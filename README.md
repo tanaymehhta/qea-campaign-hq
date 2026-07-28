@@ -16,6 +16,16 @@ invokes it on three schedules: every 30 minutes (today + yesterday), nightly at 
 **Vercel** hosts this Next.js app, which only ever reads from Supabase. It never calls
 Instantly or lemlist, so pages load instantly and no vendor rate limit can break the dashboard.
 
+## Leads
+
+`leads` is a person-level table, one row per targeted contact across the priority campaign
+lists (Resellers, LBER, Justin's Canada list, Hospitals — Canada, Chicago Retrofit). Unlike
+everything else in this app, it isn't kept current by the sync job — it was a one-time import
+from each campaign's source spreadsheet, with `status` (`prospect` / `assigned` / `sent` /
+`held` / `no_email`) set by checking each person's email against Instantly/lemlist's actual
+send/contact activity, not just campaign-roster membership or the spreadsheet's own claims.
+Re-import by hand if a source list changes. Browse it at `/leads`.
+
 ## Data notes
 
 - All dates are normalised to America/New_York.
