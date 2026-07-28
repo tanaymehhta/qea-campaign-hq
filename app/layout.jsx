@@ -33,6 +33,7 @@ export default async function RootLayout({ children }) {
             <span className="brand">QEA Campaign HQ</span>
             <a href="/">Today</a>
             <a href="/campaigns">Campaigns</a>
+            <a href="/leads">Leads</a>
             <a href="/replies">Replies</a>
             <a href="/health">Health</a>
             <span className="spacer" />

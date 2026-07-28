@@ -100,6 +100,11 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .p-live{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
 .p-planned,.p-scoping,.p-list_only{color:var(--ink-3);border-style:dashed}
 .p-ended,.p-abandoned{color:var(--ink-3)}
+.p-sent{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.p-assigned{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 40%,transparent)}
+.p-prospect{color:var(--ink-3);border-style:dashed}
+.p-held{color:var(--serious);border-color:color-mix(in srgb,var(--serious) 45%,transparent)}
+.p-no_email{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
 
 /* ---- bar chart ---- */
 .bars{display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:8px}
