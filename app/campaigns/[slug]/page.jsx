@@ -1,15 +1,38 @@
-import { db, num, pct, prettyDate } from "../../../lib/db";
-import { Num, BounceCell, Pill } from "../../../components/ui";
+import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize, PAGE_SIZES } from "../../../lib/db";
+import { Num, BounceCell, Pill, DrillCell, PeopleTable } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function Group({ params }) {
+export default async function Group({ params, searchParams }) {
+  const sp = searchParams ?? {};
   const { data: g } = await db
     .from("v_group_summary").select("*").eq("slug", params.slug).single();
   if (!g) return <><h1>Not found</h1><p className="sub">No campaign group with that name.</p></>;
 
   const { data: subs } = await db
     .from("v_campaign_summary").select("*").eq("group_id", g.id);
+
+  // everyone across every campaign in this group
+  const ids = (subs ?? []).map((s) => s.campaign_id);
+  const size = pageSize(sp.size);
+  const page = Math.max(1, Number(sp.page) || 1);
+  const offset = (page - 1) * size;
+  let people = [], peopleCount = 0;
+  if (ids.length) {
+    const res = await db.from("people")
+      .select("id, campaign_id, source, email, name, company, status, opened_count, clicked_count, replied_count, last_contacted_at", { count: "exact" })
+      .in("campaign_id", ids)
+      .order("last_contacted_at", { ascending: false, nullsFirst: false })
+      .range(offset, offset + size - 1);
+    people = res.data ?? [];
+    peopleCount = res.count ?? 0;
+  }
+  const nameOf = new Map((subs ?? []).map((s) => [s.campaign_id, s.sub_campaign_label || s.name]));
+  const pageHref = (extra) => {
+    const q = new URLSearchParams({ size: String(size), page: String(page), ...extra });
+    return `/campaigns/${params.slug}?${q}#people`;
+  };
+  const drill = (metric) => listHref({ metric, range: "all", group: params.slug });
 
   // rank by reply rate — the whole reason for running variants
   const ranked = (subs ?? []).sort((a, b) => {
@@ -28,19 +51,26 @@ export default async function Group({ params }) {
       <p className="sub">{g.description ?? " "}</p>
 
       <div className="grid g5">
-        <div className="tile"><div className="lbl">Leads</div><div className="val">{num(g.leads)}</div>
-          <div className="note">{g.campaign_count} campaigns · {g.running_count} running</div></div>
-        <div className="tile"><div className="lbl">Sent</div><div className="val">{num(g.sent)}</div>
-          <div className="note">{num(g.delivered)} delivered</div></div>
-        <div className="tile"><div className="lbl">Replies</div>
+        <a className="tile clickable" href="#people"><div className="lbl">People</div>
+          <div className="val">{num(peopleCount || g.leads)}</div>
+          <div className="note">{g.campaign_count} campaigns · {g.running_count} running</div>
+          <div className="drill">see the list &darr;</div></a>
+        <a className="tile clickable" href={drill("sent")}><div className="lbl">Sent</div>
+          <div className="val">{num(g.sent)}</div>
+          <div className="note">{num(g.delivered)} delivered</div>
+          <div className="drill">see who &rarr;</div></a>
+        <a className="tile clickable" href={drill("replied")}><div className="lbl">Replies</div>
           <div className={g.replied ? "val" : "val muted"}>{num(g.replied)}</div>
-          <div className="note">{g.leads ? `${pct(g.replied, g.leads)}% of leads · 3–8% is healthy` : "—"}</div></div>
-        <div className="tile"><div className="lbl">Meetings</div>
+          <div className="note">{g.leads ? `${pct(g.replied, g.leads)}% of leads · 3–8% is healthy` : "—"}</div>
+          <div className="drill">see who &rarr;</div></a>
+        <a className="tile clickable" href={drill("meetings")}><div className="lbl">Meetings</div>
           <div className={g.meetings ? "val" : "val muted"}>{num(g.meetings)}</div>
-          <div className="note">The primary KPI</div></div>
-        <div className="tile"><div className="lbl">Proposals sent</div>
+          <div className="note">The primary KPI</div>
+          <div className="drill">see who &rarr;</div></a>
+        <a className="tile clickable" href={drill("proposals")}><div className="lbl">Proposals sent</div>
           <div className={g.proposals ? "val" : "val muted"}>{num(g.proposals)}</div>
-          <div className="note">Logged by hand</div></div>
+          <div className="note">Logged by hand</div>
+          <div className="drill">see who &rarr;</div></a>
       </div>
 
       {overBounce.length ? (
@@ -104,6 +134,19 @@ export default async function Group({ params }) {
           </tbody>
         </table>
       </div>
+
+      <h2 id="people">Everyone in {g.display_name}</h2>
+      <p className="sub">
+        Every person across all {g.campaign_count} sub-campaigns, most recently contacted first.
+      </p>
+      <PeopleTable
+        rows={people}
+        count={peopleCount}
+        size={size}
+        page={page}
+        hrefFor={pageHref}
+        campaignOf={nameOf}
+      />
 
       <h2>What this campaign is</h2>
       <div className="card">

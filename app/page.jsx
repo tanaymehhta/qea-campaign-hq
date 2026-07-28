@@ -1,5 +1,5 @@
-import { db, dailyRange, today, shift, num, pct, windowFrom, prettyDate, EMPTY, addInto } from "../lib/db";
-import { Tile, RangePicker, DailyBars, Num, BounceCell } from "../components/ui";
+import { db, dailyRange, today, shift, num, pct, windowFrom, prettyDate, EMPTY, addInto, listHref } from "../lib/db";
+import { Tile, RangePicker, DailyBars, Num, BounceCell, DrillCell } from "../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +57,10 @@ export default async function Today({ searchParams }) {
       ? `${num(byTool.instantly.sent)} Instantly · ${num(byTool.lemlist.sent)} lemlist — still in progress`
       : `${num(byTool.instantly.sent)} Instantly · ${num(byTool.lemlist.sent)} lemlist`;
 
+  // Every tile carries the current window through to the list behind it.
+  const windowParams = w.range === "day" ? { d: w.from } : { range: w.range };
+  const drill = (metric, extra = {}) => listHref({ metric, ...windowParams, ...extra });
+
   return (
     <>
       <h1>{w.range === "day" ? prettyDate(w.from) : w.label}</h1>
@@ -70,10 +74,10 @@ export default async function Today({ searchParams }) {
         day={{ current: w.range === "day" ? w.from : t, prev: shift(w.range === "day" ? w.from : t, -1), next: shift(w.range === "day" ? w.from : t, 1) }}
       />
 
-      <div className="grid g5">
-        <Tile hero label="Emails sent" value={num(overall.sent)} note={heroNote} />
+      <div className="grid g4">
+        <Tile hero label="Emails sent" value={num(overall.sent)} note={heroNote} href={drill("sent")} />
         <Tile
-          label="New leads contacted"
+          label="Leads contacted"
           value={num(overall.new_leads_contacted)}
           tone={overall.sent > 50 && overall.new_leads_contacted === 0 ? "bad" : undefined}
           note={
@@ -81,40 +85,60 @@ export default async function Today({ searchParams }) {
               ? "All sends are follow-ups — no new leads entered"
               : "First touches, not follow-ups"
           }
+          href={drill("contacted")}
         />
         <Tile
-          label="Replies"
+          label="LinkedIn requests sent"
+          value={num(overall.linkedin_sent)}
+          tone={overall.linkedin_sent ? "" : "muted"}
+          note="Connection requests — profile views not counted"
+          href={drill("linkedin_sent")}
+        />
+        <Tile
+          label="LinkedIn accepted"
+          value={num(overall.linkedin_accepted)}
+          tone={overall.linkedin_accepted ? "" : "muted"}
+          note={overall.linkedin_sent ? `${pct(overall.linkedin_accepted, overall.linkedin_sent)}% of requests` : "lemlist multichannel only"}
+          href={drill("linkedin_accepted")}
+        />
+      </div>
+
+      <div className="grid g5">
+        <Tile
+          label="Emails bounced"
+          value={num(overall.bounced)}
+          tone={pct(overall.bounced, overall.sent) > 5 ? "bad" : undefined}
+          note={overall.sent ? `${pct(overall.bounced, overall.sent)}% of sent · stop above 5%` : "—"}
+          href={drill("bounced")}
+        />
+        <Tile
+          label="Emails opened"
+          value={num(overall.opened)}
+          tone={overall.opened ? "" : "muted"}
+          note={overall.opened ? `${pct(overall.opened, overall.sent)}% of sent` : "Most campaigns run text-only with open tracking off"}
+          href={drill("opened")}
+        />
+        <Tile
+          label="Emails replied"
           value={num(replies)}
           tone={replies ? "" : "muted"}
           note={`${num(overall.replies_automatic)} out-of-office, counted separately`}
+          href={drill("replied")}
         />
         <Tile
           label="Meetings booked"
           value={num(meetingCount)}
           tone={meetingCount ? "" : "muted"}
           note="Logged by hand — no tool records this"
+          href={drill("meetings")}
         />
         <Tile
           label="Proposals sent"
           value={num(proposalCount)}
           tone={proposalCount ? "" : "muted"}
           note="Logged by hand — no tool records this"
+          href={drill("proposals")}
         />
-      </div>
-
-      <div className="grid g4">
-        <Tile
-          label="Bounced"
-          value={num(overall.bounced)}
-          tone={pct(overall.bounced, overall.sent) > 5 ? "bad" : undefined}
-          note={overall.sent ? `${pct(overall.bounced, overall.sent)}% of sent · stop above 5%` : "—"}
-        />
-        <Tile label="Opened" value={num(overall.opened)} tone={overall.opened ? "" : "muted"}
-              note={overall.opened ? `${pct(overall.opened, overall.sent)}% of sent` : "Tracking on; Instantly needs text-only off"} />
-        <Tile label="Clicked" value={num(overall.clicked)} tone={overall.clicked ? "" : "muted"}
-              note="Link tracking is off in Instantly" />
-        <Tile label="LinkedIn accepts" value={num(overall.linkedin_accepted)}
-              tone={overall.linkedin_accepted ? "" : "muted"} note="lemlist multichannel only" />
       </div>
 
       <h2>Last 14 days</h2>
@@ -138,15 +162,15 @@ export default async function Today({ searchParams }) {
                 <tr key={g.id}>
                   <td className="name"><a href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
                   <td><span className={`pill p-${g.status}`}>{g.status.replace(/_/g, " ")}</span></td>
-                  <Num v={m.sent} />
-                  <Num v={m.new_leads_contacted} />
-                  <Num v={m.bounced} />
+                  <DrillCell v={m.sent} href={drill("sent", { group: g.slug })} />
+                  <DrillCell v={m.new_leads_contacted} href={drill("contacted", { group: g.slug })} />
+                  <DrillCell v={m.bounced} href={drill("bounced", { group: g.slug })} />
                   <BounceCell bounced={m.bounced} base={m.sent} />
-                  <Num v={m.opened} />
-                  <Num v={m.replied} />
-                  <Num v={m.linkedin_accepted} />
-                  <Num v={mt} />
-                  <Num v={pr} />
+                  <DrillCell v={m.opened} href={drill("opened", { group: g.slug })} />
+                  <DrillCell v={m.replied} href={drill("replied", { group: g.slug })} />
+                  <DrillCell v={m.linkedin_accepted} href={drill("linkedin_accepted", { group: g.slug })} />
+                  <DrillCell v={mt} href={drill("meetings", { group: g.slug })} />
+                  <DrillCell v={pr} href={drill("proposals", { group: g.slug })} />
                 </tr>
               );
             })}

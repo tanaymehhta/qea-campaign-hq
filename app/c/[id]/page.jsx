@@ -1,5 +1,5 @@
-import { db, num, pct, prettyDate, prettyWhen } from "../../../lib/db";
-import { Pill } from "../../../components/ui";
+import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize } from "../../../lib/db";
+import { Pill, PeopleTable } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +18,27 @@ function stripHtml(html) {
     .trim();
 }
 
-export default async function Campaign({ params }) {
+export default async function Campaign({ params, searchParams }) {
+  const sp = searchParams ?? {};
   const { data: c } = await db
     .from("v_campaign_summary").select("*").eq("campaign_id", params.id).single();
   if (!c) return <><h1>Not found</h1></>;
+
+  const size = pageSize(sp.size);
+  const page = Math.max(1, Number(sp.page) || 1);
+  const offset = (page - 1) * size;
+  const peopleRes = await db.from("people")
+    .select("id, campaign_id, source, email, name, company, status, opened_count, clicked_count, replied_count, last_contacted_at", { count: "exact" })
+    .eq("campaign_id", params.id)
+    .order("last_contacted_at", { ascending: false, nullsFirst: false })
+    .range(offset, offset + size - 1);
+  const people = peopleRes.data ?? [];
+  const peopleCount = peopleRes.count ?? 0;
+  const pageHref = (extra) => {
+    const q = new URLSearchParams({ size: String(size), page: String(page), ...extra });
+    return `/c/${params.id}?${q}#people`;
+  };
+  const drill = (metric) => listHref({ metric, range: "all", campaign: params.id });
 
   const [{ data: steps }, { data: stepStats }, { data: replies }] = await Promise.all([
     db.from("template_versions").select("*").eq("campaign_id", params.id)
@@ -69,17 +86,27 @@ export default async function Campaign({ params }) {
       ) : null}
 
       <div className="grid g5">
-        <div className="tile"><div className="lbl">Leads</div><div className="val">{num(c.leads)}</div></div>
-        <div className="tile"><div className="lbl">Sent</div><div className="val">{num(c.sent)}</div>
-          <div className="note">{num(c.bounced)} bounced{c.sent ? ` · ${pct(c.bounced, c.sent)}%` : ""}</div></div>
-        <div className="tile"><div className="lbl">Replies</div>
+        <a className="tile clickable" href="#people"><div className="lbl">People</div>
+          <div className="val">{num(peopleCount || c.leads)}</div>
+          <div className="drill">see the list &darr;</div></a>
+        <a className="tile clickable" href={drill("sent")}><div className="lbl">Sent</div>
+          <div className="val">{num(c.sent)}</div>
+          <div className="note">{num(c.bounced)} bounced{c.sent ? ` · ${pct(c.bounced, c.sent)}%` : ""}</div>
+          <div className="drill">see who &rarr;</div></a>
+        <a className="tile clickable" href={drill("replied")}><div className="lbl">Replies</div>
           <div className={c.replied ? "val" : "val muted"}>{num(c.replied)}</div>
-          <div className="note">{c.leads ? `${pct(c.replied, c.leads)}% of leads` : "—"}</div></div>
-        <div className="tile"><div className="lbl">Meetings</div>
-          <div className={c.meetings ? "val" : "val muted"}>{num(c.meetings)}</div></div>
-        <div className="tile"><div className="lbl">Proposals sent</div>
-          <div className={c.proposals ? "val" : "val muted"}>{num(c.proposals)}</div></div>
+          <div className="note">{c.leads ? `${pct(c.replied, c.leads)}% of leads` : "—"}</div>
+          <div className="drill">see who &rarr;</div></a>
+        <a className="tile clickable" href={drill("meetings")}><div className="lbl">Meetings</div>
+          <div className={c.meetings ? "val" : "val muted"}>{num(c.meetings)}</div>
+          <div className="drill">see who &rarr;</div></a>
+        <a className="tile clickable" href={drill("proposals")}><div className="lbl">Proposals sent</div>
+          <div className={c.proposals ? "val" : "val muted"}>{num(c.proposals)}</div>
+          <div className="drill">see who &rarr;</div></a>
       </div>
+
+      <h2 id="people">Everyone in this sub-campaign</h2>
+      <PeopleTable rows={people} count={peopleCount} size={size} page={page} hrefFor={pageHref} />
 
       <h2>The sequence</h2>
       {ordered.length === 0 ? <p className="empty">No sequence copy synced for this campaign yet.</p> : null}

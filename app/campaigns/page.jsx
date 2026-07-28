@@ -1,5 +1,5 @@
-import { db, num, pct } from "../../lib/db";
-import { Num, BounceCell } from "../../components/ui";
+import { db, num, pct, listHref } from "../../lib/db";
+import { Num, BounceCell, DrillCell } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -56,19 +56,19 @@ export default async function Campaigns() {
                     {g.paused_count ? ` · ${g.paused_count} paused` : ""}
                     {g.draft_count ? ` · ${g.draft_count} draft` : ""}
                   </td>
-                  <Num v={g.leads} />
-                  <Num v={g.sent} />
+                  <DrillCell v={g.leads} href={`/campaigns/${g.slug}#people`} />
+                  <DrillCell v={g.sent} href={listHref({ metric: "sent", range: "all", group: g.slug })} />
                   <Num v={g.delivered} />
-                  <Num v={g.bounced} />
+                  <DrillCell v={g.bounced} href={listHref({ metric: "bounced", range: "all", group: g.slug })} />
                   <BounceCell bounced={g.bounced} base={g.sent} />
-                  <Num v={g.opened} />
-                  <Num v={g.replied} />
+                  <DrillCell v={g.opened} href={listHref({ metric: "opened", range: "all", group: g.slug })} />
+                  <DrillCell v={g.replied} href={listHref({ metric: "replied", range: "all", group: g.slug })} />
                   <td className={g.leads && pct(g.replied, g.leads) >= 3 ? "ok" : "zero"}>
                     {g.leads ? `${pct(g.replied, g.leads)}%` : "—"}
                   </td>
-                  <Num v={g.linkedin_accepted} />
-                  <Num v={g.meetings} />
-                  <Num v={g.proposals} />
+                  <DrillCell v={g.linkedin_accepted} href={listHref({ metric: "linkedin_accepted", range: "all", group: g.slug })} />
+                  <DrillCell v={g.meetings} href={listHref({ metric: "meetings", range: "all", group: g.slug })} />
+                  <DrillCell v={g.proposals} href={listHref({ metric: "proposals", range: "all", group: g.slug })} />
                 </tr>
               </tbody>
             </table>
