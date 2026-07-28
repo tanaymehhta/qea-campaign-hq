@@ -7,11 +7,12 @@ export default async function Today({ searchParams }) {
   const w = windowFrom(searchParams ?? {});
   const t = today();
 
-  const [{ data: campaigns }, { data: groups }, rows, { data: meetings }] = await Promise.all([
+  const [{ data: campaigns }, { data: groups }, rows, { data: meetings }, { data: proposals }] = await Promise.all([
     db.from("campaigns").select("id, source, name, status"),
     db.from("campaign_groups").select("id, slug, display_name, status, sort_order").order("sort_order"),
     dailyRange(w.from, w.to),
     db.from("meetings").select("id, campaign_id, meeting_date").gte("meeting_date", w.from).lte("meeting_date", w.to),
+    db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to),
   ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
@@ -49,6 +50,7 @@ export default async function Today({ searchParams }) {
 
   const running = (campaigns ?? []).filter((c) => c.status === "running").length;
   const meetingCount = (meetings ?? []).length;
+  const proposalCount = (proposals ?? []).length;
   const replies = overall.replied;
   const heroNote =
     w.range === "today"
@@ -68,7 +70,7 @@ export default async function Today({ searchParams }) {
         day={{ current: w.range === "day" ? w.from : t, prev: shift(w.range === "day" ? w.from : t, -1), next: shift(w.range === "day" ? w.from : t, 1) }}
       />
 
-      <div className="grid g4">
+      <div className="grid g5">
         <Tile hero label="Emails sent" value={num(overall.sent)} note={heroNote} />
         <Tile
           label="New leads contacted"
@@ -90,6 +92,12 @@ export default async function Today({ searchParams }) {
           label="Meetings booked"
           value={num(meetingCount)}
           tone={meetingCount ? "" : "muted"}
+          note="Logged by hand — no tool records this"
+        />
+        <Tile
+          label="Proposals sent"
+          value={num(proposalCount)}
+          tone={proposalCount ? "" : "muted"}
           note="Logged by hand — no tool records this"
         />
       </div>
@@ -118,13 +126,14 @@ export default async function Today({ searchParams }) {
           <thead>
             <tr>
               <th>Campaign</th><th>Status</th><th>Sent</th><th>New leads</th><th>Bounced</th>
-              <th>Bounce %</th><th>Opened</th><th>Replies</th><th>LI acc.</th><th>Meetings</th>
+              <th>Bounce %</th><th>Opened</th><th>Replies</th><th>LI acc.</th><th>Meetings</th><th>Proposals</th>
             </tr>
           </thead>
           <tbody>
             {(groups ?? []).map((g) => {
               const m = byGroup.get(g.id) ?? { ...EMPTY };
               const mt = (meetings ?? []).filter((x) => groupOf.get(x.campaign_id) === g.id).length;
+              const pr = (proposals ?? []).filter((x) => groupOf.get(x.campaign_id) === g.id).length;
               return (
                 <tr key={g.id}>
                   <td className="name"><a href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
@@ -137,6 +146,7 @@ export default async function Today({ searchParams }) {
                   <Num v={m.replied} />
                   <Num v={m.linkedin_accepted} />
                   <Num v={mt} />
+                  <Num v={pr} />
                 </tr>
               );
             })}
@@ -150,6 +160,7 @@ export default async function Today({ searchParams }) {
               <td>{num(overall.replied)}</td>
               <td>{num(overall.linkedin_accepted)}</td>
               <td>{num(meetingCount)}</td>
+              <td>{num(proposalCount)}</td>
             </tr>
           </tbody>
         </table>

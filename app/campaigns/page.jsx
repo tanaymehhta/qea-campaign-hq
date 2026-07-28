@@ -46,7 +46,7 @@ export default async function Campaigns() {
                 <tr>
                   <th>Sub-campaigns</th><th>Leads</th><th>Sent</th><th>Delivered</th>
                   <th>Bounced</th><th>Bounce %</th><th>Opened</th><th>Replies</th>
-                  <th>Reply %</th><th>LI acc.</th><th>Meetings</th>
+                  <th>Reply %</th><th>LI acc.</th><th>Meetings</th><th>Proposals</th>
                 </tr>
               </thead>
               <tbody>
@@ -68,6 +68,7 @@ export default async function Campaigns() {
                   </td>
                   <Num v={g.linkedin_accepted} />
                   <Num v={g.meetings} />
+                  <Num v={g.proposals} />
                 </tr>
               </tbody>
             </table>

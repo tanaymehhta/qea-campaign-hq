@@ -68,7 +68,7 @@ export default async function Campaign({ params }) {
         </div>
       ) : null}
 
-      <div className="grid g4">
+      <div className="grid g5">
         <div className="tile"><div className="lbl">Leads</div><div className="val">{num(c.leads)}</div></div>
         <div className="tile"><div className="lbl">Sent</div><div className="val">{num(c.sent)}</div>
           <div className="note">{num(c.bounced)} bounced{c.sent ? ` · ${pct(c.bounced, c.sent)}%` : ""}</div></div>
@@ -77,6 +77,8 @@ export default async function Campaign({ params }) {
           <div className="note">{c.leads ? `${pct(c.replied, c.leads)}% of leads` : "—"}</div></div>
         <div className="tile"><div className="lbl">Meetings</div>
           <div className={c.meetings ? "val" : "val muted"}>{num(c.meetings)}</div></div>
+        <div className="tile"><div className="lbl">Proposals sent</div>
+          <div className={c.proposals ? "val" : "val muted"}>{num(c.proposals)}</div></div>
       </div>
 
       <h2>The sequence</h2>

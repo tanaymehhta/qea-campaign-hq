@@ -57,8 +57,9 @@ h2{font-size:12px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-
 /* ---- tiles ---- */
 .grid{display:grid;gap:12px;margin-bottom:12px}
 .g4{grid-template-columns:repeat(4,1fr)}
+.g5{grid-template-columns:repeat(5,1fr)}
 .g3{grid-template-columns:repeat(3,1fr)}
-@media(max-width:860px){.g4,.g3{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:860px){.g4,.g5,.g3{grid-template-columns:repeat(2,1fr)}}
 .tile{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
 .tile .lbl{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
 .tile .val{font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.05}

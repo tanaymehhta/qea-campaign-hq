@@ -27,7 +27,7 @@ export default async function Group({ params }) {
       <h1>{g.display_name}</h1>
       <p className="sub">{g.description ?? " "}</p>
 
-      <div className="grid g4">
+      <div className="grid g5">
         <div className="tile"><div className="lbl">Leads</div><div className="val">{num(g.leads)}</div>
           <div className="note">{g.campaign_count} campaigns · {g.running_count} running</div></div>
         <div className="tile"><div className="lbl">Sent</div><div className="val">{num(g.sent)}</div>
@@ -38,6 +38,9 @@ export default async function Group({ params }) {
         <div className="tile"><div className="lbl">Meetings</div>
           <div className={g.meetings ? "val" : "val muted"}>{num(g.meetings)}</div>
           <div className="note">The primary KPI</div></div>
+        <div className="tile"><div className="lbl">Proposals sent</div>
+          <div className={g.proposals ? "val" : "val muted"}>{num(g.proposals)}</div>
+          <div className="note">Logged by hand</div></div>
       </div>
 
       {overBounce.length ? (
@@ -63,7 +66,7 @@ export default async function Group({ params }) {
             <tr>
               <th>Sub-campaign</th><th>Tool</th><th>Status</th><th>Leads</th><th>Sent</th>
               <th>Bounced</th><th>Bounce %</th><th>Opened</th><th>Replies</th><th>Reply %</th>
-              <th>LI acc.</th><th>Cap/day</th>
+              <th>LI acc.</th><th>Meetings</th><th>Proposals</th><th>Cap/day</th>
             </tr>
           </thead>
           <tbody>
@@ -85,6 +88,8 @@ export default async function Group({ params }) {
                   {s.leads ? `${pct(s.replied, s.leads)}%` : "—"}
                 </td>
                 <Num v={s.linkedin_accepted} />
+                <Num v={s.meetings} />
+                <Num v={s.proposals} />
                 <td className="dim">{s.daily_limit ?? "—"}</td>
               </tr>
             ))}
@@ -94,7 +99,7 @@ export default async function Group({ params }) {
               <td>{g.sent ? `${pct(g.bounced, g.sent)}%` : "—"}</td>
               <td>{num(g.opened)}</td><td>{num(g.replied)}</td>
               <td>{g.leads ? `${pct(g.replied, g.leads)}%` : "—"}</td>
-              <td>{num(g.linkedin_accepted)}</td><td />
+              <td>{num(g.linkedin_accepted)}</td><td>{num(g.meetings)}</td><td>{num(g.proposals)}</td><td />
             </tr>
           </tbody>
         </table>
