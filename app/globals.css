@@ -30,7 +30,9 @@ a{color:inherit;text-decoration:none}
 /* ---- nav ---- */
 nav.top{display:flex;align-items:baseline;gap:22px;flex-wrap:wrap;
   padding-bottom:16px;border-bottom:1px solid var(--grid);margin-bottom:26px}
-nav.top .brand{font-weight:600;letter-spacing:-.01em;font-size:15px;margin-right:4px}
+nav.top a.brand{font-weight:600;letter-spacing:-.01em;font-size:15px;margin-right:4px;
+  color:var(--ink-1);text-decoration:none}
+nav.top a.brand:hover{opacity:.7}
 nav.top a{font-size:13.5px;color:var(--ink-3)}
 nav.top a:hover{color:var(--ink-1)}
 nav.top a.on{color:var(--ink-1);font-weight:600}

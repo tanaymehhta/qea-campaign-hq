@@ -33,8 +33,8 @@ export default async function RootLayout({ children }) {
       <body>
         <div className="wrap">
           <nav className="top">
-            <span className="brand">QEA Campaign HQ</span>
-            <a href="/">Today</a>
+            <a className="brand" href="/">QEA Campaign HQ</a>
+            <a href="/">Overview</a>
             <a href="/campaigns">Campaigns</a>
             <a href="/leads">Leads</a>
             <a href="/replies">Replies</a>
