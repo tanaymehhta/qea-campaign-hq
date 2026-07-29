@@ -74,62 +74,45 @@ export default async function Conflicts() {
               {nameOf.get(c.campaign_id) ?? "—"} · {c.detail}
             </div>
 
-            <div className="tw">
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: "left" }}>From</th>
-                    <th style={{ textAlign: "left" }}>Subject</th>
-                    <th>Read as</th>
-                    <th>When</th>
-                    <th style={{ textAlign: "left" }}>It is actually</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mine.map((m) => (
-                    <tr key={m.id}>
-                      <td className="name">
-                        {m.lead_name || m.lead_email || "—"}
-                        {m.lead_name && m.lead_email
-                          ? <div className="dim" style={{ fontSize: 12 }}>{m.lead_email}</div> : null}
-                      </td>
-                      <td style={{ textAlign: "left", maxWidth: "34ch" }}>
-                        <div style={{ fontSize: 13 }}>{m.subject || "—"}</div>
-                        <div className="dim" style={{ fontSize: 12 }}>{(m.body ?? "").slice(0, 90)}</div>
-                      </td>
-                      <td>
-                        <Pill status={m.sentiment} />
-                        <div className="dim" style={{ fontSize: 11, marginTop: 3 }}>
-                          {m.classified_by === "human" ? "you confirmed" : "guessed"}
-                        </div>
-                      </td>
-                      <td className="dim">{prettyWhen(m.received_at)}</td>
-                      <td style={{ textAlign: "left" }}>
-                        <form action={classifyReply} className="choices">
-                          <input type="hidden" name="id" value={m.id} />
-                          {LABELS.map(([v, label]) => (
-                            <button
-                              key={v}
-                              name="sentiment"
-                              value={v}
-                              className={m.sentiment === v ? "choice on" : "choice"}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </form>
-                      </td>
-                    </tr>
+            {mine.map((m) => (
+              <div className="msg" key={m.id}>
+                <div className="msg-head">
+                  <div>
+                    <span className="who">{m.lead_name || m.lead_email || "—"}</span>
+                    {m.lead_name && m.lead_email ? <span className="dim"> · {m.lead_email}</span> : null}
+                  </div>
+                  <div className="msg-meta">
+                    <span className="dim">{m.classified_by === "human" ? "you confirmed" : "read as"}</span>
+                    <Pill status={m.sentiment} />
+                    <span className="dim">· {prettyWhen(m.received_at)}</span>
+                  </div>
+                </div>
+
+                <div className="msg-subject">{m.subject || "—"}</div>
+                {m.body ? <div className="msg-body">{m.body.slice(0, 240)}</div> : null}
+
+                <form action={classifyReply} className="choices">
+                  <span className="choices-label">It is actually</span>
+                  {LABELS.map(([v, label]) => (
+                    <button
+                      key={v}
+                      name="sentiment"
+                      value={v}
+                      className={m.sentiment === v ? "choice on" : "choice"}
+                    >
+                      {label}
+                    </button>
                   ))}
-                  {!mine.length ? (
-                    <tr><td colSpan={5} className="empty">
-                      Instantly counts inbound here that the Unibox has not handed over yet.
-                      It usually catches up within a sync or two.
-                    </td></tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+                  <input type="hidden" name="id" value={m.id} />
+                </form>
+              </div>
+            ))}
+            {!mine.length ? (
+              <p className="empty">
+                Instantly counts inbound here that the Unibox has not handed over yet.
+                It usually catches up within a sync or two.
+              </p>
+            ) : null}
           </div>
         );
       })}
