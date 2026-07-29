@@ -146,6 +146,29 @@ lands there. Deleting that group would remove the main outreach from the dashboa
 
 ---
 
+## What the metrics actually mean
+
+These four sound alike and are not. They are four different events at four different stages.
+
+| Metric | What physically happened | How trustworthy |
+|---|---|---|
+| **Bounced** | The receiving server rejected it. It never reached a human — bad address, full mailbox, or the domain was blocked. | Certain. The server says so. Above 5%, stop and re-verify the list. |
+| **Opened** | Their mail client loaded a 1×1 invisible tracking pixel. | Weak. Inflated by security scanners that open on the recipient's behalf; missed entirely by anyone with images off. |
+| **Clicked** | They clicked a link inside the email body. | Strong — a deliberate act. But requires link tracking to be on. |
+| **Replied** | They wrote back. | The only unambiguous signal. Out-of-office is counted separately as `replies_automatic` so it cannot inflate this. |
+
+**Open and Click are not the same thing.** An open can be a corporate spam filter that no
+human ever saw. A click is a person deciding to act. Passive and noisy versus active and real.
+
+**Link tracking** is the setting that makes clicks measurable at all. With it on, every URL
+is rewritten to route through a tracking redirect first. That is the cost: rewritten
+redirect links in a plain-text cold email are a known spam signal. `link_tracking = true` on
+the ten Chicago Retrofit campaigns, off on the eleven QEA text-only ones. Same reason
+`open_tracking = false` on those eleven — they are text-only precisely to maximise inbox
+placement, so two-thirds of the campaigns cannot record an open even in principle.
+
+---
+
 ## Open items
 
 1. **Jeffrey Hohenstein, 22 Jul** — `/conflicts`. Instantly counts it automatic, the subject
@@ -154,6 +177,86 @@ lands there. Deleting that group would remove the main outreach from the dashboa
    prospect, no company. Only you know who it was.
 3. **Proposals has never been used.** Zero rows, so the tile and its drill-down are empty
    by definition, not by fault.
+4. **There is no way to log a meeting or a proposal from the dashboard.** The conflicts tab
+   can fill in a meeting that already exists, but creating one still means a hand-written
+   database row. Both are the primary KPI and both are hand-kept, so this is the most
+   obvious next thing to build.
+
+---
+
+## Known limits and debt
+
+Everything below is understood and deliberate or simply not yet done. None of it is a
+mystery; it is written here so it does not get rediscovered as a bug in three months.
+
+### Reply counts are inflated by sibling campaigns
+
+**25 of the 121 replies are duplicates** — the same person, the same minute, logged against
+two or three campaigns at once. It happens where a campaign was split into a main and a
+referral variant: `QEA Resellers — Seattle` and `QEA Resellers — Seattle (Referral)` both
+record the same out-of-office from `andy@a-rsolar.com`. lemlist genuinely files the event
+against each campaign, so the rows are not wrong individually, but any total that sums
+across campaigns counts that person more than once. Deduplicating on
+(email, minute) at read time would fix the totals without losing the per-campaign truth.
+
+### `leads` and `people` now overlap almost entirely
+
+| | Distinct emails |
+|---|---|
+| `leads` (frozen, hand-imported) | 1,921 |
+| `people` (live, synced every 30 min) | 1,898 |
+| In both | **1,897** |
+| Only in `leads` | 24 |
+| Only in `people` | 1 |
+
+`leads` was a one-time import from the source spreadsheets and does not update. `people` is
+rebuilt from the vendors every sync. They now describe nearly the same humans, and `/leads`
+and the campaign people tables show overlapping views of the same list. Worth collapsing
+into one, with `leads` kept only for the 24 people never loaded into a tool.
+
+### Hard caps in the sync
+
+None are close to being hit, but they are silent when they are:
+
+- **3,000 leads per campaign** (30 pages × 100) on the Instantly people pull.
+- **40 pages** on the Unibox reply pull, and it stops early at the first message older than
+  the window.
+- **20,000 activities** per lemlist run.
+
+### Timing
+
+Instantly's daily analytics lag its own sending by a few minutes, so a send at 19:58 may
+not appear in the 20:00 sync but will be there by 20:30. Upserts are keyed on
+(campaign, date), so this corrects itself rather than double-counting.
+
+### Opened and Clicked cannot be filtered by date
+
+Neither vendor timestamps an open or a click, so `/list` shows the lifetime list for those
+two and displays a banner saying so. This is a vendor limitation, not something to fix
+locally.
+
+### Casing
+
+`people` is unique on `(campaign_id, email)` while `refresh_lemlist_people()` groups by
+`lower(email)`. If the same address ever arrives in two different cases, they would land as
+two rows. Not observed so far.
+
+### Dead or unused
+
+- **`events` table: 0 rows.** It has `is_flagged_conflict` and `resolved_at` columns that
+  anticipated the conflicts feature; conflicts ended up as a view instead, so the table is
+  still unused.
+- **`app/timeline/` is an empty directory.** No page, no route. Safe to delete.
+- **`ungrouped` group holds 1 campaign** — anything whose name has no em dash.
+- **The `inbound_*` tables** (7 companies) live in the same Supabase project but belong to
+  the separate inbound agent, not this dashboard.
+
+### Deployment
+
+The repo is **not linked to Vercel locally** — `vercel link` has never been run, so
+`vercel env` and CLI deploys do not work from this checkout. Deploys happen from GitHub on
+push to `main`. The Supabase side is deployed directly: migrations applied and the edge
+function at version 4.
 
 ---
 
@@ -179,6 +282,13 @@ conflict — the same people who can already read every figure on it. To close t
 `SUPABASE_SERVICE_ROLE_KEY` to the Vercel environment and point
 `app/conflicts/actions.js` at it instead of the anon client. The database functions do not
 change.
+
+**The sync had no error, and never did.** When the Instantly replies looked missing, every
+run was returning `status: ok` with `error: null` on schedule. It was not a failure, a
+credential, a table or a broken foreign key — it was a code path that had never been
+written. Worth remembering as a diagnostic habit: check whether the thing is failing before
+assuming it is failing, because "the number moved but the names are absent" points at a
+missing writer, not a broken one.
 
 ---
 
