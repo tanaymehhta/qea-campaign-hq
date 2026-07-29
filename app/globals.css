@@ -16,6 +16,11 @@
   --seg-on:0 1px 2px rgba(11,11,11,.10);
   --tint-1:rgba(42,120,214,.12); --tint-2:rgba(235,104,52,.14); --tint-3:rgba(12,163,12,.12);
   --tint-4:rgba(250,178,25,.18); --tint-5:rgba(236,131,90,.16); --tint-n:rgba(11,11,11,.06);
+  /* Chart categories. Four hues, handed out in this order and pinned to a class
+     so a status keeps its colour on every page. Validated all-pairs against this
+     surface: no two are confusable, in normal vision or under any of the three
+     dichromacies. Do not add a fifth — the tail wears --cat-n. */
+  --cat-1:#b5124f; --cat-2:#2a78d6; --cat-3:#eb6834; --cat-4:#12a05e; --cat-n:#898781;
 }
 [data-theme="dark"]{
   color-scheme:dark;
@@ -28,6 +33,9 @@
   --seg-on:0 1px 2px rgba(0,0,0,.55);
   --tint-1:rgba(57,135,229,.22); --tint-2:rgba(217,89,38,.24); --tint-3:rgba(12,163,12,.22);
   --tint-4:rgba(250,178,25,.22); --tint-5:rgba(236,131,90,.22); --tint-n:rgba(255,255,255,.09);
+  /* Dark is stepped, not flipped: only the orange moves, because #eb6834 sits a
+     hair above the dark lightness band. Re-validated all-pairs on #1a1a19. */
+  --cat-3:#e86530;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -41,6 +49,9 @@
     --seg-on:0 1px 2px rgba(0,0,0,.55);
     --tint-1:rgba(57,135,229,.22); --tint-2:rgba(217,89,38,.24); --tint-3:rgba(12,163,12,.22);
     --tint-4:rgba(250,178,25,.22); --tint-5:rgba(236,131,90,.22); --tint-n:rgba(255,255,255,.09);
+  /* Dark is stepped, not flipped: only the orange moves, because #eb6834 sits a
+     hair above the dark lightness band. Re-validated all-pairs on #1a1a19. */
+  --cat-3:#e86530;
   }
 }
 

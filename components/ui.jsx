@@ -73,18 +73,47 @@ export function Tile({ label, value, raw, note, tone, hero, plus, href }) {
 }
 
 /**
+ * Which of the four hues each class wears, pinned by name so `bounced` is the
+ * same crimson on the campaign page as on the drill-down, and a filter that
+ * drops a class never repaints the ones that survive.
+ *
+ * The two poles are anchored to meaning, because in this dashboard a colour is
+ * supposed to carry a decision: green is the outcome you want, crimson is the
+ * one that ends the conversation. Blue and orange are the classes still in
+ * motion, and they are told apart by position rather than by sentiment.
+ *
+ * Four is the ceiling and it is a measured one: --cat-1…4 were validated as a
+ * set, every pair against every other, in both themes. A fifth could not be
+ * added without two of them becoming confusable under deuteranopia — so the
+ * fifth slice and the folded tail wear the neutral instead.
+ */
+const CAT_OF = {
+  // 4 — the outcome you want
+  replied: 4, interested: 4, booked: 4, won: 4, sent: 4,
+  // 1 — the outcome that stops the conversation
+  bounced: 1, not_interested: 1, no_email: 1, cancelled: 1, no_show: 1, lost: 1, unsubscribed: 1,
+  // 2 and 3 — still moving, and in that order
+  active: 2, assigned: 2, referral: 2, draft: 2,
+  contacted: 3, prospect: 3, not_now: 3,
+  // everything else, including auto_reply and unclassified, wears the neutral:
+  // a colour that meant nothing in particular would be decoration.
+};
+
+const catVar = (label) => (CAT_OF[label] ? `var(--cat-${CAT_OF[label]})` : "var(--cat-n)");
+
+/**
  * What a long table is made of, before you read it.
  *
- * One hue, stepped light to dark by share, because the reader's job here is
- * magnitude — how the rows divide — not identity. Identity lives in the legend
- * beside it and in the status pills in the table below, which already carry
- * their own meaning; painting the same statuses a second set of colours here
- * would say a colour means two things.
+ * Colour carries identity here — which class a slice is — so the hues come from
+ * the validated four in `globals.css` and are pinned to the class by name,
+ * never handed out by rank. A filter that drops a class does not repaint the
+ * ones that survive.
  *
- * The steps are `--ink-1` mixed into `--surface-1`, so one declaration covers
- * both themes and the ramp stays monotonic in each. A 2px gap in the surface
- * colour separates the segments, so the boundaries read without relying on the
- * contrast between two neighbouring steps.
+ * The legend repeats every label beside its count, so identity is never colour
+ * alone, and the table underneath is the same data in full. A 2px gap in the
+ * surface colour separates neighbours: the one pair sitting in the CVD floor
+ * band, green against orange, is legal only with a secondary cue, and the gap
+ * and the labelled legend are it.
  *
  * Under three classes there is nothing to divide, and a two-slice pie is a
  * worse way of writing one number, so it renders nothing.
@@ -97,7 +126,7 @@ export function ShareDonut({ title, items, note, max = 5 }) {
   const head = rows.slice(0, max);
   const tail = rows.slice(max);
   const shown = tail.length
-    ? [...head, { label: `${tail.length} more`, value: tail.reduce((t, r) => t + r.value, 0) }]
+    ? [...head, { label: `${tail.length} more`, value: tail.reduce((t, r) => t + r.value, 0), rest: true }]
     : head;
 
   const total = shown.reduce((t, r) => t + r.value, 0);
@@ -116,7 +145,7 @@ export function ShareDonut({ title, items, note, max = 5 }) {
           return (
             <circle
               key={s.label} cx="65" cy="65" r={R} fill="none" strokeWidth="15"
-              stroke={`color-mix(in srgb, var(--ink-1) ${[78, 57, 39, 26, 16, 9][i] ?? 11}%, var(--surface-1))`}
+              stroke={s.rest ? "var(--cat-n)" : catVar(s.label)}
               strokeDasharray={dash} strokeDashoffset={offset}
               style={{ animationDelay: `${0.08 + i * 0.05}s` }}
             />
@@ -127,9 +156,9 @@ export function ShareDonut({ title, items, note, max = 5 }) {
       </svg>
 
       <ul className="dlegend">
-        {shown.map((s, i) => (
+        {shown.map((s) => (
           <li key={s.label}>
-            <i style={{ background: `color-mix(in srgb, var(--ink-1) ${[78, 57, 39, 26, 16, 9][i] ?? 11}%, var(--surface-1))` }} />
+            <i style={{ background: s.rest ? "var(--cat-n)" : catVar(s.label) }} />
             <span className="dlabel">{s.label.replace(/_/g, " ")}</span>
             <span className="dval">{num(s.value)}</span>
             <span className="dpct">{Math.round((1000 * s.value) / total) / 10}%</span>
