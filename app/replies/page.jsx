@@ -27,7 +27,7 @@ export default async function Replies({ searchParams }) {
         outside the original sequence, and CC&rsquo;d third-party replies, never appear in lemlist.
       </p>
 
-      <div className="range">
+      <div className="seg" style={{ marginBottom: 20 }}>
         {TAGS.map((t) => (
           <a key={t} href={`/replies?tag=${t}`} className={tag === t ? "on" : ""}>
             {t === "all" ? `All (${total})` : `${t.replace(/_/g, " ")} (${tally[t] ?? 0})`}

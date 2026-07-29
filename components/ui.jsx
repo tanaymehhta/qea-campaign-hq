@@ -4,17 +4,61 @@ export function Pill({ status }) {
   return <span className={`pill p-${status ?? "unknown"}`}>{(status ?? "unknown").replace(/_/g, " ")}</span>;
 }
 
+/** A segmented control. Options are links, so every state is a real URL. */
+export function Seg({ options, current, hrefFor }) {
+  return (
+    <div className="seg">
+      {options.map(([k, label]) => (
+        <a key={k} href={hrefFor(k)} className={String(current) === String(k) ? "on" : ""}>{label}</a>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The rep picker. Selecting a rep scopes the page to the campaign groups they
+ * own — group level is the only place the data records an owner, so it is the
+ * only honest thing to filter by.
+ */
+export function Reps({ reps, current, hrefFor, big, subtitleFor }) {
+  const all = { id: "all", name: "All reps", initials: "ALL", role: "Everyone", tint: "var(--tint-n)", ink: "var(--ink-1)" };
+  return (
+    <div className={big ? "reps big" : "reps"}>
+      {[all, ...reps].map((r, i) => (
+        <a
+          key={r.id}
+          href={hrefFor(r.id)}
+          className={current === r.id ? "on" : ""}
+          style={{ animationDelay: `${0.04 + i * 0.03}s` }}
+        >
+          <span
+            className="glyph"
+            style={{ background: r.tint, color: r.ink, fontSize: r.id === "all" ? (big ? 12.5 : 11.5) : undefined }}
+          >
+            {r.initials}
+          </span>
+          <span className="who">
+            {r.id === "all" ? "All reps" : r.name.split(" ")[0]}
+            {big && r.id !== "all" ? <><br />{r.name.split(" ").slice(1).join(" ")}</> : null}
+          </span>
+          <span className="role">{subtitleFor ? subtitleFor(r) : r.role}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 /** A number. Give it an href and it becomes the way into the people behind it. */
-export function Tile({ label, value, note, tone, hero, href }) {
+export function Tile({ label, value, raw, note, tone, hero, plus, href }) {
   const inner = (
     <>
       <div className="lbl">{label}</div>
-      <div className={`val${tone ? ` ${tone}` : ""}`}>{value}</div>
+      <div className={`val${tone ? ` ${tone}` : ""}`} data-count={raw != null ? raw : undefined}>{value}</div>
       {note ? <div className="note">{note}</div> : null}
       {href ? <div className="drill">see who &rarr;</div> : null}
     </>
   );
-  const cls = `tile${hero ? " hero" : ""}${href ? " clickable" : ""}`;
+  const cls = `tile${hero ? " hero" : ""}${plus ? " plus" : ""}`;
   return href ? <a className={cls} href={href}>{inner}</a> : <div className={cls}>{inner}</div>;
 }
 
@@ -36,7 +80,7 @@ export function DrillCell({ v, href }) {
   return <td><a className="drilled" href={href}>{num(v)}</a></td>;
 }
 
-export function RangePicker({ base, current, day }) {
+export function RangePicker({ base, current, day, note }) {
   const q = (s) => (base.includes("?") ? `${base}&${s}` : `${base}?${s}`);
   const opts = [
     ["today", "Today"],
@@ -46,17 +90,16 @@ export function RangePicker({ base, current, day }) {
     ["all", "All time"],
   ];
   return (
-    <div className="range">
-      {opts.map(([k, label]) => (
-        <a key={k} href={q(`range=${k}`)} className={current === k ? "on" : ""}>{label}</a>
-      ))}
+    <div className="segrow">
+      <Seg options={opts} current={current} hrefFor={(k) => q(`range=${k}`)} />
       {day ? (
-        <>
-          <a className="step" href={q(`d=${day.prev}`)}>&larr;</a>
-          <a className={current === "day" ? "on" : ""} href={q(`d=${day.current}`)}>{prettyDate(day.current)}</a>
-          <a className="step" href={q(`d=${day.next}`)}>&rarr;</a>
-        </>
+        <div className="seg">
+          <a href={q(`d=${day.prev}`)}>&larr;</a>
+          <a href={q(`d=${day.current}`)} className={current === "day" ? "on" : ""}>{prettyDate(day.current)}</a>
+          <a href={q(`d=${day.next}`)}>&rarr;</a>
+        </div>
       ) : null}
+      {note ? <span className="note">{note}</span> : null}
     </div>
   );
 }
@@ -73,14 +116,14 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
   const offset = (page - 1) * size;
   return (
     <>
-      <div className="range">
-        <span className="dim" style={{ fontSize: 12.5, alignSelf: "center", marginRight: 4 }}>Show</span>
-        {PAGE_SIZES.map((s) => (
-          <a key={s} href={hrefFor({ size: s, page: 1 })} className={size === s ? "on" : ""}>{s}</a>
-        ))}
-        <span className="dim" style={{ fontSize: 12.5, alignSelf: "center", marginLeft: 8 }}>
-          of {num(count)}
-        </span>
+      <div className="segrow">
+        <span className="note">Show</span>
+        <Seg
+          options={PAGE_SIZES.map((s) => [s, s])}
+          current={size}
+          hrefFor={(s) => hrefFor({ size: s, page: 1 })}
+        />
+        <span className="note">of {num(count)}</span>
       </div>
 
       <div className="card tw">
@@ -120,12 +163,12 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
       </div>
 
       {pages > 1 ? (
-        <div className="range">
-          {page > 1 ? <a className="step" href={hrefFor({ size, page: page - 1 })}>&larr;</a> : null}
-          <span className="dim" style={{ alignSelf: "center", fontSize: 12.5 }}>
+        <div className="range" style={{ marginTop: 12 }}>
+          {page > 1 ? <a href={hrefFor({ size, page: page - 1 })}>&larr;</a> : null}
+          <span className="count">
             {num(offset + 1)}–{num(Math.min(offset + size, count))} of {num(count)}
           </span>
-          {page < pages ? <a className="step" href={hrefFor({ size, page: page + 1 })}>&rarr;</a> : null}
+          {page < pages ? <a href={hrefFor({ size, page: page + 1 })}>&rarr;</a> : null}
         </div>
       ) : null}
     </>
@@ -143,15 +186,20 @@ export function DailyBars({ days }) {
         <span className="dim">emails sent per day</span>
       </div>
       <div className="bars">
-        {days.map((d) => {
+        {days.map((d, i) => {
           const total = d.instantly + d.lemlist;
           return (
             <div className="bcol" key={d.date} title={`${prettyDate(d.date)} — ${num(total)} sent (${num(d.instantly)} Instantly, ${num(d.lemlist)} lemlist)`}>
-              <div className="bval">{total ? num(total) : <span className="dim">—</span>}</div>
-              <div className="bstack" style={{ height: `${(total / max) * 100}%` }}>
+              <div className={total ? "bval" : "bval dim"}>{total ? num(total) : "—"}</div>
+              <div
+                className="bstack"
+                style={{ height: `${(total / max) * 100}%`, animationDelay: `${0.1 + i * 0.03}s` }}
+              >
                 {d.instantly ? <span className="bar" style={{ flex: d.instantly }} /> : null}
-                {d.lemlist ? <span className="bar lem" style={{ flex: d.lemlist }} /> : null}
-                {!total ? <span className="bar off" style={{ height: 2 }} /> : null}
+                {d.lemlist ? (
+                  <span className={d.instantly ? "bar lem" : "bar lem only"} style={{ flex: d.lemlist }} />
+                ) : null}
+                {!total ? <span className="bar off" style={{ height: 3 }} /> : null}
               </div>
             </div>
           );

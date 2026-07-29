@@ -1,5 +1,7 @@
 import "./globals.css";
-import { db, prettyWhen } from "../lib/db";
+import { db } from "../lib/db";
+import Nav from "../components/nav";
+import Tween from "../components/tween";
 
 export const metadata = {
   title: "QEA Campaign HQ",
@@ -7,6 +9,9 @@ export const metadata = {
 };
 
 export const dynamic = "force-dynamic";
+
+// Runs before first paint so a dark-theme visitor never sees a white flash.
+const THEME_BOOT = `try{var t=localStorage.getItem("qea-hq-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
 
 async function lastSync() {
   const { data } = await db
@@ -30,24 +35,16 @@ export default async function RootLayout({ children }) {
 
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       <body>
         <div className="wrap">
-          <nav className="top">
-            <a className="brand" href="/">QEA Campaign HQ</a>
-            <a href="/">Overview</a>
-            <a href="/campaigns">Campaigns</a>
-            <a href="/leads">Leads</a>
-            <a href="/replies">Replies</a>
-            <a href="/conflicts">
-              Conflicts{conflicts ? <span className="badge">{conflicts}</span> : null}
-            </a>
-            <a href="/health">Health</a>
-            <span className="spacer" />
-            <span className="sync">
-              <span className={stale ? "dot stale" : "dot"} />
-              {s ? <>synced <b>{ageMin < 1 ? "just now" : `${ageMin} min ago`}</b></> : "never synced"}
-            </span>
-          </nav>
+          <Nav
+            synced={s ? (ageMin < 1 ? "just now" : `${ageMin} min ago`) : null}
+            stale={stale}
+            conflicts={conflicts ?? 0}
+          />
           {children}
           <p className="foot">
             Synced from Instantly and lemlist every 30 minutes. All dates in America/New_York.
@@ -55,6 +52,7 @@ export default async function RootLayout({ children }) {
             CC&rsquo;d third-party replies, never surface in lemlist.
           </p>
         </div>
+        <Tween />
       </body>
     </html>
   );

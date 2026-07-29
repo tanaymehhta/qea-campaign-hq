@@ -1,12 +1,14 @@
 import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize, PAGE_SIZES } from "../../../lib/db";
-import { Num, BounceCell, Pill, DrillCell, PeopleTable } from "../../../components/ui";
+import { Num, BounceCell, Pill, DrillCell, PeopleTable, Tile } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function Group({ params, searchParams }) {
   const sp = searchParams ?? {};
-  const { data: g } = await db
-    .from("v_group_summary").select("*").eq("slug", params.slug).single();
+  const [{ data: g }, { data: allGroups }] = await Promise.all([
+    db.from("v_group_summary").select("*").eq("slug", params.slug).single(),
+    db.from("campaign_groups").select("slug, display_name, sort_order").order("sort_order"),
+  ]);
   if (!g) return <><h1>Not found</h1><p className="sub">No campaign group with that name.</p></>;
 
   const { data: subs } = await db
@@ -47,30 +49,33 @@ export default async function Group({ params, searchParams }) {
 
   return (
     <>
+      <a className="drilled dim" href="/campaigns" style={{ fontSize: 12.5, display: "inline-block", marginBottom: 10 }}>
+        &larr; All campaigns
+      </a>
       <h1>{g.display_name}</h1>
       <p className="sub">{g.description ?? " "}</p>
 
+      <div className="tabs">
+        {(allGroups ?? []).map((x) => (
+          <a key={x.slug} href={`/campaigns/${x.slug}`} className={x.slug === params.slug ? "on" : ""}>
+            {x.display_name}
+          </a>
+        ))}
+      </div>
+
       <div className="grid g5">
-        <a className="tile clickable" href="#people"><div className="lbl">People</div>
-          <div className="val">{num(peopleCount || g.leads)}</div>
-          <div className="note">{g.campaign_count} campaigns · {g.running_count} running</div>
-          <div className="drill">see the list &darr;</div></a>
-        <a className="tile clickable" href={drill("sent")}><div className="lbl">Sent</div>
-          <div className="val">{num(g.sent)}</div>
-          <div className="note">{num(g.delivered)} delivered</div>
-          <div className="drill">see who &rarr;</div></a>
-        <a className="tile clickable" href={drill("replied")}><div className="lbl">Replies</div>
-          <div className={g.replied ? "val" : "val muted"}>{num(g.replied)}</div>
-          <div className="note">{g.leads ? `${pct(g.replied, g.leads)}% of leads · 3–8% is healthy` : "—"}</div>
-          <div className="drill">see who &rarr;</div></a>
-        <a className="tile clickable" href={drill("meetings")}><div className="lbl">Meetings</div>
-          <div className={g.meetings ? "val" : "val muted"}>{num(g.meetings)}</div>
-          <div className="note">The primary KPI</div>
-          <div className="drill">see who &rarr;</div></a>
-        <a className="tile clickable" href={drill("proposals")}><div className="lbl">Proposals sent</div>
-          <div className={g.proposals ? "val" : "val muted"}>{num(g.proposals)}</div>
-          <div className="note">Logged by hand</div>
-          <div className="drill">see who &rarr;</div></a>
+        <Tile plus label="People" value={num(peopleCount || g.leads)} raw={peopleCount || g.leads}
+          note={`${g.campaign_count} campaigns · ${g.running_count} running`} href="#people" />
+        <Tile plus label="Sent" value={num(g.sent)} raw={g.sent}
+          note={`${num(g.delivered)} delivered`} href={drill("sent")} />
+        <Tile plus label="Replies" value={num(g.replied)} raw={g.replied}
+          tone={g.replied ? undefined : "muted"}
+          note={g.leads ? `${pct(g.replied, g.leads)}% of leads · 3–8% is healthy` : "—"}
+          href={drill("replied")} />
+        <Tile plus label="Meetings" value={num(g.meetings)} raw={g.meetings}
+          tone={g.meetings ? undefined : "muted"} note="The primary KPI" href={drill("meetings")} />
+        <Tile plus label="Proposals sent" value={num(g.proposals)} raw={g.proposals}
+          tone={g.proposals ? undefined : "muted"} note="Logged by hand" href={drill("proposals")} />
       </div>
 
       {overBounce.length ? (

@@ -1,8 +1,8 @@
 import {
   db, num, prettyDate, prettyWhen, windowFrom, shift, today,
-  METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, listHref,
+  METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, campaignIdsForRep, listHref,
 } from "../../lib/db";
-import { RangePicker, Pill } from "../../components/ui";
+import { RangePicker, Pill, Seg } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +41,11 @@ export default async function List({ searchParams }) {
   } else if (sp.group) {
     const { group, ids } = await campaignIdsForGroup(sp.group);
     if (group) { scopeIds = ids; scopeLabel = group.display_name; }
+  } else if (sp.rep) {
+    // Reps own groups, not campaigns — see campaignIdsForRep. Scoping here keeps
+    // a rep-filtered tile and the list behind it counting the same people.
+    const { label, ids } = await campaignIdsForRep(sp.rep);
+    if (label) { scopeIds = ids; scopeLabel = `${label}'s campaigns`; }
   }
 
   const campaignNames = new Map(
@@ -99,7 +104,7 @@ export default async function List({ searchParams }) {
   }
 
   const pages = Math.max(1, Math.ceil(count / size));
-  const base = { metric: key, group: sp.group, campaign: sp.campaign, size, range: w.range === "day" ? undefined : w.range, d: w.range === "day" ? w.from : undefined };
+  const base = { metric: key, group: sp.group, campaign: sp.campaign, rep: sp.rep, size, range: w.range === "day" ? undefined : w.range, d: w.range === "day" ? w.from : undefined };
   const link = (extra) => listHref({ ...base, ...extra });
 
   return (
@@ -111,7 +116,12 @@ export default async function List({ searchParams }) {
       </p>
 
       <div className="range">
-        <a href={sp.campaign ? `/c/${sp.campaign}` : sp.group ? `/campaigns/${sp.group}` : "/"}>&larr; back</a>
+        <a href={
+          sp.campaign ? `/c/${sp.campaign}`
+            : sp.group ? `/campaigns/${sp.group}`
+            : sp.rep ? `/?rep=${encodeURIComponent(sp.rep)}`
+            : "/"
+        }>&larr; back</a>
       </div>
 
       <RangePicker
@@ -131,11 +141,13 @@ export default async function List({ searchParams }) {
         </div>
       ) : null}
 
-      <div className="range">
-        <span className="dim" style={{ fontSize: 12.5, alignSelf: "center", marginRight: 4 }}>Show</span>
-        {PAGE_SIZES.map((s) => (
-          <a key={s} href={link({ size: s, page: 1 })} className={size === s ? "on" : ""}>{s}</a>
-        ))}
+      <div className="segrow">
+        <span className="note">Show</span>
+        <Seg
+          options={PAGE_SIZES.map((s) => [s, s])}
+          current={size}
+          hrefFor={(s) => link({ size: s, page: 1 })}
+        />
       </div>
 
       <div className="card tw">
@@ -236,12 +248,12 @@ export default async function List({ searchParams }) {
       </div>
 
       {pages > 1 ? (
-        <div className="range">
-          {page > 1 ? <a className="step" href={link({ page: page - 1 })}>&larr;</a> : null}
-          <span className="dim" style={{ alignSelf: "center", fontSize: 12.5 }}>
+        <div className="range" style={{ marginTop: 12 }}>
+          {page > 1 ? <a href={link({ page: page - 1 })}>&larr;</a> : null}
+          <span className="count">
             {num(offset + 1)}–{num(Math.min(offset + size, count))} of {num(count)}
           </span>
-          {page < pages ? <a className="step" href={link({ page: page + 1 })}>&rarr;</a> : null}
+          {page < pages ? <a href={link({ page: page + 1 })}>&rarr;</a> : null}
         </div>
       ) : null}
     </>

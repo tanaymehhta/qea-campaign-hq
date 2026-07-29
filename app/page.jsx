@@ -1,31 +1,43 @@
-import { db, dailyRange, today, shift, num, pct, windowFrom, prettyDate, EMPTY, addInto, listHref } from "../lib/db";
-import { Tile, RangePicker, DailyBars, Num, BounceCell, DrillCell } from "../components/ui";
+import {
+  db, dailyRange, today, shift, num, pct, windowFrom, prettyDate,
+  EMPTY, addInto, listHref, repList,
+} from "../lib/db";
+import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function Today({ searchParams }) {
-  const w = windowFrom(searchParams ?? {});
+export default async function Overview({ searchParams }) {
+  const sp = searchParams ?? {};
+  const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { data: groups }, rows, { data: meetings }, { data: proposals }] = await Promise.all([
-    db.from("campaigns").select("id, source, name, status"),
-    db.from("campaign_groups").select("id, slug, display_name, status, sort_order").order("sort_order"),
-    dailyRange(w.from, w.to),
-    db.from("meetings").select("id, campaign_id, meeting_date").gte("meeting_date", w.from).lte("meeting_date", w.to),
-    db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to),
-  ]);
+  const [{ data: campaigns }, { groups, reps }, rows, { data: meetings }, { data: proposals }] =
+    await Promise.all([
+      db.from("campaigns").select("id, source, name, status"),
+      repList(),
+      dailyRange(w.from, w.to),
+      db.from("meetings").select("id, campaign_id, group_id, meeting_date").gte("meeting_date", w.from).lte("meeting_date", w.to),
+      db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to),
+    ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
   const groupOf = new Map((members ?? []).map((m) => [m.campaign_id, m.group_id]));
   const cById = new Map((campaigns ?? []).map((c) => [c.id, c]));
 
-  // window totals, by tool and by group
+  // A rep owns groups, not campaigns, so their scope is every campaign inside
+  // the groups they own. "all" means no scoping at all.
+  const rep = reps.some((r) => r.id === sp.rep) ? sp.rep : "all";
+  const mine = reps.find((r) => r.id === rep);
+  const myGroupIds = mine ? new Set(mine.groupIds) : null;
+  const inScope = (campaignId) => !myGroupIds || myGroupIds.has(groupOf.get(campaignId));
+  const shownGroups = myGroupIds ? groups.filter((g) => myGroupIds.has(g.id)) : groups;
+
   const overall = { ...EMPTY };
   const byTool = { instantly: { ...EMPTY }, lemlist: { ...EMPTY } };
   const byGroup = new Map();
   for (const r of rows) {
     const c = cById.get(r.campaign_id);
-    if (!c) continue;
+    if (!c || !inScope(r.campaign_id)) continue;
     addInto(overall, r);
     if (byTool[c.source]) addInto(byTool[c.source], r);
     const gid = groupOf.get(r.campaign_id);
@@ -33,6 +45,13 @@ export default async function Today({ searchParams }) {
     if (!byGroup.has(gid)) byGroup.set(gid, { ...EMPTY });
     addInto(byGroup.get(gid), r);
   }
+
+  // A meeting can be logged against a group with no campaign, so scope on
+  // either — otherwise a rep's hand-logged meetings vanish from their own view.
+  const scopedMeetings = (meetings ?? []).filter(
+    (m) => !myGroupIds || myGroupIds.has(m.group_id) || myGroupIds.has(groupOf.get(m.campaign_id))
+  );
+  const scopedProposals = (proposals ?? []).filter((p) => inScope(p.campaign_id));
 
   // last 14 days for the chart, always, regardless of the selected window
   const chartFrom = shift(t, -13);
@@ -45,40 +64,70 @@ export default async function Today({ searchParams }) {
   for (const r of chartRows) {
     const c = cById.get(r.campaign_id);
     const slot = perDay.get(r.metric_date);
-    if (c && slot) slot[c.source] += r.sent ?? 0;
+    if (c && slot && inScope(r.campaign_id)) slot[c.source] += r.sent ?? 0;
   }
 
-  const running = (campaigns ?? []).filter((c) => c.status === "running").length;
-  const meetingCount = (meetings ?? []).length;
-  const proposalCount = (proposals ?? []).length;
-  const replies = overall.replied;
-  const heroNote =
-    w.range === "today"
-      ? `${num(byTool.instantly.sent)} Instantly · ${num(byTool.lemlist.sent)} lemlist — still in progress`
-      : `${num(byTool.instantly.sent)} Instantly · ${num(byTool.lemlist.sent)} lemlist`;
+  const scopedCampaigns = (campaigns ?? []).filter((c) => inScope(c.id));
+  const running = scopedCampaigns.filter((c) => c.status === "running").length;
+  const meetingCount = scopedMeetings.length;
+  const proposalCount = scopedProposals.length;
 
-  // Every tile carries the current window through to the list behind it.
+  // Every link carries the current window and rep through to the page behind it.
   const windowParams = w.range === "day" ? { d: w.from } : { range: w.range };
-  const drill = (metric, extra = {}) => listHref({ metric, ...windowParams, ...extra });
+  const repParams = rep === "all" ? {} : { rep };
+  const drill = (metric, extra = {}) => listHref({ metric, ...windowParams, ...repParams, ...extra });
+  const here = (params) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
+    return q.toString() ? `/?${q}` : "/";
+  };
 
   return (
     <>
-      <h1>{w.range === "day" ? prettyDate(w.from) : w.label}</h1>
-      <p className="sub">
-        Everything sent across both tools. {running} campaigns are running right now.
-      </p>
+      <div className="rise">
+        <h1>Overview</h1>
+        <p className="sub">
+          {rep === "all" ? (
+            <>Everything sent across Instantly and lemlist. {running} of {(campaigns ?? []).length} campaigns
+              are running right now.</>
+          ) : (
+            <>{rep} owns {shownGroups.length} campaign group{shownGroups.length === 1 ? "" : "s"} and{" "}
+              {scopedCampaigns.length} campaigns, {running} of them running right now.</>
+          )}
+        </p>
+      </div>
+
+      <Reps
+        reps={reps}
+        current={rep}
+        hrefFor={(id) => here({ rep: id === "all" ? "" : id, ...windowParams })}
+      />
 
       <RangePicker
-        base="/"
+        base={here({ rep: rep === "all" ? "" : rep })}
         current={w.range}
-        day={{ current: w.range === "day" ? w.from : t, prev: shift(w.range === "day" ? w.from : t, -1), next: shift(w.range === "day" ? w.from : t, 1) }}
+        day={{
+          current: w.range === "day" ? w.from : t,
+          prev: shift(w.range === "day" ? w.from : t, -1),
+          next: shift(w.range === "day" ? w.from : t, 1),
+        }}
+        note={w.range === "today" ? "Today so far — sends still in progress" : `${w.label}, to ${prettyDate(t)}`}
       />
 
       <div className="grid g4">
-        <Tile hero label="Emails sent" value={num(overall.sent)} note={heroNote} href={drill("sent")} />
         <Tile
+          hero
+          label="Emails sent"
+          value={num(overall.sent)}
+          raw={overall.sent}
+          note={`${num(byTool.instantly.sent)} Instantly · ${num(byTool.lemlist.sent)} lemlist`}
+          href={drill("sent")}
+        />
+        <Tile
+          hero
           label="Leads contacted"
           value={num(overall.new_leads_contacted)}
+          raw={overall.new_leads_contacted}
           tone={overall.sent > 50 && overall.new_leads_contacted === 0 ? "bad" : undefined}
           note={
             overall.sent > 50 && overall.new_leads_contacted === 0
@@ -88,60 +137,69 @@ export default async function Today({ searchParams }) {
           href={drill("contacted")}
         />
         <Tile
-          label="LinkedIn requests sent"
+          hero
+          label="Emails replied"
+          value={num(overall.replied)}
+          raw={overall.replied}
+          tone={overall.replied ? undefined : "muted"}
+          note={`${num(overall.replies_automatic)} out-of-office, counted separately`}
+          href={drill("replied")}
+        />
+        <Tile
+          hero
+          label="Meetings booked"
+          value={num(meetingCount)}
+          raw={meetingCount}
+          tone={meetingCount ? undefined : "muted"}
+          note="The primary KPI · logged by hand"
+          href={drill("meetings")}
+        />
+      </div>
+
+      <div className="grid g5" style={{ marginBottom: 34 }}>
+        <Tile
+          label="LinkedIn sent"
           value={num(overall.linkedin_sent)}
-          tone={overall.linkedin_sent ? "" : "muted"}
+          raw={overall.linkedin_sent}
+          tone={overall.linkedin_sent ? undefined : "muted"}
           note="Connection requests — profile views not counted"
           href={drill("linkedin_sent")}
         />
         <Tile
           label="LinkedIn accepted"
           value={num(overall.linkedin_accepted)}
-          tone={overall.linkedin_accepted ? "" : "muted"}
+          raw={overall.linkedin_accepted}
+          tone={overall.linkedin_accepted ? undefined : "muted"}
           note={overall.linkedin_sent ? `${pct(overall.linkedin_accepted, overall.linkedin_sent)}% of requests` : "lemlist multichannel only"}
           href={drill("linkedin_accepted")}
         />
-      </div>
-
-      <div className="grid g5">
         <Tile
-          label="Emails bounced"
+          label="Bounced"
           value={num(overall.bounced)}
+          raw={overall.bounced}
           tone={pct(overall.bounced, overall.sent) > 5 ? "bad" : undefined}
           note={overall.sent ? `${pct(overall.bounced, overall.sent)}% of sent · stop above 5%` : "—"}
           href={drill("bounced")}
         />
         <Tile
-          label="Emails opened"
+          label="Opened"
           value={num(overall.opened)}
-          tone={overall.opened ? "" : "muted"}
-          note={overall.opened ? `${pct(overall.opened, overall.sent)}% of sent` : "Most campaigns run text-only with open tracking off"}
+          raw={overall.opened}
+          tone={overall.opened ? undefined : "muted"}
+          note={overall.opened ? `${pct(overall.opened, overall.sent)}% of sent` : "Two-thirds of campaigns run tracking off"}
           href={drill("opened")}
-        />
-        <Tile
-          label="Emails replied"
-          value={num(replies)}
-          tone={replies ? "" : "muted"}
-          note={`${num(overall.replies_automatic)} out-of-office, counted separately`}
-          href={drill("replied")}
-        />
-        <Tile
-          label="Meetings booked"
-          value={num(meetingCount)}
-          tone={meetingCount ? "" : "muted"}
-          note="Logged by hand — no tool records this"
-          href={drill("meetings")}
         />
         <Tile
           label="Proposals sent"
           value={num(proposalCount)}
-          tone={proposalCount ? "" : "muted"}
+          raw={proposalCount}
+          tone={proposalCount ? undefined : "muted"}
           note="Logged by hand — no tool records this"
           href={drill("proposals")}
         />
       </div>
 
-      <h2>Last 14 days</h2>
+      <h2 style={{ marginTop: 0 }}>Last 14 days</h2>
       <DailyBars days={[...perDay.values()]} />
 
       <h2>By campaign — {w.range === "day" ? prettyDate(w.from) : w.label.toLowerCase()}</h2>
@@ -154,14 +212,17 @@ export default async function Today({ searchParams }) {
             </tr>
           </thead>
           <tbody>
-            {(groups ?? []).map((g) => {
+            {shownGroups.map((g) => {
               const m = byGroup.get(g.id) ?? { ...EMPTY };
-              const mt = (meetings ?? []).filter((x) => groupOf.get(x.campaign_id) === g.id).length;
-              const pr = (proposals ?? []).filter((x) => groupOf.get(x.campaign_id) === g.id).length;
+              const mt = scopedMeetings.filter(
+                (x) => x.group_id === g.id || groupOf.get(x.campaign_id) === g.id
+              ).length;
+              const pr = scopedProposals.filter((x) => groupOf.get(x.campaign_id) === g.id).length;
+              const status = g.status ?? "unknown";
               return (
                 <tr key={g.id}>
-                  <td className="name"><a href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
-                  <td><span className={`pill p-${g.status}`}>{g.status.replace(/_/g, " ")}</span></td>
+                  <td className="name"><a className="drilled" href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
+                  <td><span className={`pill p-${status}`}>{status.replace(/_/g, " ")}</span></td>
                   <DrillCell v={m.sent} href={drill("sent", { group: g.slug })} />
                   <DrillCell v={m.new_leads_contacted} href={drill("contacted", { group: g.slug })} />
                   <DrillCell v={m.bounced} href={drill("bounced", { group: g.slug })} />

@@ -35,12 +35,12 @@ export default async function Health() {
       </p>
 
       <div className="grid g4">
-        <div className="tile"><div className="lbl">Sent today</div><div className="val">{num(sentTotal)}</div>
+        <div className="tile plus"><div className="lbl">Sent today</div><div className="val">{num(sentTotal)}</div>
           <div className="note">against a configured cap of {num(capTotal)}</div></div>
-        <div className="tile"><div className="lbl">Running campaigns</div><div className="val">{running.length}</div></div>
-        <div className="tile"><div className="lbl">Mailboxes</div><div className="val">{(accounts ?? []).length}</div>
+        <div className="tile plus"><div className="lbl">Running campaigns</div><div className="val">{running.length}</div></div>
+        <div className="tile plus"><div className="lbl">Mailboxes</div><div className="val">{(accounts ?? []).length}</div>
           <div className="note">{byDomain.size} domains</div></div>
-        <div className="tile"><div className="lbl">Last sync</div>
+        <div className="tile plus"><div className="lbl">Last sync</div>
           <div className="val" style={{ fontSize: 20 }}>{runs?.[0] ? prettyWhen(runs[0].finished_at ?? runs[0].started_at) : "never"}</div>
           <div className="note">{runs?.[0]?.status ?? "—"} · {runs?.[0]?.mode ?? ""}</div></div>
       </div>

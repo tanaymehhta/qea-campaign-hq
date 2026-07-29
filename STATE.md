@@ -13,6 +13,31 @@ tab for a person to settle rather than being guessed at silently.
 
 ---
 
+## Design refresh — 29 July 2026
+
+The Claude Design pass, applied to the live pages. Frontend only: no schema change, no
+query rewritten except where a new control needed scoping.
+
+- **Tokens and dark mode.** `app/globals.css` carries the full token set. Dark is opt-in via
+  `[data-theme="dark"]` on `<html>`, toggled in the nav and remembered in `localStorage`;
+  an inline script in `<head>` applies it before first paint. Untouched, the OS preference wins.
+- **Nav** is a client component (`components/nav.jsx`) so it can mark the current page and
+  hold the theme switch. Meetings joined it.
+- **Rep picker.** Reps are derived from `campaign_groups.owner` — there is no rep table, and
+  group level is the only place an owner is recorded. Selecting one scopes the Overview and
+  Meetings pages, and `?rep=` carries into `/list` so a tile and the list behind it count the
+  same people.
+- **Overview tiles re-ordered** to the design's four-then-five: sent, contacted, replied,
+  meetings on top; LinkedIn sent, LinkedIn accepted, bounced, opened, proposals below.
+- **Meetings** is a new page: rep stats, one expandable row per meeting, and the replies that
+  have not become one yet (matched by email against the meetings table).
+- **Campaigns** is group cards with a delivered/bounced bar and a sort control
+  (priority / reply rate / volume / bounce risk — worst sub-campaign, not the group average).
+- Expand/collapse is native `<details>` throughout, so it works without JavaScript. The only
+  JS on the page is the nav, the theme boot, and the count-up on figures — all decoration.
+
+---
+
 ## What changed
 
 ### 1. The dashboard opens on All time

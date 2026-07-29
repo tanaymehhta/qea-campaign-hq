@@ -73,17 +73,20 @@ export default async function Leads({ searchParams }) {
       <div className="grid g4">
         <Tile hero label="Total people" value={num(totalCount)} note={`${populatedGroups.length} campaign groups`} />
         <Tile
+          plus
           label="Sent"
           value={num(totalByStatus.sent)}
           tone={totalByStatus.sent ? "" : "muted"}
           note="Confirmed in Instantly/lemlist"
         />
         <Tile
+          plus
           label="Not yet sent"
           value={num(totalByStatus.assigned + totalByStatus.prospect)}
           note="Assigned or prospect, no confirmed send"
         />
         <Tile
+          plus
           label="Held / no email"
           value={num(totalByStatus.held + totalByStatus.no_email)}
           tone="muted"
@@ -91,7 +94,7 @@ export default async function Leads({ searchParams }) {
         />
       </div>
 
-      <div className="range">
+      <div className="seg" style={{ marginBottom: 20 }}>
         {populatedGroups.map((g) => (
           <a key={g.id} href={`/leads?group=${g.slug}`} className={activeGroup?.id === g.id ? "on" : ""}>
             {g.display_name} ({num(countsByGroup.get(g.id) ?? 0)})
@@ -102,7 +105,7 @@ export default async function Leads({ searchParams }) {
       {activeGroup ? (
         <>
           <h2>{activeGroup.display_name}</h2>
-          <div className="range">
+          <div className="seg" style={{ marginBottom: 14 }}>
             <a href={`/leads?group=${activeGroup.slug}`} className={!activeStatus ? "on" : ""}>
               All ({num(gc.total)})
             </a>

@@ -86,21 +86,21 @@ export default async function Campaign({ params, searchParams }) {
       ) : null}
 
       <div className="grid g5">
-        <a className="tile clickable" href="#people"><div className="lbl">People</div>
+        <a className="tile plus" href="#people"><div className="lbl">People</div>
           <div className="val">{num(peopleCount || c.leads)}</div>
           <div className="drill">see the list &darr;</div></a>
-        <a className="tile clickable" href={drill("sent")}><div className="lbl">Sent</div>
+        <a className="tile plus" href={drill("sent")}><div className="lbl">Sent</div>
           <div className="val">{num(c.sent)}</div>
           <div className="note">{num(c.bounced)} bounced{c.sent ? ` · ${pct(c.bounced, c.sent)}%` : ""}</div>
           <div className="drill">see who &rarr;</div></a>
-        <a className="tile clickable" href={drill("replied")}><div className="lbl">Replies</div>
+        <a className="tile plus" href={drill("replied")}><div className="lbl">Replies</div>
           <div className={c.replied ? "val" : "val muted"}>{num(c.replied)}</div>
           <div className="note">{c.leads ? `${pct(c.replied, c.leads)}% of leads` : "—"}</div>
           <div className="drill">see who &rarr;</div></a>
-        <a className="tile clickable" href={drill("meetings")}><div className="lbl">Meetings</div>
+        <a className="tile plus" href={drill("meetings")}><div className="lbl">Meetings</div>
           <div className={c.meetings ? "val" : "val muted"}>{num(c.meetings)}</div>
           <div className="drill">see who &rarr;</div></a>
-        <a className="tile clickable" href={drill("proposals")}><div className="lbl">Proposals sent</div>
+        <a className="tile plus" href={drill("proposals")}><div className="lbl">Proposals sent</div>
           <div className={c.proposals ? "val" : "val muted"}>{num(c.proposals)}</div>
           <div className="drill">see who &rarr;</div></a>
       </div>
