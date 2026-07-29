@@ -67,6 +67,51 @@ No new CSS. Every class is one that already existed, so dark mode came free.
 
 ---
 
+## Seven shadow campaigns hidden — 29 July 2026
+
+Seven lemlist campaigns sat in draft having sent nothing: two named
+`QEA Resellers — Chicago`, two named `QEA Resellers — Seattle`, and one each for
+Denver / Boulder, LA and LBER BEUDO Batch 2. The campaigns that actually send are the
+`(Referral)` ones, which are running.
+
+They held nothing of their own. All 39 replies filed against them had a twin filed against
+a live campaign in the same minute, and not one of their 24 people existed only there.
+What they did was inflate every total that sums across campaigns, and put two identically
+named rows on a person's page.
+
+**They were the entire source of the duplicate-reply problem.** Of the 88 replies now
+visible, zero are duplicates on (email, minute). The read-time deduplication this file
+used to call for is not needed.
+
+`campaigns.hidden` is how they stay gone. Deleting the rows would not have held — the
+lemlist sync upserts every campaign the vendor lists, keyed on
+`(source, source_campaign_id)`, so they would have returned within the half hour. The
+upsert names its columns and `hidden` is not one of them, so the flag survives a re-sync.
+
+The filter is applied in two places, because the app reaches the data both ways:
+
+- **The views** carry `where not c.hidden` by hand. A view runs as its owner and so ignores
+  row security; writing the filter into `v_campaign_summary`, `v_daily_totals` and
+  `v_group_daily` is the only way it applies there. `v_group_summary` reads
+  `v_campaign_summary` and inherits it.
+- **Row security** covers every direct table read — `campaigns`, `people`, `activities`,
+  `replies`, `meetings`, `daily_metrics`, `proposals`, `campaign_group_members`. This is
+  the part that matters: no query in the app, present or future, has to remember the rule.
+
+The test is `is_hidden_campaign()`, a `security definer` function, and it has to be. A plain
+`not exists (select 1 from campaigns …)` inside a policy runs as the querying role, which
+by then cannot see hidden campaigns either — so the check would come back true for
+everything and filter nothing. The function reads the table as its owner, outside row
+security, which is the only way to ask the question honestly.
+
+The sync writes as the service role, which row security does not apply to, so a hidden
+campaign still syncs. It is simply never read. To bring one back:
+`update campaigns set hidden = false where source_campaign_id = '…'`.
+
+Visible after the change: 35 campaigns, 1,898 people, 2,826 activities, 88 replies.
+
+---
+
 ## What changed
 
 ### 1. The dashboard opens on All time
@@ -180,11 +225,11 @@ A confirmed row is never overwritten by a later sync — the same guarantee
 
 | | Count |
 |---|---|
-| Campaigns | 42 |
+| Campaigns | 35 visible (42 synced, 7 hidden) |
 | Campaign groups | 5 |
-| People | 1,935 |
-| Activity events | 2,607 |
-| Replies | 121 (98 lemlist, 23 Instantly) |
+| People | 1,898 |
+| Activity events | 2,826 |
+| Replies | 88 (59 lemlist, 29 Instantly), no duplicates |
 | Leads (hand-imported) | 1,950 |
 | Meetings | 2 |
 | Proposals | 0 |
@@ -242,16 +287,6 @@ placement, so two-thirds of the campaigns cannot record an open even in principl
 
 Everything below is understood and deliberate or simply not yet done. None of it is a
 mystery; it is written here so it does not get rediscovered as a bug in three months.
-
-### Reply counts are inflated by sibling campaigns
-
-**25 of the 121 replies are duplicates** — the same person, the same minute, logged against
-two or three campaigns at once. It happens where a campaign was split into a main and a
-referral variant: `QEA Resellers — Seattle` and `QEA Resellers — Seattle (Referral)` both
-record the same out-of-office from `andy@a-rsolar.com`. lemlist genuinely files the event
-against each campaign, so the rows are not wrong individually, but any total that sums
-across campaigns counts that person more than once. Deduplicating on
-(email, minute) at read time would fix the totals without losing the per-campaign truth.
 
 ### `leads` and `people` now overlap almost entirely
 
@@ -364,6 +399,7 @@ Migrations added this session:
     20260728232005_person_level_drilldowns.sql
     20260728232200_refresh_lemlist_people.sql
     20260728234500_conflicts_and_human_classification.sql
+    20260729110000_hide_shadow_draft_campaigns.sql
 
 Commits:
 
