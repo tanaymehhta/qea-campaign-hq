@@ -19,7 +19,10 @@ async function lastSync() {
 }
 
 export default async function RootLayout({ children }) {
-  const s = await lastSync();
+  const [s, { count: conflicts }] = await Promise.all([
+    lastSync(),
+    db.from("v_conflicts").select("*", { count: "exact", head: true }),
+  ]);
   const ageMin = s?.finished_at
     ? Math.round((Date.now() - new Date(s.finished_at).getTime()) / 60000)
     : null;
@@ -35,6 +38,9 @@ export default async function RootLayout({ children }) {
             <a href="/campaigns">Campaigns</a>
             <a href="/leads">Leads</a>
             <a href="/replies">Replies</a>
+            <a href="/conflicts">
+              Conflicts{conflicts ? <span className="badge">{conflicts}</span> : null}
+            </a>
             <a href="/health">Health</a>
             <span className="spacer" />
             <span className="sync">

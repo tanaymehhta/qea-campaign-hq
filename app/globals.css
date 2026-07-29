@@ -74,6 +74,19 @@ a.tile:hover .drill{opacity:1}
 a.drilled{color:inherit;text-decoration:none;border-bottom:1px dotted var(--ink-3)}
 a.drilled:hover{color:var(--ink-1);border-bottom-style:solid}
 
+/* ---- conflicts: the only place the dashboard writes ---- */
+.badge{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:9px;font-size:11px;
+  font-weight:600;background:var(--warn);color:#fff;vertical-align:1px}
+.choices{display:flex;gap:5px;flex-wrap:wrap}
+.choice{font:inherit;font-size:12px;padding:5px 10px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-1);color:var(--ink-2)}
+.choice:hover{background:var(--wash);color:var(--ink-1)}
+.choice.on{border-color:var(--axis);color:var(--ink-1);font-weight:600}
+.gapform{display:flex;gap:8px;flex-wrap:wrap}
+.gapform input{font:inherit;font-size:13px;padding:7px 10px;border-radius:8px;
+  border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);min-width:150px}
+.gapform input:focus{outline:none;border-color:var(--axis)}
+
 /* ---- cards & tables ---- */
 .card{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;
   padding:18px 20px;margin-bottom:14px}

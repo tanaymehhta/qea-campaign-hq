@@ -42,6 +42,38 @@ lemlist's per-person counters are rebuilt by `refresh_lemlist_people()` after ea
 sync rather than accumulated in the loop: an incremental run only sees two days, and
 upserting that would overwrite a lifetime count with a partial one.
 
+## Conflicts
+
+`/conflicts` is everywhere the tools contradict themselves, or leave a gap only a person
+can close. It is a **view, not a table** — a conflict is a fact about the current data, so
+it appears when the data disagrees and disappears the moment it agrees. There is nothing to
+mark as done and nothing that can sit there stale.
+
+Two kinds today:
+
+- **reply_split.** Instantly states, per campaign per day, how many inbound were real replies
+  and how many were auto-replies. Nothing in its message payload marks an individual message
+  as automatic — `i_status` and `ai_interest_value` are *interest* labels, so an unlabelled
+  real reply is indistinguishable from an out-of-office. The sync guesses from the subject
+  line and is honest that it is guessing: when that labelling and Instantly's own count
+  disagree, the day surfaces here with every message listed for a person to settle.
+- **meeting_detail.** A meeting logged by hand with no prospect name.
+
+### The one place the dashboard writes
+
+Everything else in this app is read-only. Confirming a conflict goes through
+`classify_reply()` or `record_meeting_detail()` — `security definer` functions that validate
+their own arguments: the label must be one of the six the schema allows, and the row must
+already exist. Neither can insert, delete, or touch another table, and RLS still blocks
+direct writes to `replies` and `meetings`. A confirmed row is stamped `classified_by = 'human'`
+and the sync never overwrites it, the same guarantee `assignment_source = 'override'` gives
+campaign grouping.
+
+Note the trade: the site has no login, so anyone with the URL can confirm a conflict, just as
+anyone with the URL can already read every figure. To lock that down, add a service-role key
+to the Vercel environment and point `app/conflicts/actions.js` at it instead of the anon
+client — the database functions stay exactly as they are.
+
 ## Leads
 
 `leads` is a person-level table, one row per targeted contact across the priority campaign
@@ -61,6 +93,9 @@ Re-import by hand if a source list changes. Browse it at `/leads`.
   event stream. This also surfaces replies that `/stats` under-reports.
 - Reply counts are a floor. Replies sent outside the original sequence, and CC'd third-party
   replies, never appear in lemlist at all.
+- Instantly's daily analytics report *that* a reply happened but never hand over the message,
+  so the person behind it comes from `/api/v2/emails` (the Unibox) instead. Until that was
+  wired up the `replies` table was Instantly-blind: the count moved, the names never existed.
 - Campaign grouping is auto-derived by splitting each campaign name on the first em dash.
   Any membership row marked `assignment_source = 'override'` is never touched by the sync.
 - Opens and clicks are structurally low, not broken. Most campaigns run text-only with
