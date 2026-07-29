@@ -72,6 +72,85 @@ export function Tile({ label, value, raw, note, tone, hero, plus, href }) {
   return href ? <a className={cls} href={href}>{inner}</a> : <div className={cls}>{inner}</div>;
 }
 
+/**
+ * What a long table is made of, before you read it.
+ *
+ * One hue, stepped light to dark by share, because the reader's job here is
+ * magnitude — how the rows divide — not identity. Identity lives in the legend
+ * beside it and in the status pills in the table below, which already carry
+ * their own meaning; painting the same statuses a second set of colours here
+ * would say a colour means two things.
+ *
+ * The steps are `--ink-1` mixed into `--surface-1`, so one declaration covers
+ * both themes and the ramp stays monotonic in each. A 2px gap in the surface
+ * colour separates the segments, so the boundaries read without relying on the
+ * contrast between two neighbouring steps.
+ *
+ * Under three classes there is nothing to divide, and a two-slice pie is a
+ * worse way of writing one number, so it renders nothing.
+ */
+export function ShareDonut({ title, items, note, max = 5 }) {
+  const rows = [...(items ?? [])].filter((i) => i.value > 0).sort((a, b) => b.value - a.value);
+  if (rows.length < 3) return null;
+
+  // Beyond the fifth the slices stop being readable, so the tail becomes one.
+  const head = rows.slice(0, max);
+  const tail = rows.slice(max);
+  const shown = tail.length
+    ? [...head, { label: `${tail.length} more`, value: tail.reduce((t, r) => t + r.value, 0) }]
+    : head;
+
+  const total = shown.reduce((t, r) => t + r.value, 0);
+  const R = 52, C = 2 * Math.PI * R, GAP = 2;
+  let at = 0;
+
+  return (
+    <div className="card donut">
+      <svg viewBox="0 0 130 130" role="img" aria-label={`${title}: ${shown.map((s) => `${s.label} ${s.value}`).join(", ")}`}>
+        {shown.map((s, i) => {
+          const len = (s.value / total) * C;
+          const seg = Math.max(len - GAP, 1);
+          const dash = `${seg} ${C - seg}`;
+          const offset = -at;
+          at += len;
+          return (
+            <circle
+              key={s.label} cx="65" cy="65" r={R} fill="none" strokeWidth="15"
+              stroke={`color-mix(in srgb, var(--ink-1) ${[78, 57, 39, 26, 16, 9][i] ?? 11}%, var(--surface-1))`}
+              strokeDasharray={dash} strokeDashoffset={offset}
+              style={{ animationDelay: `${0.08 + i * 0.05}s` }}
+            />
+          );
+        })}
+        <text x="65" y="62" className="dnum">{num(total)}</text>
+        <text x="65" y="77" className="dcap">{title}</text>
+      </svg>
+
+      <ul className="dlegend">
+        {shown.map((s, i) => (
+          <li key={s.label}>
+            <i style={{ background: `color-mix(in srgb, var(--ink-1) ${[78, 57, 39, 26, 16, 9][i] ?? 11}%, var(--surface-1))` }} />
+            <span className="dlabel">{s.label.replace(/_/g, " ")}</span>
+            <span className="dval">{num(s.value)}</span>
+            <span className="dpct">{Math.round((1000 * s.value) / total) / 10}%</span>
+          </li>
+        ))}
+        {note ? <li className="dnote">{note}</li> : null}
+      </ul>
+    </div>
+  );
+}
+
+/** Count rows by a field, for the donut. */
+export function tally(rows, field) {
+  const m = new Map();
+  for (const r of rows ?? []) {
+    const k = r[field] ?? "unknown";
+    m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return [...m.entries()].map(([label, value]) => ({ label, value }));
+}
+
 /** Bounce rate coloured against the runbook: <2% fine, 2–5% watch, >5% stop. */
 export function BounceCell({ bounced, base }) {
   const p = pct(bounced, base);

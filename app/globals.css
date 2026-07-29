@@ -278,6 +278,27 @@ details[open] > summary .chev{transform:rotate(180deg)}
 .legend span{display:inline-flex;align-items:center;gap:7px}
 .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
 
+/* ---- share donut: what a long table is made of, before you read it ---- */
+.donut{display:flex;align-items:center;gap:30px;flex-wrap:wrap;margin-bottom:14px}
+.donut svg{width:130px;height:130px;flex:0 0 auto;transform:rotate(-90deg)}
+.donut circle{transform-origin:65px 65px;animation:growRing .5s cubic-bezier(.22,.8,.3,1) both}
+.donut text{transform:rotate(90deg);transform-origin:65px 65px;text-anchor:middle}
+.donut .dnum{font-size:20px;font-weight:600;letter-spacing:-.02em;fill:var(--ink-1);
+  font-variant-numeric:tabular-nums}
+.donut .dcap{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;fill:var(--ink-3)}
+.dlegend{list-style:none;margin:0;padding:0;flex:1;min-width:220px;
+  display:grid;grid-template-columns:auto 1fr auto auto;gap:7px 12px;align-items:center}
+.dlegend li{display:contents}
+.dlegend i{width:10px;height:10px;border-radius:3px;display:inline-block;
+  box-shadow:0 0 0 1px var(--border)}
+.dlegend .dlabel{font-size:13px;color:var(--ink-2)}
+.dlegend .dval,.dlegend .dpct{font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+.dlegend .dval{color:var(--ink-1);font-weight:600}
+.dlegend .dpct{color:var(--ink-3)}
+.dlegend .dnote{display:block;grid-column:1/-1;font-size:12px;color:var(--ink-3);margin-top:2px}
+@keyframes growRing{from{opacity:0;stroke-width:4}to{opacity:1;stroke-width:15}}
+@media (prefers-reduced-motion:reduce){.donut circle{animation:none}}
+
 /* ---- conflicts: the only place the dashboard writes ---- */
 .msg{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:10px}
 .msg-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap}

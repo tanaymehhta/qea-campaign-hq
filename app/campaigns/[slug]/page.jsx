@@ -1,5 +1,5 @@
 import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize, PAGE_SIZES } from "../../../lib/db";
-import { Num, BounceCell, Pill, DrillCell, PeopleTable, Tile } from "../../../components/ui";
+import { Num, BounceCell, Pill, DrillCell, PeopleTable, Tile, ShareDonut, tally } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -19,15 +19,21 @@ export default async function Group({ params, searchParams }) {
   const size = pageSize(sp.size);
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * size;
-  let people = [], peopleCount = 0;
+  let people = [], peopleCount = 0, statuses = [];
   if (ids.length) {
-    const res = await db.from("people")
-      .select("id, campaign_id, source, email, name, company, status, opened_count, clicked_count, replied_count, last_contacted_at", { count: "exact" })
-      .in("campaign_id", ids)
-      .order("last_contacted_at", { ascending: false, nullsFirst: false })
-      .range(offset, offset + size - 1);
+    // Two reads: the page on screen, and one column for everyone, so the ring
+    // above the table describes the group rather than the rows in view.
+    const [res, all] = await Promise.all([
+      db.from("people")
+        .select("id, campaign_id, source, email, name, company, status, opened_count, clicked_count, replied_count, last_contacted_at", { count: "exact" })
+        .in("campaign_id", ids)
+        .order("last_contacted_at", { ascending: false, nullsFirst: false })
+        .range(offset, offset + size - 1),
+      db.from("people").select("status").in("campaign_id", ids).limit(5000),
+    ]);
     people = res.data ?? [];
     peopleCount = res.count ?? 0;
+    statuses = all.data ?? [];
   }
   const nameOf = new Map((subs ?? []).map((s) => [s.campaign_id, s.sub_campaign_label || s.name]));
   const pageHref = (extra) => {
@@ -144,6 +150,8 @@ export default async function Group({ params, searchParams }) {
       <p className="sub">
         Every person across all {g.campaign_count} sub-campaigns, most recently contacted first.
       </p>
+      <ShareDonut title="people" items={tally(statuses, "status")}
+        note="By status, across the whole group — not just this page." />
       <PeopleTable
         rows={people}
         count={peopleCount}

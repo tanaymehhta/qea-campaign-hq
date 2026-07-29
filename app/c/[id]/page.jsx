@@ -1,5 +1,5 @@
 import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize } from "../../../lib/db";
-import { Pill, PeopleTable, PersonLink } from "../../../components/ui";
+import { Pill, PeopleTable, PersonLink, ShareDonut, tally } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +34,10 @@ export default async function Campaign({ params, searchParams }) {
     .range(offset, offset + size - 1);
   const people = peopleRes.data ?? [];
   const peopleCount = peopleRes.count ?? 0;
+  // One column for everyone, so the ring describes the campaign rather than the
+  // twenty-five rows on screen.
+  const { data: statuses } = await db.from("people")
+    .select("status").eq("campaign_id", params.id).limit(5000);
   const pageHref = (extra) => {
     const q = new URLSearchParams({ size: String(size), page: String(page), ...extra });
     return `/c/${params.id}?${q}#people`;
@@ -106,6 +110,8 @@ export default async function Campaign({ params, searchParams }) {
       </div>
 
       <h2 id="people">Everyone in this sub-campaign</h2>
+      <ShareDonut title="people" items={tally(statuses, "status")}
+        note="By status, across everyone in the campaign — not just this page." />
       <PeopleTable rows={people} count={peopleCount} size={size} page={page} hrefFor={pageHref} />
 
       <h2>The sequence</h2>

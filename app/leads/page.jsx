@@ -1,5 +1,5 @@
 import { db, num } from "../../lib/db";
-import { Tile, Pill, PersonLink } from "../../components/ui";
+import { Tile, Pill, PersonLink, ShareDonut } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +119,14 @@ export default async function Leads({ searchParams }) {
               </a>
             ))}
           </div>
+
+          {/* The whole group, not the page: the counts come from head-counts
+              above, so the picture matches the filter rather than the slice. */}
+          <ShareDonut
+            title={activeStatus ? "shown" : "leads"}
+            items={STATUSES.map((s) => ({ label: s, value: gc[s] ?? 0 }))}
+            note={activeStatus ? `Filtered to ${activeStatus.replace(/_/g, " ")} — the ring is the whole group.` : null}
+          />
 
           <div className="card tw">
             <table>

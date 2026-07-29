@@ -2,7 +2,7 @@ import {
   db, num, prettyDate, prettyWhen, windowFrom, shift, today,
   METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, campaignIdsForRep, listHref,
 } from "../../lib/db";
-import { RangePicker, Pill, Seg, PersonLink } from "../../components/ui";
+import { RangePicker, Pill, Seg, PersonLink, ShareDonut, tally } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -57,50 +57,64 @@ export default async function List({ searchParams }) {
   const windowed = m.table !== "people" || !!m.dateField;
   const ignoresWindow = !windowed && w.range !== "all";
 
-  let q, rows = [], count = 0;
+  let rows = [], count = 0;
 
-  if (m.table === "activities") {
-    q = db.from("activities")
-      .select("id, campaign_id, source, event_type, occurred_at, email, name, company", { count: "exact" })
-      .eq("event_type", m.event)
-      .gte("activity_date", w.from).lte("activity_date", w.to)
-      .order("occurred_at", { ascending: false });
-  } else if (m.table === "people") {
-    q = db.from("people")
-      .select("id, campaign_id, source, email, name, company, status, sent_count, opened_count, clicked_count, replied_count, bounced, first_contacted_at, last_contacted_at", { count: "exact" })
-      .order("last_contacted_at", { ascending: false, nullsFirst: false });
-    if (m.counter) q = q.gt(m.counter, 0);
-    if (m.altFilter) for (const [k, v] of Object.entries(m.altFilter)) q = q.eq(k, v);
-    if (m.dateField) q = q.gte(m.dateField, w.from).lte(m.dateField, `${w.to}T23:59:59.999Z`);
-  } else if (m.table === "replies") {
-    q = db.from("replies")
-      .select("id, campaign_id, lead_name, lead_email, company, channel, subject, body, sentiment, received_at", { count: "exact" })
-      .gte("received_at", `${w.from}T00:00:00Z`).lte("received_at", `${w.to}T23:59:59.999Z`)
-      .order("received_at", { ascending: false });
-    if (m.sentiment) q = q.eq("sentiment", m.sentiment);
-  } else if (m.table === "meetings") {
-    q = db.from("meetings")
-      .select("id, campaign_id, prospect_name, prospect_email, company, meeting_date, status, evidence, note", { count: "exact" })
-      .gte("meeting_date", w.from).lte("meeting_date", w.to)
-      .order("meeting_date", { ascending: false });
-  } else {
-    q = db.from("proposals")
-      .select("id, campaign_id, prospect_name, company, amount, sent_date, status, note", { count: "exact" })
-      .gte("sent_date", w.from).lte("sent_date", w.to)
-      .order("sent_date", { ascending: false });
-  }
-
-  if (scopeIds) {
+  // Built as a function rather than a value, because it is needed twice: once
+  // for the page of rows on screen, and once — selecting a single column — for
+  // the breakdown above it, which summarises the whole result rather than the
+  // twenty-five rows you happen to be looking at.
+  const build = (cols) => {
+    let q;
+    if (m.table === "activities") {
+      q = db.from("activities")
+        .select(cols ?? "id, campaign_id, source, event_type, occurred_at, email, name, company", { count: "exact" })
+        .eq("event_type", m.event)
+        .gte("activity_date", w.from).lte("activity_date", w.to)
+        .order("occurred_at", { ascending: false });
+    } else if (m.table === "people") {
+      q = db.from("people")
+        .select(cols ?? "id, campaign_id, source, email, name, company, status, sent_count, opened_count, clicked_count, replied_count, bounced, first_contacted_at, last_contacted_at", { count: "exact" })
+        .order("last_contacted_at", { ascending: false, nullsFirst: false });
+      if (m.counter) q = q.gt(m.counter, 0);
+      if (m.altFilter) for (const [k, v] of Object.entries(m.altFilter)) q = q.eq(k, v);
+      if (m.dateField) q = q.gte(m.dateField, w.from).lte(m.dateField, `${w.to}T23:59:59.999Z`);
+    } else if (m.table === "replies") {
+      q = db.from("replies")
+        .select(cols ?? "id, campaign_id, lead_name, lead_email, company, channel, subject, body, sentiment, received_at", { count: "exact" })
+        .gte("received_at", `${w.from}T00:00:00Z`).lte("received_at", `${w.to}T23:59:59.999Z`)
+        .order("received_at", { ascending: false });
+      if (m.sentiment) q = q.eq("sentiment", m.sentiment);
+    } else if (m.table === "meetings") {
+      q = db.from("meetings")
+        .select(cols ?? "id, campaign_id, prospect_name, prospect_email, company, meeting_date, status, evidence, note", { count: "exact" })
+        .gte("meeting_date", w.from).lte("meeting_date", w.to)
+        .order("meeting_date", { ascending: false });
+    } else {
+      q = db.from("proposals")
+        .select(cols ?? "id, campaign_id, prospect_name, company, amount, sent_date, status, note", { count: "exact" })
+        .gte("sent_date", w.from).lte("sent_date", w.to)
+        .order("sent_date", { ascending: false });
+    }
     // An empty scope means the group has no campaigns; `in ()` is invalid SQL,
-    // so short-circuit to no rows rather than silently returning everything.
-    if (!scopeIds.length) { rows = []; count = 0; }
-    else q = q.in("campaign_id", scopeIds);
-  }
+    // so the caller short-circuits rather than silently returning everything.
+    if (scopeIds?.length) q = q.in("campaign_id", scopeIds);
+    return q;
+  };
+
+  // An activity list is one event type by definition, so there is nothing to
+  // divide; the other shapes carry a state worth seeing the shape of.
+  const BREAKDOWN = { people: "status", replies: "sentiment", meetings: "status", proposals: "status" };
+  const field = BREAKDOWN[m.table];
+  let breakdown = [];
 
   if (scopeIds?.length !== 0) {
-    const res = await q.range(offset, offset + size - 1);
+    const [res, cats] = await Promise.all([
+      build().range(offset, offset + size - 1),
+      field ? build(`campaign_id, ${field}`).limit(5000) : Promise.resolve({ data: [] }),
+    ]);
     rows = res.data ?? [];
     count = res.count ?? 0;
+    breakdown = tally(cats.data, field);
   }
 
   const pages = Math.max(1, Math.ceil(count / size));
@@ -140,6 +154,12 @@ export default async function List({ searchParams }) {
           a date range. This is the lifetime list, not {w.label.toLowerCase()}.
         </div>
       ) : null}
+
+      <ShareDonut
+        title={m.table === "replies" ? "replies" : m.table === "meetings" ? "meetings" : "people"}
+        items={breakdown}
+        note={`By ${field === "sentiment" ? "how the reply was read" : "status"}, across all ${num(count)} — not just this page.`}
+      />
 
       <div className="segrow">
         <span className="note">Show</span>
