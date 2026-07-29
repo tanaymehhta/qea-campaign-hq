@@ -126,8 +126,13 @@ export default async function Meetings({ searchParams }) {
                 {anonymous ? "?" : initials(m.prospect_name)}
               </span>
               <span className="meat">
+                {/* A link inside a summary navigates on its own click and lets
+                    every other click through to the toggle, so the name goes to
+                    the person and the rest of the row still opens. */}
                 <span className="who" style={anonymous ? { color: "var(--ink-3)" } : undefined}>
-                  {m.prospect_name || "No prospect recorded"}
+                  {m.prospect_email
+                    ? <PersonLink email={m.prospect_email} name={m.prospect_name} />
+                    : m.prospect_name || "No prospect recorded"}
                 </span>
                 <span className="line">
                   {(m.company || "No company")} — {campaign ?? "campaign unknown"}
