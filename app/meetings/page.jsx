@@ -1,5 +1,5 @@
 import { db, num, pct, prettyDate, prettyWhen, initials, repList, listHref } from "../../lib/db";
-import { Tile, Reps, Pill } from "../../components/ui";
+import { Tile, Reps, Pill, PersonLink } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -141,7 +141,11 @@ export default async function Meetings({ searchParams }) {
             <div className="mbody">
               <div className="inner">
                 <div className="meta">
-                  <div><div className="k">Prospect</div><div className="v">{m.prospect_name || <span className="dim">not recorded</span>}</div></div>
+                  <div><div className="k">Prospect</div><div className="v">
+                    {m.prospect_name || m.prospect_email
+                      ? <PersonLink email={m.prospect_email} name={m.prospect_name} />
+                      : <span className="dim">not recorded</span>}
+                  </div></div>
                   <div><div className="k">Company</div><div className="v">{m.company || "—"}</div></div>
                   <div><div className="k">Email</div><div className="v">{m.prospect_email || "—"}</div></div>
                   <div><div className="k">Campaign</div><div className="v">
@@ -188,7 +192,7 @@ export default async function Meetings({ searchParams }) {
               return (
                 <tr key={r.id}>
                   <td className="name">
-                    {r.lead_name || r.lead_email || "Unknown"}
+                    <PersonLink email={r.lead_email} name={r.lead_name} fallback="Unknown" />
                     {r.lead_name && r.lead_email ? <span className="alias">{r.lead_email}</span> : null}
                   </td>
                   <td style={{ textAlign: "left" }}>{r.company || "—"}</td>

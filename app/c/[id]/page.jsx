@@ -1,5 +1,5 @@
 import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize } from "../../../lib/db";
-import { Pill, PeopleTable } from "../../../components/ui";
+import { Pill, PeopleTable, PersonLink } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -148,7 +148,7 @@ export default async function Campaign({ params, searchParams }) {
               <tbody>
                 {replies.map((r) => (
                   <tr key={r.id}>
-                    <td className="name">{r.lead_name || r.lead_email || "—"}</td>
+                    <td className="name"><PersonLink email={r.lead_email} name={r.lead_name} /></td>
                     <td className="dim" style={{ textAlign: "left" }}>{r.company ?? "—"}</td>
                     <td className="dim">{r.channel}</td>
                     <td><span className="pill">{r.sentiment.replace(/_/g, " ")}</span></td>

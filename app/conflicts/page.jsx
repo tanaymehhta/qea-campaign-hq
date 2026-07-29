@@ -1,5 +1,5 @@
 import { db, num, prettyDate, prettyWhen } from "../../lib/db";
-import { Pill } from "../../components/ui";
+import { Pill, PersonLink } from "../../components/ui";
 import { classifyReply, recordMeetingDetail } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +78,7 @@ export default async function Conflicts() {
               <div className="msg" key={m.id}>
                 <div className="msg-head">
                   <div>
-                    <span className="who">{m.lead_name || m.lead_email || "—"}</span>
+                    <span className="who"><PersonLink email={m.lead_email} name={m.lead_name} /></span>
                     {m.lead_name && m.lead_email ? <span className="dim"> · {m.lead_email}</span> : null}
                   </div>
                   <div className="msg-meta">

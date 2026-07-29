@@ -2,7 +2,7 @@ import {
   db, num, prettyDate, prettyWhen, windowFrom, shift, today,
   METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, campaignIdsForRep, listHref,
 } from "../../lib/db";
-import { RangePicker, Pill, Seg } from "../../components/ui";
+import { RangePicker, Pill, Seg, PersonLink } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -179,7 +179,8 @@ export default async function List({ searchParams }) {
 
               if (m.table === "replies") return (
                 <tr key={r.id}>
-                  <td className="name">{r.lead_name || r.lead_email || "Unknown"}
+                  <td className="name">
+                    <PersonLink email={r.lead_email} name={r.lead_name} fallback="Unknown" />
                     {r.lead_name && r.lead_email ? <div className="dim" style={{ fontSize: 12 }}>{r.lead_email}</div> : null}</td>
                   <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                   <td style={{ textAlign: "left" }}>{cname}</td>
@@ -194,7 +195,10 @@ export default async function List({ searchParams }) {
 
               if (m.table === "meetings") return (
                 <tr key={r.id}>
-                  <td className="name">{r.prospect_name || <span className="dim">not recorded</span>}
+                  <td className="name">
+                    {r.prospect_name || r.prospect_email
+                      ? <PersonLink email={r.prospect_email} name={r.prospect_name} />
+                      : <span className="dim">not recorded</span>}
                     {r.prospect_email ? <div className="dim" style={{ fontSize: 12 }}>{r.prospect_email}</div> : null}</td>
                   <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                   <td style={{ textAlign: "left" }}>{cname}</td>
@@ -217,7 +221,7 @@ export default async function List({ searchParams }) {
 
               if (m.table === "people") return (
                 <tr key={r.id}>
-                  <td className="name">{r.name || "—"}</td>
+                  <td className="name"><PersonLink email={r.email} name={r.name} /></td>
                   <td className="dim" style={{ textAlign: "left" }}>{r.email}</td>
                   <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                   <td style={{ textAlign: "left" }}>{cname}</td>
@@ -231,7 +235,7 @@ export default async function List({ searchParams }) {
 
               return (
                 <tr key={r.id}>
-                  <td className="name">{r.name || "—"}</td>
+                  <td className="name"><PersonLink email={r.email} name={r.name} /></td>
                   <td className="dim" style={{ textAlign: "left" }}>{r.email || "—"}</td>
                   <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                   <td style={{ textAlign: "left" }}>{cname}</td>

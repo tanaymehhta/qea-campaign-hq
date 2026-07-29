@@ -1,7 +1,17 @@
-import { num, pct, prettyDate, prettyWhen, PAGE_SIZES } from "../lib/db";
+import { num, pct, prettyDate, prettyWhen, personHref, PAGE_SIZES } from "../lib/db";
 
 export function Pill({ status }) {
   return <span className={`pill p-${status ?? "unknown"}`}>{(status ?? "unknown").replace(/_/g, " ")}</span>;
+}
+
+/**
+ * A person's name, opening their hub. The email is the key, so a row without
+ * one stays inert text rather than linking somewhere that cannot resolve.
+ */
+export function PersonLink({ email, name, fallback = "—" }) {
+  const href = personHref(email);
+  const label = name || email || fallback;
+  return href ? <a href={href}>{label}</a> : <span>{label}</span>;
 }
 
 /** A segmented control. Options are links, so every state is a real URL. */
@@ -140,7 +150,7 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
-                <td className="name">{r.name || "—"}</td>
+                <td className="name"><PersonLink email={r.email} name={r.name} /></td>
                 <td className="dim" style={{ textAlign: "left" }}>{r.email}</td>
                 <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                 {campaignOf ? (

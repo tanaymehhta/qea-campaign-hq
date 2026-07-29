@@ -38,6 +38,35 @@ query rewritten except where a new control needed scoping.
 
 ---
 
+## The person hub — 29 July 2026
+
+Every number opened onto a list of people, and every person in that list was a dead end.
+`/person/[email]` closes it: one page per human, keyed on the address rather than the
+campaign, holding their campaigns, their whole event stream, and every reply they sent.
+
+- **Email is the key**, matched with `eq` on the lowercased address, not `ilike`. Twenty-nine
+  addresses contain an underscore and `ilike` would read it as a wildcard. Nothing in
+  `people` differs from its own lowercase, so `eq` is both correct and cheaper.
+- **No tabs.** Only 24 of 1,898 people are in more than one campaign, and the average person
+  has 1.6 recorded events. Sections stack, as they do on the campaign page.
+- **Sibling duplicates are collapsed and labelled.** lemlist files one out-of-office against
+  every campaign a person sits in, so Michael Kramer's two messages were six rows. The page
+  shows two, names all three campaigns on each, and the Replied tile says
+  "2 distinct messages, filed against 6 campaigns" rather than a 6 that matches nothing below.
+- **Blank reply bodies say so.** Eighty of the ninety-eight lemlist replies carry a subject
+  and a single space for a body. Both this page and `/replies` now name that instead of
+  rendering an empty block.
+- **Proposals are absent on purpose** — that table records a prospect name and no email, so
+  there is no key to join a person on. Give it an email column and it belongs here.
+- **Person names are links everywhere they appear**: the people tables, all four row shapes
+  on `/list`, `/replies`, `/meetings`, `/leads`, `/conflicts` and the campaign page. A row
+  with no email stays inert text rather than linking somewhere that cannot resolve — which
+  is why neither of the two meetings links today: both have a null `prospect_email`.
+
+No new CSS. Every class is one that already existed, so dark mode came free.
+
+---
+
 ## What changed
 
 ### 1. The dashboard opens on All time
@@ -321,6 +350,7 @@ missing writer, not a broken one.
 
     app/page.jsx              overview, all-time by default, every tile a link
     app/list/page.jsx         the drill-down behind every number
+    app/person/[email]/       one human, across every campaign
     app/conflicts/page.jsx    what only a person can settle
     app/conflicts/actions.js  the only two writes in the app
     app/campaigns/[slug]/     group page + everyone in the group

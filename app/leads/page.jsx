@@ -1,5 +1,5 @@
 import { db, num } from "../../lib/db";
-import { Tile, Pill } from "../../components/ui";
+import { Tile, Pill, PersonLink } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -135,7 +135,7 @@ export default async function Leads({ searchParams }) {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td className="name">{r.name || "—"}</td>
+                    <td className="name"><PersonLink email={r.email} name={r.name} /></td>
                     <td className="dim" style={{ textAlign: "left" }}>{r.email || "—"}</td>
                     <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                     <td style={{ textAlign: "left" }}>{r.title || "—"}</td>

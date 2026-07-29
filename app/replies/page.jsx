@@ -1,4 +1,5 @@
 import { db, num, prettyWhen } from "../../lib/db";
+import { PersonLink } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export default async function Replies({ searchParams }) {
         <div className="card" key={r.id}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 8 }}>
             <div>
-              <strong>{r.lead_name || r.lead_email || "Unknown"}</strong>
+              <strong><PersonLink email={r.lead_email} name={r.lead_name} fallback="Unknown" /></strong>
               {r.company ? <span className="dim"> · {r.company}</span> : null}
               <div className="dim" style={{ fontSize: 12.5, marginTop: 2 }}>
                 {r.campaigns?.name ?? "—"} · {r.channel}
@@ -53,7 +54,12 @@ export default async function Replies({ searchParams }) {
             </div>
           </div>
           {r.subject ? <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>{r.subject}</div> : null}
-          {r.body ? <div style={{ fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>{r.body}</div> : null}
+          {/* Most lemlist replies carry a subject and a single space for a body. */}
+          {r.body?.trim()
+            ? <div style={{ fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>{r.body.trim()}</div>
+            : <div className="dim" style={{ fontSize: 12.5 }}>
+                {r.source === "lemlist" ? "lemlist recorded the subject only" : "No message body recorded"}
+              </div>}
         </div>
       ))}
     </>
