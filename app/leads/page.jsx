@@ -43,6 +43,7 @@ export default async function Leads({ searchParams }) {
 
   let rows = [];
   const gc = { ...EMPTY_COUNTS };
+  const search = (sp.q ?? "").replace(/[,()%]/g, "").trim();
   if (activeGroup) {
     gc.total = countsByGroup.get(activeGroup.id) ?? 0;
     const statusBreakdown = await Promise.all(
@@ -57,6 +58,7 @@ export default async function Leads({ searchParams }) {
       .order("name")
       .limit(1000);
     if (activeStatus) q = q.eq("status", activeStatus);
+    if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,company.ilike.%${search}%`);
     const { data } = await q;
     rows = data ?? [];
   }
@@ -105,14 +107,27 @@ export default async function Leads({ searchParams }) {
       {activeGroup ? (
         <>
           <h2>{activeGroup.display_name}</h2>
+
+          <form action="/leads" method="GET" style={{ marginBottom: 14 }}>
+            <input type="hidden" name="group" value={activeGroup.slug} />
+            {activeStatus ? <input type="hidden" name="status" value={activeStatus} /> : null}
+            <input
+              type="search"
+              name="q"
+              placeholder="Search name, email, or company…"
+              defaultValue={sp.q ?? ""}
+              style={{ width: 320, maxWidth: "100%" }}
+            />
+          </form>
+
           <div className="seg" style={{ marginBottom: 14 }}>
-            <a href={`/leads?group=${activeGroup.slug}`} className={!activeStatus ? "on" : ""}>
+            <a href={`/leads?group=${activeGroup.slug}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className={!activeStatus ? "on" : ""}>
               All ({num(gc.total)})
             </a>
             {STATUSES.map((s) => (
               <a
                 key={s}
-                href={`/leads?group=${activeGroup.slug}&status=${s}`}
+                href={`/leads?group=${activeGroup.slug}&status=${s}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
                 className={activeStatus === s ? "on" : ""}
               >
                 {s.replace(/_/g, " ")} ({num(gc[s] ?? 0)})

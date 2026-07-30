@@ -7,12 +7,14 @@ const TAGS = ["all", "unclassified", "interested", "referral", "not_now", "not_i
 
 export default async function Replies({ searchParams }) {
   const tag = searchParams?.tag ?? "all";
+  const search = (searchParams?.q ?? "").replace(/[,()%]/g, "").trim();
 
   let q = db.from("replies")
     .select("*, campaigns(name, source)")
     .order("received_at", { ascending: false })
     .limit(300);
   if (tag !== "all") q = q.eq("sentiment", tag);
+  if (search) q = q.or(`lead_name.ilike.%${search}%,lead_email.ilike.%${search}%,company.ilike.%${search}%`);
   const { data: replies } = await q;
 
   const { data: counts } = await db.from("replies").select("sentiment");
@@ -28,9 +30,24 @@ export default async function Replies({ searchParams }) {
         outside the original sequence, and CC&rsquo;d third-party replies, never appear in lemlist.
       </p>
 
+      <form action="/replies" method="GET" style={{ marginBottom: 14 }}>
+        {tag !== "all" ? <input type="hidden" name="tag" value={tag} /> : null}
+        <input
+          type="search"
+          name="q"
+          placeholder="Search name, email, or company…"
+          defaultValue={search}
+          style={{ width: 320, maxWidth: "100%" }}
+        />
+      </form>
+
       <div className="seg" style={{ marginBottom: 20 }}>
         {TAGS.map((t) => (
-          <a key={t} href={`/replies?tag=${t}`} className={tag === t ? "on" : ""}>
+          <a
+            key={t}
+            href={`/replies?tag=${t}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+            className={tag === t ? "on" : ""}
+          >
             {t === "all" ? `All (${total})` : `${t.replace(/_/g, " ")} (${tally[t] ?? 0})`}
           </a>
         ))}

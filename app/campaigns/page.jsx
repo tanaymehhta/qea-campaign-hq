@@ -1,4 +1,4 @@
-import { db, num, pct, listHref } from "../../lib/db";
+import { db, num, pct, prettyDate, listHref } from "../../lib/db";
 import { Seg, BounceCell, DrillCell, Num } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +87,7 @@ export default async function Campaigns({ searchParams }) {
                       g.geography,
                       (g.platform ?? []).join(", ") || null,
                       `${g.campaign_count} campaign${g.campaign_count === 1 ? "" : "s"}`,
+                      g.first_sent_on ? `${prettyDate(g.first_sent_on)} – ${prettyDate(g.last_sent_on)}` : null,
                     ].filter(Boolean).join(" · ")}
                   </div>
                 </div>

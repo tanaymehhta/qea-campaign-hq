@@ -90,15 +90,17 @@ export default async function List({ searchParams }) {
       if (m.sentiment) q = q.eq("sentiment", m.sentiment);
       else if (!forBreakdown && sp.sentiment && sp.sentiment !== "all") q = q.eq("sentiment", sp.sentiment);
     } else if (m.table === "meetings") {
+      // Hand-logged and can be booked for a future date — "all time" means every
+      // one ever logged, not capped at today the way send activity is.
       q = db.from("meetings")
         .select(cols ?? "id, campaign_id, prospect_name, prospect_email, company, meeting_date, status, evidence, note", { count: "exact" })
-        .gte("meeting_date", w.from).lte("meeting_date", w.to)
         .order("meeting_date", { ascending: false });
+      if (w.range !== "all") q = q.gte("meeting_date", w.from).lte("meeting_date", w.to);
     } else {
       q = db.from("proposals")
         .select(cols ?? "id, campaign_id, prospect_name, company, amount, sent_date, status, note", { count: "exact" })
-        .gte("sent_date", w.from).lte("sent_date", w.to)
         .order("sent_date", { ascending: false });
+      if (w.range !== "all") q = q.gte("sent_date", w.from).lte("sent_date", w.to);
     }
     // An empty scope means the group has no campaigns; `in ()` is invalid SQL,
     // so the caller short-circuits rather than silently returning everything.

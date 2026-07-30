@@ -16,8 +16,14 @@ export default async function Overview({ searchParams }) {
       db.from("campaigns").select("id, source, name, status"),
       repList(),
       dailyRange(w.from, w.to),
-      db.from("meetings").select("id, campaign_id, group_id, meeting_date").gte("meeting_date", w.from).lte("meeting_date", w.to),
-      db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to),
+      // Meetings/proposals are hand-logged and can be booked for a future date;
+      // "all time" means every one ever logged, not capped at today like send activity.
+      (w.range === "all"
+        ? db.from("meetings").select("id, campaign_id, group_id, meeting_date")
+        : db.from("meetings").select("id, campaign_id, group_id, meeting_date").gte("meeting_date", w.from).lte("meeting_date", w.to)),
+      (w.range === "all"
+        ? db.from("proposals").select("id, campaign_id, sent_date")
+        : db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to)),
     ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
