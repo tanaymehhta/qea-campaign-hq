@@ -11,7 +11,7 @@ export default async function Overview({ searchParams }) {
   const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { groups, reps }, rows, { data: meetings }, { data: proposals }] =
+  const [{ data: campaigns }, { groups, reps }, rows, { data: meetings }, { data: proposals }, { data: calls }] =
     await Promise.all([
       db.from("campaigns").select("id, source, name, status"),
       repList(),
@@ -24,6 +24,12 @@ export default async function Overview({ searchParams }) {
       (w.range === "all"
         ? db.from("proposals").select("id, campaign_id, sent_date")
         : db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to)),
+      // Phone calls carry no campaign_id (some, like the New York batch, happened
+      // outside any campaign in this database), so unlike meetings/proposals they
+      // can't be scoped to a rep — same as how /meetings already shows them unscoped.
+      (w.range === "all"
+        ? db.from("phone_calls").select("id, call_date")
+        : db.from("phone_calls").select("id, call_date").gte("call_date", w.from).lte("call_date", w.to)),
     ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
@@ -77,6 +83,8 @@ export default async function Overview({ searchParams }) {
   const running = scopedCampaigns.filter((c) => c.status === "running").length;
   const meetingCount = scopedMeetings.length;
   const proposalCount = scopedProposals.length;
+  // Not rep-scoped — phone_calls has no campaign_id to scope by, same as /meetings.
+  const callCount = (calls ?? []).length;
 
   // Every link carries the current window and rep through to the page behind it.
   const windowParams = w.range === "day" ? { d: w.from } : { range: w.range };
@@ -162,7 +170,7 @@ export default async function Overview({ searchParams }) {
         />
       </div>
 
-      <div className="grid g5" style={{ marginBottom: 34 }}>
+      <div className="grid g6" style={{ marginBottom: 34 }}>
         <Tile
           label="LinkedIn sent"
           value={num(overall.linkedin_sent)}
@@ -202,6 +210,14 @@ export default async function Overview({ searchParams }) {
           tone={proposalCount ? undefined : "muted"}
           note="Logged by hand — no tool records this"
           href={drill("proposals")}
+        />
+        <Tile
+          label="Calls logged"
+          value={num(callCount)}
+          raw={callCount}
+          tone={callCount ? undefined : "muted"}
+          note="Hand-logged, not scoped to a rep"
+          href="/meetings"
         />
       </div>
 

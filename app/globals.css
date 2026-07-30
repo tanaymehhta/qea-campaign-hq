@@ -128,9 +128,10 @@ h2{font-size:12px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-
 .grid{display:grid;gap:12px;margin-bottom:12px}
 .g4{grid-template-columns:repeat(4,1fr)}
 .g5{grid-template-columns:repeat(5,1fr)}
+.g6{grid-template-columns:repeat(6,1fr)}
 .g3{grid-template-columns:repeat(3,1fr)}
-@media(max-width:980px){.g4,.g5,.g3{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:560px){.g4,.g5,.g3{grid-template-columns:1fr}}
+@media(max-width:980px){.g4,.g5,.g6,.g3{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.g4,.g5,.g6,.g3{grid-template-columns:1fr}}
 .tile{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;
   padding:16px 18px;animation:fadeUp .45s cubic-bezier(.22,.8,.3,1) both}
 .tile .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
