@@ -70,22 +70,26 @@ export default async function Inboxes() {
       <h2>Emails</h2>
       <div className="card tw">
         <table>
-          <thead><tr><th style={{ textAlign: "left" }}>Email</th><th style={{ textAlign: "left" }}>Domain</th><th>Source</th><th style={{ textAlign: "left" }}>Campaigns</th></tr></thead>
+          <thead><tr><th style={{ textAlign: "left" }}>Email</th><th style={{ textAlign: "left" }}>Domain</th><th>Source</th><th style={{ textAlign: "left" }}>Campaign</th><th style={{ textAlign: "left" }}>Sub-campaign</th></tr></thead>
           <tbody>
             {(accounts ?? []).map((a) => {
               const cs = campaignsByEmail.get(a.email.toLowerCase()) ?? [];
+              const groupNames = [...new Set(cs.map((c) => groupOfCampaign.get(c.id) ?? "—"))].join(", ");
               return (
                 <tr key={a.id}>
                   <td className="name" style={{ textAlign: "left" }}>{a.email}</td>
                   <td className="dim" style={{ textAlign: "left" }}>{a.domain ?? "—"}</td>
                   <td className="dim">{a.source}</td>
                   <td style={{ textAlign: "left" }} className={cs.length ? "" : "zero"}>
+                    {cs.length ? groupNames : "unassigned"}
+                  </td>
+                  <td style={{ textAlign: "left" }} className={cs.length ? "" : "zero"}>
                     {cs.length ? cs.map((c) => c.name).join(", ") : "unassigned"}
                   </td>
                 </tr>
               );
             })}
-            {!accounts?.length ? <tr><td colSpan={4} className="empty">No mailboxes synced yet.</td></tr> : null}
+            {!accounts?.length ? <tr><td colSpan={5} className="empty">No mailboxes synced yet.</td></tr> : null}
           </tbody>
         </table>
       </div>
