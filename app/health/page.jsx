@@ -5,12 +5,13 @@ export const dynamic = "force-dynamic";
 
 export default async function Health() {
   const t = today();
-  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }] = await Promise.all([
+  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }] = await Promise.all([
     db.from("email_accounts").select("*").order("email"),
     db.from("sync_runs").select("*").order("started_at", { ascending: false }).limit(12),
     db.from("v_campaign_summary").select("*"),
     dailyRange(t, t),
     db.from("v_metric_drift").select("*").order("metric_date", { ascending: false }),
+    db.from("v_group_status_drift").select("*"),
   ]);
 
   const sentToday = new Map();
@@ -109,6 +110,35 @@ export default async function Health() {
                   <td className={d.dm_bounced !== d.act_bounced ? "bad" : "dim"}>{d.dm_bounced} / {d.act_bounced}</td>
                   <td className={d.dm_linkedin_sent !== d.act_linkedin_sent ? "bad" : "dim"}>{d.dm_linkedin_sent} / {d.act_linkedin_sent}</td>
                   <td className={d.dm_linkedin_accepted !== d.act_linkedin_accepted ? "bad" : "dim"}>{d.dm_linkedin_accepted} / {d.act_linkedin_accepted}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h2>Group status</h2>
+      <p className="sub" style={{ marginTop: -8 }}>
+        A group's status is a hand-set label, never revisited once campaigns underneath it
+        actually start sending. This is where a group left labelled &ldquo;planned&rdquo; or
+        &ldquo;abandoned&rdquo; while it&rsquo;s really running would show up — like Canada
+        &mdash; Justin&rsquo;s list did.
+      </p>
+      <div className="card tw">
+        {!groupDrift?.length ? (
+          <p className="empty" style={{ padding: 0 }}>Clean — no group is labelled planned/abandoned while actually sending.</p>
+        ) : (
+          <table>
+            <thead><tr><th style={{ textAlign: "left" }}>Group</th><th>Labelled</th>
+              <th>Running campaigns</th><th>Lifetime sent</th><th>First sent</th></tr></thead>
+            <tbody>
+              {groupDrift.map((g) => (
+                <tr key={g.id}>
+                  <td className="name" style={{ textAlign: "left" }}><a href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
+                  <td className="bad">{g.stored_status}</td>
+                  <td>{g.running_count} / {g.campaign_count}</td>
+                  <Num v={g.sent} />
+                  <td className="dim">{g.first_sent_on ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
