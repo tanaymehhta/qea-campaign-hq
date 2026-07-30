@@ -13,11 +13,12 @@ export const dynamic = "force-dynamic";
 export default async function Meetings({ searchParams }) {
   const rep = searchParams?.rep ?? "all";
 
-  const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }] = await Promise.all([
+  const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }, { data: calls }] = await Promise.all([
     repList(),
     db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, status, leads, replied, source"),
     db.from("meetings").select("*").order("meeting_date", { ascending: false }),
     db.from("proposals").select("id, campaign_id"),
+    db.from("phone_calls").select("*").order("call_date", { ascending: false }),
   ]);
 
   const groupById = new Map(groups.map((g) => [g.id, g]));
@@ -177,6 +178,36 @@ export default async function Meetings({ searchParams }) {
           </details>
         );
       })}
+
+      <h2>Phone calls</h2>
+      <p className="sub">
+        Hand-logged, the same way as meetings — not tied to a campaign row in this database, so
+        each call carries its own free-text label instead of a link.
+      </p>
+      <div className="card tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Prospect</th><th>Company</th><th>Campaign</th><th>Outcome</th><th>Date</th><th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(calls ?? []).map((c) => (
+              <tr key={c.id}>
+                <td className="name">{c.prospect_name}</td>
+                <td style={{ textAlign: "left" }}>{c.company || "—"}</td>
+                <td style={{ textAlign: "left" }}>{c.campaign_label || "—"}</td>
+                <td><Pill status={c.outcome} /></td>
+                <td className="dim">{prettyDate(c.call_date)}</td>
+                <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
+              </tr>
+            ))}
+            {!calls?.length ? (
+              <tr><td colSpan={6} className="empty">No phone calls logged yet.</td></tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
 
       <h2>Replies waiting to become meetings</h2>
       <p className="sub">
