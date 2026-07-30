@@ -5,11 +5,12 @@ export const dynamic = "force-dynamic";
 
 export default async function Health() {
   const t = today();
-  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows] = await Promise.all([
+  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }] = await Promise.all([
     db.from("email_accounts").select("*").order("email"),
     db.from("sync_runs").select("*").order("started_at", { ascending: false }).limit(12),
     db.from("v_campaign_summary").select("*"),
     dailyRange(t, t),
+    db.from("v_metric_drift").select("*").order("metric_date", { ascending: false }),
   ]);
 
   const sentToday = new Map();
@@ -84,6 +85,35 @@ export default async function Health() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <h2>Data integrity</h2>
+      <p className="sub" style={{ marginTop: -8 }}>
+        lemlist's tile counts (daily_metrics) are derived from the named-people table
+        (activities) on every sync, so the two can no longer drift apart silently.
+        This is the canary if that ever stops being true.
+      </p>
+      <div className="card tw">
+        {!drift?.length ? (
+          <p className="empty" style={{ padding: 0 }}>Clean — every lemlist tile count matches its named rows.</p>
+        ) : (
+          <table>
+            <thead><tr><th style={{ textAlign: "left" }}>Campaign</th><th>Date</th>
+              <th>Sent (tile / rows)</th><th>Bounced</th><th>LI sent</th><th>LI accepted</th></tr></thead>
+            <tbody>
+              {drift.map((d) => (
+                <tr key={`${d.campaign_id}-${d.metric_date}`}>
+                  <td className="name" style={{ textAlign: "left" }}>{d.name}</td>
+                  <td className="dim">{d.metric_date}</td>
+                  <td className={d.dm_sent !== d.act_sent ? "bad" : "dim"}>{d.dm_sent} / {d.act_sent}</td>
+                  <td className={d.dm_bounced !== d.act_bounced ? "bad" : "dim"}>{d.dm_bounced} / {d.act_bounced}</td>
+                  <td className={d.dm_linkedin_sent !== d.act_linkedin_sent ? "bad" : "dim"}>{d.dm_linkedin_sent} / {d.act_linkedin_sent}</td>
+                  <td className={d.dm_linkedin_accepted !== d.act_linkedin_accepted ? "bad" : "dim"}>{d.dm_linkedin_accepted} / {d.act_linkedin_accepted}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <h2>Sync log</h2>

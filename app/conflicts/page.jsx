@@ -46,6 +46,20 @@ export default async function Conflicts() {
 
   const meetingGaps = list.filter((c) => c.kind === "meeting_detail");
 
+  // A reply that never trips reply_split (Instantly's count can already agree
+  // with ours) and never gets classified just sits — including, once, a
+  // reply that was actually a booked meeting nobody logged. v_conflicts
+  // surfaces anything still unclassified after 48h; fetch the full rows.
+  const needsReview = list.filter((c) => c.kind === "needs_review");
+  let reviewMessages = [];
+  if (needsReview.length) {
+    const { data } = await db
+      .from("replies")
+      .select("id, campaign_id, lead_name, lead_email, company, subject, body, sentiment, received_at")
+      .in("id", needsReview.map((c) => c.subject_id));
+    reviewMessages = data ?? [];
+  }
+
   return (
     <>
       <h1>Conflicts</h1>
@@ -131,6 +145,39 @@ export default async function Conflicts() {
             <input name="note" placeholder="Note (optional)" />
             <button className="choice on">Save</button>
           </form>
+        </div>
+      ))}
+
+      {reviewMessages.map((m) => (
+        <div className="card" key={m.id}>
+          <div style={{ marginBottom: 4, fontWeight: 600 }}>
+            {(m.lead_name || m.lead_email || "Someone")} replied and nobody has read it yet
+          </div>
+          <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
+            {nameOf.get(m.campaign_id) ?? "—"} · Unclassified for over 48 hours. Read it, classify it —
+            and if it is a booked call, log the meeting from the Meetings page.
+          </div>
+          <div className="msg">
+            <div className="msg-head">
+              <div>
+                <span className="who"><PersonLink email={m.lead_email} name={m.lead_name} /></span>
+                {m.lead_name && m.lead_email ? <span className="dim"> · {m.lead_email}</span> : null}
+              </div>
+              <div className="msg-meta">
+                <Pill status={m.sentiment} />
+                <span className="dim">· {prettyWhen(m.received_at)}</span>
+              </div>
+            </div>
+            <div className="msg-subject">{m.subject || "—"}</div>
+            {m.body ? <div className="msg-body">{m.body.slice(0, 240)}</div> : null}
+            <form action={classifyReply} className="choices">
+              <span className="choices-label">It is actually</span>
+              {LABELS.map(([v, label]) => (
+                <button key={v} name="sentiment" value={v} className="choice">{label}</button>
+              ))}
+              <input type="hidden" name="id" value={m.id} />
+            </form>
+          </div>
         </div>
       ))}
     </>

@@ -433,13 +433,6 @@ const ACTIVITY_MAP: Record<string, string> = {
   linkedinInterested: "replied",
 };
 
-// event -> the daily_metrics column it increments (null = counted, not tallied)
-const EVENT_COLUMN: Record<string, string> = {
-  sent: "sent", opened: "opened", clicked: "clicked", replied: "replied",
-  bounced: "bounced", auto_reply: "replies_automatic",
-  linkedin_sent: "linkedin_sent", linkedin_accepted: "linkedin_accepted",
-};
-
 const REPLY_TYPES = new Set(["emailsReplied", "linkedinReplied", "outOfOffice"]);
 
 async function syncLemlist(from: string, to: string, deep: boolean) {
@@ -485,7 +478,6 @@ async function syncLemlist(from: string, to: string, deep: boolean) {
   }
 
   // --- daily, built from the activity stream (one pass, all campaigns)
-  const bucket = new Map<string, Record<string, number>>();
   const replyRows: any[] = [];
   const activityRows: any[] = [];
   for (let offset = 0; offset < 20000; offset += 100) {
@@ -507,13 +499,6 @@ async function syncLemlist(from: string, to: string, deep: boolean) {
       const company = a.leadCompanyName ?? a.companyName ?? null;
 
       if (event) {
-        const col = EVENT_COLUMN[event];
-        if (col) {
-          const k = `${cid}|${date}`;
-          const b = bucket.get(k) ?? {};
-          b[col] = (b[col] ?? 0) + 1;
-          bucket.set(k, b);
-        }
         // lemlist timestamps every single event, so unlike Instantly its rows
         // survive a date filter intact.
         activityRows.push({
@@ -539,21 +524,6 @@ async function syncLemlist(from: string, to: string, deep: boolean) {
     if (acts.length < 100) break;
   }
 
-  for (const [k, v] of bucket) {
-    const [campaign_id, metric_date] = k.split("|");
-    const sent = v.sent ?? 0, bounced = v.bounced ?? 0;
-    await db.from("daily_metrics").upsert({
-      campaign_id, metric_date, sent, bounced,
-      delivered: Math.max(0, sent - bounced),
-      contacted: sent,
-      opened: v.opened ?? 0, clicked: v.clicked ?? 0,
-      replied: v.replied ?? 0, replies_automatic: v.replies_automatic ?? 0,
-      linkedin_sent: v.linkedin_sent ?? 0, linkedin_accepted: v.linkedin_accepted ?? 0,
-      pulled_at: new Date().toISOString(),
-    }, { onConflict: "campaign_id,metric_date" });
-    wrote++;
-  }
-
   if (replyRows.length) {
     await db.from("replies").upsert(replyRows, {
       onConflict: "source,source_message_id", ignoreDuplicates: true,
@@ -561,6 +531,17 @@ async function syncLemlist(from: string, to: string, deep: boolean) {
     wrote += replyRows.length;
   }
   if (activityRows.length) wrote += await writeActivities(activityRows);
+
+  // daily_metrics used to be tallied here in memory from the same page loop
+  // above — a second, independent count of the same feed. Two readings of one
+  // paginated feed can disagree with each other (a page fetched while lemlist
+  // is still writing new activity can skip or shuffle rows), and an additive
+  // tally never gets revisited once wrong. Deriving it in SQL from what
+  // `activities` actually holds, *after* activities is written, makes it a
+  // single source of truth: it can only ever be behind until the next sync
+  // recomputes it, never permanently wrong.
+  const { data: recomputed } = await db.rpc("refresh_lemlist_daily_metrics", { p_from: from, p_to: to });
+  wrote += recomputed ?? 0;
   return wrote;
 }
 

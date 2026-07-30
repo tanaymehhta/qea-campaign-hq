@@ -63,7 +63,7 @@ export default async function List({ searchParams }) {
   // for the page of rows on screen, and once — selecting a single column — for
   // the breakdown above it, which summarises the whole result rather than the
   // twenty-five rows you happen to be looking at.
-  const build = (cols) => {
+  const build = (cols, forBreakdown = false) => {
     let q;
     if (m.table === "activities") {
       q = db.from("activities")
@@ -83,7 +83,12 @@ export default async function List({ searchParams }) {
         .select(cols ?? "id, campaign_id, lead_name, lead_email, company, channel, subject, body, sentiment, received_at", { count: "exact" })
         .gte("received_at", `${w.from}T00:00:00Z`).lte("received_at", `${w.to}T23:59:59.999Z`)
         .order("received_at", { ascending: false });
+      // The metric can already pin one sentiment (e.g. auto_reply); a metric
+      // that doesn't (replied = every inbound) leaves it open to the ?sentiment=
+      // filter — except for the breakdown query, which must see every sentiment
+      // to stay clickable regardless of which slice is currently selected.
       if (m.sentiment) q = q.eq("sentiment", m.sentiment);
+      else if (!forBreakdown && sp.sentiment && sp.sentiment !== "all") q = q.eq("sentiment", sp.sentiment);
     } else if (m.table === "meetings") {
       q = db.from("meetings")
         .select(cols ?? "id, campaign_id, prospect_name, prospect_email, company, meeting_date, status, evidence, note", { count: "exact" })
@@ -110,7 +115,7 @@ export default async function List({ searchParams }) {
   if (scopeIds?.length !== 0) {
     const [res, cats] = await Promise.all([
       build().range(offset, offset + size - 1),
-      field ? build(`campaign_id, ${field}`).limit(5000) : Promise.resolve({ data: [] }),
+      field ? build(`campaign_id, ${field}`, true).limit(5000) : Promise.resolve({ data: [] }),
     ]);
     rows = res.data ?? [];
     count = res.count ?? 0;
@@ -118,8 +123,14 @@ export default async function List({ searchParams }) {
   }
 
   const pages = Math.max(1, Math.ceil(count / size));
-  const base = { metric: key, group: sp.group, campaign: sp.campaign, rep: sp.rep, size, range: w.range === "day" ? undefined : w.range, d: w.range === "day" ? w.from : undefined };
+  const base = {
+    metric: key, group: sp.group, campaign: sp.campaign, rep: sp.rep, size,
+    range: w.range === "day" ? undefined : w.range, d: w.range === "day" ? w.from : undefined,
+    sentiment: m.sentiment ? undefined : sp.sentiment,
+  };
   const link = (extra) => listHref({ ...base, ...extra });
+  const canFilterSentiment = field === "sentiment" && !m.sentiment;
+  const SENTIMENTS = ["all", "unclassified", "interested", "referral", "not_now", "not_interested", "auto_reply"];
 
   return (
     <>
@@ -160,6 +171,17 @@ export default async function List({ searchParams }) {
         items={breakdown}
         note={`By ${field === "sentiment" ? "how the reply was read" : "status"}, across all ${num(count)} — not just this page.`}
       />
+
+      {canFilterSentiment ? (
+        <div className="segrow">
+          <span className="note">Type</span>
+          <Seg
+            options={SENTIMENTS.map((s) => [s, s.replace(/_/g, " ")])}
+            current={sp.sentiment ?? "all"}
+            hrefFor={(s) => link({ sentiment: s === "all" ? undefined : s, page: 1 })}
+          />
+        </div>
+      ) : null}
 
       <div className="segrow">
         <span className="note">Show</span>
