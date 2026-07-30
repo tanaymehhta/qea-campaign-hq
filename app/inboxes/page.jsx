@@ -1,15 +1,37 @@
-import { db } from "../../lib/db";
-import { Pill } from "../../components/ui";
+import { db, windowFrom, num } from "../../lib/db";
+import { Pill, RangePicker } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function Inboxes() {
-  const [{ data: accounts }, { data: campaigns }, { data: members }, { data: groups }] = await Promise.all([
+export default async function Inboxes({ searchParams }) {
+  const sp = searchParams ?? {};
+  const w = windowFrom(sp);
+
+  const [{ data: accounts }, { data: campaigns }, { data: members }, { data: groups }, { data: daily }] = await Promise.all([
     db.from("email_accounts").select("*").order("domain").order("email"),
     db.from("campaigns").select("id, name, source, status, sender_emails").order("name"),
     db.from("campaign_group_members").select("group_id, campaign_id"),
     db.from("campaign_groups").select("id, display_name"),
+    db.from("email_account_daily").select("email, metric_date, sent")
+      .gte("metric_date", w.from).lte("metric_date", w.to),
   ]);
+
+  // Per email: total sent, days it actually sent (avg is over sending days,
+  // not calendar days — a mailbox idle on weekends shouldn't look throttled),
+  // and the highest/lowest single day.
+  const volumeByEmail = new Map();
+  for (const d of daily ?? []) {
+    const email = d.email.toLowerCase();
+    if (!volumeByEmail.has(email)) volumeByEmail.set(email, { total: 0, days: [] });
+    const v = volumeByEmail.get(email);
+    v.total += d.sent ?? 0;
+    v.days.push(d.sent ?? 0);
+  }
+  for (const v of volumeByEmail.values()) {
+    v.avg = v.days.length ? Math.round((v.total / v.days.length) * 10) / 10 : 0;
+    v.max = v.days.length ? Math.max(...v.days) : 0;
+    v.min = v.days.length ? Math.min(...v.days) : 0;
+  }
 
   const groupNameOf = new Map((groups ?? []).map((g) => [g.id, g.display_name]));
   const groupOfCampaign = new Map((members ?? []).map((m) => [m.campaign_id, groupNameOf.get(m.group_id)]));
@@ -48,6 +70,47 @@ export default async function Inboxes() {
         <div className="tile plus"><div className="lbl">Campaigns</div><div className="val">{(campaigns ?? []).length}</div></div>
         <div className="tile plus"><div className="lbl">Idle mailboxes</div><div className="val">{(accounts ?? []).filter((a) => !campaignsByEmail.has(a.email.toLowerCase())).length}</div>
           <div className="note">not assigned to any campaign</div></div>
+      </div>
+
+      <h2>Send volume per mailbox</h2>
+      <p className="sub">Instantly only — lemlist has no per-mailbox send-volume endpoint.</p>
+      <RangePicker base="/inboxes" current={w.range} />
+      <div className="card tw">
+        <table>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>Email</th>
+              <th>Total sent</th>
+              <th>Avg/day</th>
+              <th>Highest day</th>
+              <th>Lowest day</th>
+              <th>Days sent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(accounts ?? []).filter((a) => a.source === "instantly").map((a) => {
+              const v = volumeByEmail.get(a.email.toLowerCase());
+              if (!v) return (
+                <tr key={a.id}>
+                  <td className="name" style={{ textAlign: "left" }}>{a.email}</td>
+                  <td className="zero" colSpan={5}>no sends in this window</td>
+                </tr>
+              );
+              return (
+                <tr key={a.id}>
+                  <td className="name" style={{ textAlign: "left" }}>{a.email}</td>
+                  <td>{num(v.total)}</td>
+                  <td>{v.avg}</td>
+                  <td>{num(v.max)}</td>
+                  <td>{num(v.min)}</td>
+                  <td className="dim">{v.days.length}</td>
+                </tr>
+              );
+            })}
+            {!accounts?.filter((a) => a.source === "instantly").length
+              ? <tr><td colSpan={6} className="empty">No Instantly mailboxes synced yet.</td></tr> : null}
+          </tbody>
+        </table>
       </div>
 
       <h2>Domains</h2>

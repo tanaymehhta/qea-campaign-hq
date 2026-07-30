@@ -395,6 +395,7 @@ async function syncInstantly(from: string, to: string, deep: boolean) {
   // --- mailboxes
   if (deep) {
     const accts = await getJSON(`${INSTANTLY}/accounts?limit=100`, H);
+    const emails: string[] = [];
     for (const a of accts.items ?? []) {
       await db.from("email_accounts").upsert({
         source: "instantly", email: a.email,
@@ -406,6 +407,32 @@ async function syncInstantly(from: string, to: string, deep: boolean) {
         last_synced: new Date().toISOString(),
       }, { onConflict: "source,email" });
       wrote++;
+      if (a.email) emails.push(a.email);
+    }
+
+    // --- per-mailbox daily send volume
+    //
+    // The campaign-level daily endpoint has no sender breakdown, so "how many
+    // emails went out of this mailbox" needs its own account-scoped call.
+    // Batched 20 emails per request — the endpoint accepts a comma-separated list.
+    for (let i = 0; i < emails.length; i += 20) {
+      const batch = emails.slice(i, i + 20);
+      const q = new URLSearchParams({ emails: batch.join(","), start_date: from, end_date: to });
+      let res: any;
+      try {
+        res = await getJSON(`${INSTANTLY}/accounts/analytics/daily?${q}`, H);
+      } catch (_) { continue; }
+      const days = res?.result ?? res;
+      if (!Array.isArray(days) || !days.length) continue;
+      await db.from("email_account_daily").upsert(
+        days.map((d: any) => ({
+          email: d.email_account, source: "instantly", metric_date: d.date,
+          sent: d.sent ?? 0, bounced: d.bounced ?? 0, replied: d.replies ?? 0,
+          pulled_at: new Date().toISOString(),
+        })),
+        { onConflict: "source,email,metric_date" },
+      );
+      wrote += days.length;
     }
   }
   return wrote;
