@@ -96,7 +96,7 @@ function addBuilding(role, rawName, row, extra) {
   p.zip = p.zip ?? val(extra.zip);
   p.buildings.push({
     bin: val(row.BIN), address: val(row.Address), borough: val(row.Borough),
-    rank: row.Rank, score: row.Reliability_Score,
+    rank: row.Rank, score: row.Reliability_Score, streak: row.Safe_Cycles,
   });
   // Defect 3: NYCHA — 169 buildings behind 4 names. Public housing,
   // procurement-gated, almost certainly not the buyer. Imported but tagged

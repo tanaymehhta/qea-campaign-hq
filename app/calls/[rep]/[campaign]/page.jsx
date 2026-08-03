@@ -44,6 +44,67 @@ const FILTERS = {
   dnc: "do-not-call",
 };
 
+/**
+ * The call crib, personalized from the contact's own book — the Day 1 call
+ * sheet's script (opener → stop talking → the reseller ask → close on their
+ * top building), templated so every one of the 1,252 people gets one without
+ * anyone writing 1,252 scripts. Owners get the owner variant: they are a
+ * buyer, not a channel.
+ */
+function Crib({ ct, rep }) {
+  const first = ct.full_name.split(" ")[0];
+  const caller = rep.split(" ")[0];
+  const bldgs = ct.buildings ?? [];
+  const top = bldgs[0]; // buildings are stored best-rank first
+  const n = ct.buildings_count;
+
+  const boroughs = [...bldgs.reduce((m, b) => m.set(b.borough, (m.get(b.borough) ?? 0) + 1), new Map())]
+    .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(" · ");
+
+  return (
+    <>
+      <h2>The book — why this call</h2>
+      <p className="note" style={{ marginBottom: 10 }}>
+        {num(n)} SAFE building{n === 1 ? "" : "s"} carried · top building ranks #{ct.best_rank}
+        {top?.streak ? ` (${top.streak}-cycle SAFE streak)` : ""}{boroughs ? ` · ${boroughs}` : ""}
+      </p>
+
+      <h2>Script</h2>
+      {ct.role === "engineer" ? (
+        <>
+          <p><b>Opener —</b> &ldquo;{first}? {caller} from QEA Tech — do you have thirty seconds?
+            I was going through the public FISP filings and your name is on {num(n)} building{n === 1 ? "" : "s"} that
+            all read SAFE, on time, no violations. You clearly run a tight book, which is exactly why I called you
+            and not chased a problem building. We scan building envelopes with drones — thermal and visual, whole
+            building in a day, no scaffold. FISP only checks what&rsquo;s falling off; Local Law 97 carbon penalties
+            are the next bill your owners see. Are they asking you about LL97 yet?&rdquo;
+            <b> Then stop talking.</b></p>
+          <p><b>The real ask — reseller.</b> &ldquo;Would you run this under {ct.org_name || "your firm"}? You scope
+            it, we fly it, you file and bill it, you keep the margin — and you clear more buildings a cycle with the
+            same people.&rdquo;</p>
+          <p><b>Close —</b> &ldquo;Let&rsquo;s do one building.
+            {top ? ` ${top.address}, ${top.borough} —` : ""} we fly it, you see the output, and if it&rsquo;s not
+            useful you&rsquo;ve lost nothing. What&rsquo;s your week look like?&rdquo;</p>
+          <p className="note">No answer? Leave the voicemail every single time — one hook (drone scans, no scaffold,
+            LL97), your number twice, twenty seconds. The follow-up email is warm only because the voicemail happened.</p>
+        </>
+      ) : (
+        <>
+          <p><b>Opener —</b> &ldquo;{first}? {caller} from QEA Tech.
+            {top ? ` Your building at ${top.address} passed FISP` : " Your building passed FISP"}
+            {top?.streak ? ` — ${top.streak} cycles SAFE in a row, no fines` : ""} — that puts you in the most
+            compliant slice of the city, and it&rsquo;s why I called. LL11 only checks falling hazards. It says
+            nothing about where the building leaks energy, and Local Law 97 carbon penalties are the next bill.
+            Our drone scan shows exactly where it leaks — one day, no scaffold. Has anyone put an LL97 number in
+            front of you yet?&rdquo; <b>Then stop talking.</b></p>
+          <p><b>Close —</b> &ldquo;We fly it, you see the output, and if it&rsquo;s not useful you&rsquo;ve lost
+            nothing. What&rsquo;s your week look like?&rdquo;</p>
+        </>
+      )}
+    </>
+  );
+}
+
 export default async function CallWorkspace({ params, searchParams }) {
   const rep = decodeURIComponent(params.rep);
   const sp = searchParams ?? {};
@@ -181,42 +242,35 @@ export default async function CallWorkspace({ params, searchParams }) {
                       </summary>
 
                       <div className="mbody"><div className="inner">
-                        <div className="meta" style={{ marginBottom: 14 }}>
-                          <div><div className="k">Role</div><div className="v">{ct.role}</div></div>
-                          <div><div className="k">Org</div><div className="v">{ct.org_name || "—"}</div></div>
-                          <div><div className="k">Licence</div><div className="v">{ct.license_no || "—"}</div></div>
-                          <div><div className="k">Phone</div><div className="v">{ct.phone || "—"}</div></div>
+                        {/* The two things that matter mid-call: what to dial, then
+                            where to write down what happened. Everything else is
+                            reference and sits below or folds away. */}
+                        <div className="meta" style={{ marginBottom: 16 }}>
+                          <div><div className="k">Phone</div><div className="v">
+                            {ct.phone || <span className="dim">none yet — firm mainline, ask for {ct.full_name.split(" ")[0]}</span>}
+                          </div></div>
                           <div><div className="k">Email</div><div className="v">{ct.email || "—"}</div></div>
-                          <div><div className="k">LinkedIn</div><div className="v">{ct.linkedin || "—"}</div></div>
-                          <div><div className="k">Where</div><div className="v">{[ct.city, ct.state, ct.zip].filter(Boolean).join(", ") || "—"}</div></div>
-                          <div><div className="k">Contact source</div><div className="v">{ct.contact_source || "—"}</div></div>
+                          <div><div className="k">Licence</div><div className="v">{ct.license_no || "—"}</div></div>
+                          <div><div className="k">Where</div><div className="v">{[ct.city, ct.state].filter(Boolean).join(", ") || "—"}</div></div>
+                          <div><div className="k">Number from</div><div className="v">{ct.contact_source || "—"}</div></div>
                           {ct.dnc ? <div><div className="k">Do not call</div><div className="v">{ct.dnc_reason || "yes"}</div></div> : null}
                         </div>
 
-                        <h2>Their {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"}</h2>
-                        <div className="tw">
-                          <table>
-                            <thead><tr>
-                              <th style={{ textAlign: "left" }}>Address</th><th>BIN</th>
-                              <th>Borough</th><th>Rank</th><th>Reliability</th>
-                            </tr></thead>
-                            <tbody>
-                              {(ct.buildings ?? []).map((b) => (
-                                <tr key={b.bin}>
-                                  <td className="name">{b.address}</td>
-                                  <td className="dim">{b.bin}</td>
-                                  <td>{b.borough}</td>
-                                  <td>#{b.rank}</td>
-                                  <td>{num(b.score)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <h2>Calls logged — {num(history.length)}</h2>
+                        <h2>Log the call</h2>
+                        <form action={logCall} className="gapform">
+                          <input type="hidden" name="contact_id" value={ct.id} />
+                          <input type="hidden" name="rep" value={rep} />
+                          <input type="hidden" name="path" value={base} />
+                          <input type="date" name="call_date" defaultValue={t} required />
+                          <select name="outcome" required>
+                            {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                          </select>
+                          <input name="note" placeholder="What happened? Notes go here." style={{ flex: 2, minWidth: 220 }} />
+                          <input type="date" name="callback_date" title="Callback date, if any" />
+                          <button className="choice" type="submit">Log call</button>
+                        </form>
                         {history.length ? (
-                          <div className="tw">
+                          <div className="tw" style={{ marginTop: 14 }}>
                             <table>
                               <thead><tr>
                                 <th>Date</th><th>Outcome</th><th>Rep</th>
@@ -235,21 +289,36 @@ export default async function CallWorkspace({ params, searchParams }) {
                               </tbody>
                             </table>
                           </div>
-                        ) : <p className="note">Never called.</p>}
+                        ) : null}
 
-                        <h2>Log a call</h2>
-                        <form action={logCall} className="gapform">
-                          <input type="hidden" name="contact_id" value={ct.id} />
-                          <input type="hidden" name="rep" value={rep} />
-                          <input type="hidden" name="path" value={base} />
-                          <input type="date" name="call_date" defaultValue={t} required />
-                          <select name="outcome" required>
-                            {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                          </select>
-                          <input name="note" placeholder="What happened?" style={{ flex: 1, minWidth: 180 }} />
-                          <input type="date" name="callback_date" title="Callback date, if any" />
-                          <button className="choice" type="submit">Log call</button>
-                        </form>
+                        <Crib ct={ct} rep={rep} />
+
+                        {/* The full book is reference, not reading — folded so the
+                            form above never sinks below 65 rows of addresses. */}
+                        <details style={{ marginTop: 14 }}>
+                          <summary className="note" style={{ cursor: "pointer" }}>
+                            All {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"} on the SAFE list &rarr;
+                          </summary>
+                          <div className="tw" style={{ marginTop: 10 }}>
+                            <table>
+                              <thead><tr>
+                                <th style={{ textAlign: "left" }}>Address</th><th>BIN</th>
+                                <th>Borough</th><th>Rank</th><th>SAFE streak</th>
+                              </tr></thead>
+                              <tbody>
+                                {(ct.buildings ?? []).map((b) => (
+                                  <tr key={b.bin}>
+                                    <td className="name">{b.address}</td>
+                                    <td className="dim">{b.bin}</td>
+                                    <td>{b.borough}</td>
+                                    <td>#{b.rank}</td>
+                                    <td>{b.streak ? `${b.streak} cycles` : num(b.score)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
 
                         <div className="choices">
                           <span className="choices-label">Fix a detail</span>
