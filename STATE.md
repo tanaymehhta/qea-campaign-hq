@@ -92,10 +92,121 @@ is 2,119 buildings but 1,252 people, and a rep dials Christopher Krepcio once.
 Migration applied and import run against production on 3 August; the pages render 63
 dialable people, Christopher Krepcio (65 buildings) at the top.
 
-**Open:** the frontend is not yet pushed to `main`, so the live site does not show
-`/calls` until that deploy happens; the engineer referral script seeded into
-`summary_md` (`data/campaign02_summary.md`) is a first draft, untested on a real call;
-only 63 of 1,252 people are dialable until the free name harvest and enrichment wave run.
+**Open:** the engineer referral script seeded into `summary_md`
+(`data/campaign02_summary.md`) is a first draft, untested on a real call; only 63 of
+1,252 people are dialable until the free name harvest and enrichment wave run.
+
+---
+
+## Calls, end-to-end tested — 3 August 2026
+
+The Calls section was exercised against production the way a rep would: real form
+POSTs through the server actions, not RPC calls made to look like them. The write path
+held on every probe. The **read** path did not, and the way it failed was the dangerous
+kind — silent, and only on the pages actually being used.
+
+### The stale-read bug
+
+Log a call and the Overview tile moved from 3 to 4. The workspace the rep was standing
+in still said 3. So did the roster and the rep page. A phone number saved mid-call did
+not appear on the row. The call was always really in the database; the page was showing
+a saved copy.
+
+Two causes, both now fixed in one place each:
+
+- **Next was caching every PostgREST GET on disk** (`.next/cache/fetch-cache`) and
+  serving it after writes. It survived a server restart, which is what ruled out the
+  obvious explanations. `force-dynamic` does not prevent it. Only `/` and `/meetings`
+  looked live, because `app/calls/actions.js` explicitly revalidates exactly those two
+  paths. The fix is one option on the shared client in `lib/db.js` —
+  `global: { fetch: (url, opts) => fetch(url, { ...opts, cache: "no-store" }) }` — which
+  covers every page, not just Calls. **This affected the whole dashboard**, not only the
+  new section: the sync job writes every 30 minutes and any page could serve a stale
+  copy of that too.
+- **`revalidatePath` was being handed an encoded path.** The form carries
+  `/calls/Mark%20Vasu/…`; `revalidatePath` matches real pathnames, so it looked for a
+  page by that literal name, found nothing, and silently did nothing. Decoded.
+
+Worth remembering as a habit: when one page updates and another does not, the
+difference between them is the clue. Here it was which paths someone had remembered to
+revalidate.
+
+### Four gaps found by testing, all closed
+
+| Gap | What it cost | Fix |
+|---|---|---|
+| Double-submit logged the call twice | The Overview tile counts calls, so a misclick inflated a steering number — and the stale page above was actively training people to click again | `log_call` ignores an identical (contact, date, outcome, note) inside one minute. A different note still lands. |
+| Do-not-call was one-way | A misclick removed a contact from the working list until someone wrote SQL | `restore_contact()` + a "Put back on the list" button, audited in `call_contact_edits` like any other correction |
+| Every rejected write was a crash screen | The database raised a readable sentence; the rep saw a stack trace | Writes end in a redirect carrying the message. `?open=<contact>` reopens the row so logging a call no longer collapses the person you are on the phone with, and a reload never re-posts. |
+| Any text saved as a phone number | The whitelist checked *which* field, never *what* | Loose shape check: seven digits for a phone, an `@` and a dot for an email. `(718) 445-9200 x12` and `+16462620425` both pass. |
+
+Verified after the change, against production:
+
+| Test | Result |
+|---|---|
+| Three identical submits, seconds apart | **one** row |
+| Same contact, different note | second row, as intended |
+| Retire → restore | `dnc` cleared, both directions in the audit trail |
+| `asdf` as a phone / `notanemail` as an email | refused, message shown in a banner, no crash |
+| Invalid outcome, missing date, bogus contact, `full_name` as a field, `phone", dnc=true --` injection, blank DNC reason | all refused in Postgres, **zero rows written** |
+| Direct insert / update / delete with the anon key | refused or matched nothing; RLS held |
+
+### Checked and deliberately left alone
+
+- **Latency after removing the cache.** Every page now really queries on every render.
+  Worst is `/leads` and the rep page at ~0.8s; the workspace is ~0.5s. The one slow view
+  is "never called, show everyone" at 1.8s — 1,246 rows behind a deliberate opt-in click.
+- **The import does not clobber hand-edits.** `old?.phone ?? c.phone`, `dnc` OR'd,
+  `callback_date` preserved. Re-verified by dry run: still reconciles to the source
+  exactly (1,252 contacts, 253 engineers, 999 owners, 44 phone, 61 email, 63 dialable).
+- **Indexes.** The unique key on `(call_campaign_id, source_key)` already covers contact
+  lookups. `phone_calls.contact_id` is unindexed and that is fine at a few thousand calls.
+- **Supabase security advisors.** Every warning is this app's deliberate design — no
+  login, so writes go through validating `security definer` functions. Changing them
+  would break the thing that makes it safe.
+
+Test fixtures were removed afterwards and the numbers put back to the import's own
+reconciliation (3 calls, 0 edits, 5 dnc, 44 phone, 61 email, 63 dialable). One real
+phone number was nulled during cleanup and restored from the source workbook.
+
+---
+
+## Feedback — 3 August 2026
+
+A folded box at the foot of **every page**, and `/feedback` to read what comes in. Built
+so that noticing something and saying it are the same moment: the box is already on the
+page you are complaining about.
+
+- **Nothing to fill in but the sentence.** The page and the selected rep are read from
+  the `Referer` header on the POST, so a report from `/inboxes?rep=Mark Vasu` files
+  itself as exactly that. No "which page?" field for anyone to skip or get wrong. Each
+  item links back to where it was written.
+- **Screenshots go to a Storage bucket**, not a column — 2 MB of PNG does not belong in
+  a row selected on every page load. `feedback` bucket, public read, **images only, 5 MB
+  each, enforced by storage rather than by us remembering to check**.
+- **One table, two states.** `feedback` (page, rep, body, screenshot path, status,
+  created_at) with `open` / `done`, one click between them, and the open count on a tile
+  at the top where it nags. A suggestion box nobody reads is worse than none.
+- **Writes are `submit_feedback()` and `set_feedback_status()`** — same validating
+  `security definer` pattern as everything else here.
+- **Native, per DESIGN.md.** A `<details>` and a plain file input; no new client
+  component. Screenshots attach by file, not paste — paste would need JavaScript. On a
+  Mac, `Cmd+Shift+4` saves to the Desktop and you pick it.
+
+Verified: box renders on all ten pages; text + PNG from `/inboxes?rep=Mark Vasu` saved
+with page and rep captured automatically and the image publicly served; empty body,
+5,001 characters, a 6 MB file and a `.txt` renamed as an image all refused with a
+readable sentence and **no junk row or file left behind**; mark done / reopen works;
+invalid status and bogus id refused. One bug found and fixed during testing: a valid
+screenshot with an invalid body used to upload the file and *then* reject the row,
+orphaning it — the text is now checked first.
+
+**Known limits.** The anon key is what uploads, the same trust model as every other
+write here; the bucket's own mime and size limits are what bound it. If it is ever
+abused, move the upload behind a token-guarded edge function holding the service key,
+the way `import-call-list` already did. There is no delete in the UI, so a screenshot
+can only be orphaned by deleting a row by hand in SQL — one test PNG in the bucket is
+exactly that, and can be removed from the Supabase dashboard.
 
 ---
 
@@ -451,7 +562,10 @@ missing writer, not a broken one.
     app/conflicts/actions.js  the only two writes in the app
     app/campaigns/[slug]/     group page + everyone in the group
     app/c/[id]/               sub-campaign page + everyone in it
-    lib/db.js                 METRICS registry, window/paging helpers
+    app/calls/                the phone workspace, four levels deep
+    app/feedback/             what the team has asked for, and the writes behind it
+    components/feedback.jsx   the box at the foot of every page
+    lib/db.js                 METRICS registry, window/paging helpers, the no-store client
     components/ui.jsx         Tile, DrillCell, PeopleTable
     supabase/functions/sync/  the edge function, deployed at version 4
 
@@ -462,6 +576,8 @@ Migrations added this session:
     20260728234500_conflicts_and_human_classification.sql
     20260729110000_hide_shadow_draft_campaigns.sql
     20260803120000_call_campaigns_workspace.sql
+    20260803160000_calls_hardening.sql
+    20260803170000_feedback.sql
 
 Commits:
 

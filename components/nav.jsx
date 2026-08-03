@@ -13,6 +13,7 @@ const LINKS = [
   ["/inboxes", "Inboxes"],
   ["/conflicts", "Conflicts"],
   ["/health", "Health"],
+  ["/feedback", "Feedback"],
 ];
 
 /**

@@ -202,7 +202,7 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .pill{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;
   padding:2px 8px;border-radius:6px;border:1px solid var(--border);white-space:nowrap;
   color:var(--ink-3)}
-.p-running,.p-live,.p-sent,.p-booked,.p-booked_meeting,.p-active{color:var(--good);
+.p-running,.p-live,.p-sent,.p-booked,.p-booked_meeting,.p-active,.p-done{color:var(--good);
   border-color:color-mix(in srgb,var(--good) 40%,transparent)}
 .p-paused,.p-held,.p-follow_up{color:var(--serious);
   border-color:color-mix(in srgb,var(--serious) 45%,transparent)}
@@ -210,7 +210,7 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
   border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
 .p-assigned{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 40%,transparent)}
 .p-interested{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
-.p-referral{color:var(--warn-ink);border-color:var(--warn-soft)}
+.p-referral,.p-open{color:var(--warn-ink);border-color:var(--warn-soft)}
 .p-unclassified,.p-auto_reply{color:var(--ink-3);border-style:dashed}
 .p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now,.p-never_called,.p-no_answer,.p-dnc{color:var(--ink-3);border-style:dashed}
 
@@ -370,3 +370,30 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
   background:var(--wash-2);padding:1px 5px;border-radius:4px;color:var(--ink-2)}
 .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--grid);color:var(--ink-3);
   font-size:12.5px;max-width:90ch;line-height:1.6}
+
+/* ---- feedback ---- */
+/* The box at the foot of every page. Quieter than a card on purpose: it is
+   always there, and a thing that is always there must not compete with the
+   numbers above it. Opened, it becomes a normal surface. */
+.fb{margin-top:30px;border:1px solid var(--border);border-radius:12px;background:var(--page);
+  transition:background .16s,border-color .16s}
+.fb[open]{background:var(--surface-1);border-color:var(--axis)}
+.fb > summary{display:flex;align-items:center;gap:10px;padding:12px 18px;cursor:pointer;
+  list-style:none;font-size:13px;color:var(--ink-3);transition:color .16s}
+.fb > summary::-webkit-details-marker{display:none}
+.fb > summary:hover{color:var(--ink-1)}
+.fb > summary .chev{margin-left:auto}
+.fbbody{padding:0 18px 18px;animation:slideDown .3s cubic-bezier(.22,.8,.3,1) both}
+.fbform{display:flex;flex-direction:column;gap:10px;max-width:74ch}
+.fbform textarea{font:inherit;font-size:13.5px;line-height:1.5;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);resize:vertical}
+.fbform textarea:focus{outline:none;border-color:var(--axis)}
+.fbrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.fbfile{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3)}
+.fbfile input{font:inherit;font-size:12px;color:var(--ink-2);max-width:100%}
+.fbrow .choice{margin-left:auto}
+/* A screenshot on the review page: capped so a tall grab cannot own the row,
+   and clickable through to the full image. */
+.shot{display:block;margin-top:12px;max-width:100%;max-height:340px;border-radius:10px;
+  border:1px solid var(--border)}

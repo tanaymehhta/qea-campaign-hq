@@ -217,6 +217,21 @@ conflict resolution and for logging calls. `select` elements inside it share the
 input styling — added token-based when the Calls workspace needed an outcome
 picker, no new class.
 
+### `.fb` — the feedback box
+
+A `<details>` at the foot of every page, rendered from `app/layout.jsx`. Closed, it is
+`--page` with a `--border` and `--ink-3` type: quieter than a card, because a thing that is
+on every page must not compete with the numbers above it. Open, it becomes `--surface-1`
+with an `--axis` border like any other raised surface, and the body slides down on
+`slideDown` like every other disclosure here.
+
+`.fbform` stacks a textarea, a file input and the submit; `.shot` is the screenshot on
+`/feedback`, capped at `340px` so a tall grab cannot own the row.
+
+No client component. The page it was sent from comes from the `Referer` header on the POST,
+not from JavaScript reading the URL — which is why the box can live in a layout that cannot
+read query params.
+
 ### `.warnbox` — something needs attention
 
 Left rule in `--crit`, or `.warnbox.w` in `--warn` for the softer case. `.warnbox.plain`

@@ -59,9 +59,15 @@ Two kinds today:
   disagree, the day surfaces here with every message listed for a person to settle.
 - **meeting_detail.** A meeting logged by hand with no prospect name.
 
-### The one place the dashboard writes
+### How the dashboard writes
 
-Everything else in this app is read-only. Confirming a conflict goes through
+Reading is the bulk of this app, but it is no longer read-only: conflicts, calls and
+feedback all write. Every one of them goes the same way, and the pattern is the point —
+a `security definer` function that validates its own arguments, so a malformed or hostile
+POST fails in the database rather than being trusted because it came from our own UI. RLS
+still blocks direct writes to every table.
+
+Confirming a conflict goes through
 `classify_reply()` or `record_meeting_detail()` — `security definer` functions that validate
 their own arguments: the label must be one of the six the schema allows, and the row must
 already exist. Neither can insert, delete, or touch another table, and RLS still blocks
@@ -73,6 +79,42 @@ Note the trade: the site has no login, so anyone with the URL can confirm a conf
 anyone with the URL can already read every figure. To lock that down, add a service-role key
 to the Vercel environment and point `app/conflicts/actions.js` at it instead of the anon
 client — the database functions stay exactly as they are.
+
+## Calls
+
+`/calls` is a phone-first workspace, four levels deep: names only → that rep's call lists →
+the workspace → a contact expanded in place. The workspace holds the campaign context
+(prose from a `summary_md` column, so it is edited in the database without a deploy),
+metric tiles that each filter the list beneath them, and one row per **person** — not per
+building. The source is 2,119 buildings but 1,252 people, and a rep dials the engineer who
+carries 65 of them once, not 65 times. Sorted by follow-ups due, then buildings carried:
+the top 32 engineers reach half the list.
+
+**There is no second call table.** The Overview Calls tile reads `phone_calls`, and the
+workspace writes the same rows — `phone_calls` gained `contact_id`, `rep` and
+`callback_date` rather than gaining a sibling. Nothing to reconcile, no way for the two
+pages to disagree.
+
+Writes: `log_call`, `set_contact_dnc`, `restore_contact`, `update_contact_detail`
+(whitelisted to phone / email / linkedin, and each edit writes an audit row naming who
+changed what, when, and from what) and `set_callback`. `log_call` ignores an identical
+call logged inside a minute, so a double-clicked submit cannot inflate a number the
+company steers on.
+
+Load it with `scripts/import_call_list.mjs`, which is re-runnable: it upserts on
+`(call_campaign_id, source_key)` and lets the existing value win for anything a rep may
+have corrected by hand, so a re-import fills blanks and never overwrites a number someone
+earned on a call.
+
+## Feedback
+
+A folded box at the foot of every page, and `/feedback` to read what comes in. The page it
+was sent from and the rep selected on it are taken from the `Referer` header on the POST,
+so a report costs one sentence and nothing else — there is no "which page?" field to skip
+or get wrong. Screenshots are optional and go to a Supabase Storage bucket (`feedback`,
+images only, 5 MB each, enforced by the bucket) rather than into a column that would be
+selected on every page load. Two states, `open` and `done`, because a suggestion box nobody
+works through is worse than not having one.
 
 ## Leads
 
@@ -108,9 +150,15 @@ Re-import by hand if a source list changes. Browse it at `/leads`.
 ## Environment
 
 `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Both have hardcoded fallbacks
-in `lib/db.js` — the anon key is a public read-only credential; every table is behind RLS with
-a select-only policy and all writes go through the service role, which lives only inside the
-edge function.
+in `lib/db.js` — the anon key is public by design: every table is behind RLS with a
+select-only policy, so it cannot write to one directly. The sync writes with the service
+role, which lives only inside the edge function; the app's own writes go through the
+validating functions described under Conflicts.
+
+`lib/db.js` also pins every read to `cache: "no-store"`. Next's fetch cache would otherwise
+store each PostgREST GET on disk and keep serving it after a write — which it did, silently,
+until a call logged in `/calls` failed to appear on the page that logged it. Nothing this
+database holds is safely cacheable: the sync rewrites it every 30 minutes.
 
 ## Local
 

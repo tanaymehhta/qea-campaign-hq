@@ -2,6 +2,7 @@ import "./globals.css";
 import { db } from "../lib/db";
 import Nav from "../components/nav";
 import Tween from "../components/tween";
+import FeedbackBox from "../components/feedback";
 
 export const metadata = {
   title: "QEA Campaign HQ",
@@ -46,6 +47,9 @@ export default async function RootLayout({ children }) {
             conflicts={conflicts ?? 0}
           />
           {children}
+          {/* On every page, because the moment you notice something is the
+              moment you'll say it — not after navigating somewhere else. */}
+          <FeedbackBox />
           <p className="foot">
             Synced from Instantly and lemlist every 30 minutes. All dates in America/New_York.
             Reply counts are a floor, not a total — replies sent outside the original sequence, and
