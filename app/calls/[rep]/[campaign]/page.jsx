@@ -1,7 +1,7 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
 import { contactsFor, callsFor, callStats } from "../../../../lib/calls";
 import { Tile, Pill } from "../../../../components/ui";
-import { logCall, setContactDnc, updateContactDetail, setCallback } from "../../actions";
+import { logCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -158,6 +158,17 @@ export default async function CallWorkspace({ params, searchParams }) {
         <a href={`/calls/${encodeURIComponent(rep)}`}>&larr; {rep}&rsquo;s lists</a>
       </div>
 
+      {/* A write that the database refused. It says why in a sentence; the
+          rep needs to read it, not a stack trace. */}
+      {sp.err ? (
+        <div className="card" style={{ marginBottom: 18, borderColor: "var(--warn-ink)" }}>
+          <p style={{ margin: 0 }}>
+            <b>That didn&rsquo;t save.</b> {sp.err}{" "}
+            <a href={base}>dismiss</a>
+          </p>
+        </div>
+      ) : null}
+
       {/* Context — prose from summary_md, editable in the database without a deploy. */}
       <div className="card" style={{ marginBottom: 26 }}>
         {camp.summary_md
@@ -216,6 +227,10 @@ export default async function CallWorkspace({ params, searchParams }) {
                     <details
                       className={due ? "mrow hasgap" : "mrow"}
                       key={ct.id}
+                      id={`c-${ct.id}`}
+                      /* Reopened after a write, so logging a call doesn't
+                         collapse the person you're still on the phone with. */
+                      open={sp.open === ct.id}
                       style={{ animationDelay: `${0.04 + Math.min(i, 20) * 0.02}s` }}
                     >
                       <summary>
@@ -345,14 +360,30 @@ export default async function CallWorkspace({ params, searchParams }) {
                             <input type="date" name="date" defaultValue={ct.callback_date ?? ""} />
                             <button className="choice" type="submit">Set</button>
                           </form>
-                          <span className="choices-label">Do not call</span>
-                          <form action={setContactDnc} className="gapform">
-                            <input type="hidden" name="contact_id" value={ct.id} />
-                            <input type="hidden" name="rep" value={rep} />
-                            <input type="hidden" name="path" value={base} />
-                            <input name="reason" placeholder="why?" required />
-                            <button className="choice" type="submit">Retire</button>
-                          </form>
+                          {/* Retiring someone used to be one-way — a misclick
+                              cost a contact until someone wrote SQL. */}
+                          {ct.dnc ? (
+                            <>
+                              <span className="choices-label">Retired</span>
+                              <form action={restoreContact} className="gapform">
+                                <input type="hidden" name="contact_id" value={ct.id} />
+                                <input type="hidden" name="rep" value={rep} />
+                                <input type="hidden" name="path" value={base} />
+                                <button className="choice" type="submit">Put back on the list</button>
+                              </form>
+                            </>
+                          ) : (
+                            <>
+                              <span className="choices-label">Do not call</span>
+                              <form action={setContactDnc} className="gapform">
+                                <input type="hidden" name="contact_id" value={ct.id} />
+                                <input type="hidden" name="rep" value={rep} />
+                                <input type="hidden" name="path" value={base} />
+                                <input name="reason" placeholder="why?" required />
+                                <button className="choice" type="submit">Retire</button>
+                              </form>
+                            </>
+                          )}
                         </div>
                       </div></div>
                     </details>

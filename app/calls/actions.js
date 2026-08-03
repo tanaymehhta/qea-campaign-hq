@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "../../lib/db";
 
 /**
@@ -11,10 +12,25 @@ import { db } from "../../lib/db";
  */
 
 function done(formData, error) {
-  if (error) throw new Error(error.message);
-  revalidatePath(formData.get("path") || "/calls", "page");
-  revalidatePath("/");          // the Overview Calls tile reads the same rows
-  revalidatePath("/meetings");  // so does the Meetings phone-call table
+  // The form carries an encoded path (the rep name has a space); revalidatePath
+  // matches on the real pathname, so an encoded one silently matches nothing.
+  const path = formData.get("path") || "/calls";
+  const contact = formData.get("contact_id");
+  if (!error) {
+    revalidatePath(decodeURIComponent(path), "page");
+    revalidatePath("/");          // the Overview Calls tile reads the same rows
+    revalidatePath("/meetings");  // so does the Meetings phone-call table
+  }
+
+  // Always end on a GET. A thrown error would show the rep a crash screen
+  // instead of the sentence the database actually raised ("a do-not-call needs
+  // a reason"), and reloading after a POST re-submits the call. ?open reopens
+  // the row they were working, because a redirect otherwise collapses it and
+  // they lose their place mid-shift.
+  const q = new URLSearchParams();
+  if (contact) q.set("open", contact);
+  if (error) q.set("err", error.message);
+  redirect(`${path}?${q}${contact ? `#c-${contact}` : ""}`);
 }
 
 export async function logCall(formData) {
@@ -53,6 +69,15 @@ export async function setCallback(formData) {
     p_contact: formData.get("contact_id"),
     p_rep: formData.get("rep") ?? "",
     p_date: formData.get("date") || null,
+  });
+  done(formData, error);
+}
+
+/** The way back from a do-not-call — retiring someone was one-way. */
+export async function restoreContact(formData) {
+  const { error } = await db.rpc("restore_contact", {
+    p_contact: formData.get("contact_id"),
+    p_rep: formData.get("rep") ?? "",
   });
   done(formData, error);
 }
