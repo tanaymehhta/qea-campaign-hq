@@ -202,9 +202,9 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .pill{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;
   padding:2px 8px;border-radius:6px;border:1px solid var(--border);white-space:nowrap;
   color:var(--ink-3)}
-.p-running,.p-live,.p-sent,.p-booked{color:var(--good);
+.p-running,.p-live,.p-sent,.p-booked,.p-booked_meeting,.p-active{color:var(--good);
   border-color:color-mix(in srgb,var(--good) 40%,transparent)}
-.p-paused,.p-held{color:var(--serious);
+.p-paused,.p-held,.p-follow_up{color:var(--serious);
   border-color:color-mix(in srgb,var(--serious) 45%,transparent)}
 .p-errored,.p-no_email,.p-no_show,.p-cancelled,.p-not_interested{color:var(--crit);
   border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
@@ -212,7 +212,7 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .p-interested{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
 .p-referral{color:var(--warn-ink);border-color:var(--warn-soft)}
 .p-unclassified,.p-auto_reply{color:var(--ink-3);border-style:dashed}
-.p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now{color:var(--ink-3);border-style:dashed}
+.p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now,.p-never_called,.p-no_answer,.p-dnc{color:var(--ink-3);border-style:dashed}
 
 /* ---- campaign group cards ---- */
 .gcard{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
@@ -329,10 +329,11 @@ details[open] > summary .chev{transform:rotate(180deg)}
 .choice:hover{background:var(--wash-2);color:var(--ink-1);border-color:var(--axis)}
 .choice.on{border-color:var(--axis);color:var(--ink-1);font-weight:600;background:var(--wash-2)}
 .gapform{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
-.gapform input{font:inherit;font-size:13px;padding:7px 11px;border-radius:9px;
+.gapform input,.gapform select{font:inherit;font-size:13px;padding:7px 11px;border-radius:9px;
   border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);
   min-width:150px;flex:1 1 150px}
-.gapform input:focus{outline:none;border-color:var(--axis)}
+.gapform select{flex:0 1 auto;min-width:0}
+.gapform input:focus,.gapform select:focus{outline:none;border-color:var(--axis)}
 .gapform .choice{padding:0 18px;flex:0 0 auto}
 
 /* ---- misc ---- */

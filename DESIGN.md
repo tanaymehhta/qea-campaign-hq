@@ -210,6 +210,13 @@ Table conventions:
 `globals.css`, grouped by meaning rather than by name: solid border for a real state, dashed
 for a provisional one (draft, prospect, unclassified).
 
+### `.gapform` — an inline form
+
+The one form treatment: a flex row of inputs with `.choice` buttons, used for
+conflict resolution and for logging calls. `select` elements inside it share the
+input styling — added token-based when the Calls workspace needed an outcome
+picker, no new class.
+
 ### `.warnbox` — something needs attention
 
 Left rule in `--crit`, or `.warnbox.w` in `--warn` for the softer case. `.warnbox.plain`

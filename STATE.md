@@ -38,6 +38,67 @@ query rewritten except where a new control needed scoping.
 
 ---
 
+## The Calls section — 3 August 2026
+
+A phone-first workspace at `/calls`, built for Campaign 02 (NYC LL11 SAFE / Reliable).
+Four levels: `/calls` is names only — clicking a name is how you say who you are, the
+same no-login contract as `?rep=` elsewhere; `/calls/[rep]` is that rep's call lists as
+cards; `/calls/[rep]/[campaign]` is the workspace — Context prose from a `summary_md`
+column (editable in the database, no deploy), call-metric tiles that each filter the
+list beneath them, and one `<details>` row per **person**. Not per building: the source
+is 2,119 buildings but 1,252 people, and a rep dials Christopher Krepcio once.
+
+- **No second call table.** The Overview Calls tile reads `phone_calls`; the workspace
+  writes the same rows. `phone_calls` gained `contact_id`, `rep` and `callback_date`;
+  `campaign_label` stays free text and existing rows are untouched.
+- **Three new tables** — `call_campaigns`, `call_contacts` (buildings carried as jsonb,
+  `best_rank`, `dnc`, `callback_date`), `call_contact_edits` (audit trail for
+  hand-corrected phone/email/linkedin: who changed what, when, from what).
+- **Four new writes**, all `security definer` functions mirroring `classify_reply()`:
+  `log_call`, `set_contact_dnc`, `update_contact_detail` (whitelisted to
+  phone/email/linkedin, writes the audit row), `set_callback`. Verified by test, not
+  assumed:
+
+  | Test | Result |
+  |---|---|
+  | Valid `log_call` | row in `phone_calls` with contact_id, rep, campaign label, callback |
+  | Invalid outcome `"hacked"` | rejected — `not a valid outcome: hacked` |
+  | Nonexistent contact id | rejected — `no contact with id …` |
+  | Non-whitelisted field `"dnc"` | rejected — `not an editable field: dnc` |
+  | Valid detail edit | new phone saved **and** audit row with old value + rep |
+  | Blank DNC reason | rejected — `a do-not-call needs a reason` |
+  | Direct `PATCH` / `INSERT` with the anon key | **zero rows changed**, RLS held |
+
+  Test fixtures were deleted afterwards; the list carries no synthetic calls.
+- **Ordering is the strategy.** Follow-ups due today or earlier sort first with a
+  marker; beneath them, buildings carried descending — the top 32 engineers reach 50%
+  of the buildings. Default view filters to people with a phone or email (only 63 of
+  1,252 have either yet), with a toggle for the rest.
+- **Import** is `scripts/import_call_list.mjs` (re-runnable; upserts on
+  `(call_campaign_id, source_key)`; hand-edited details and dnc/callback state survive
+  a re-run — verified by running it twice: second run reported all 1,252 already
+  existed, counts unchanged). No service key was available locally, so writes went
+  through a token-guarded `import-call-list` edge function (which holds the key
+  server-side); it is now a `410` tombstone. The script also supports `EMIT_SQL=<dir>`
+  and a local `SUPABASE_SERVICE_ROLE_KEY` for future runs. Reconciliation against
+  `data/Campaign02_SAFE_Reliable_2119.xlsx`, confirmed row-for-row in Postgres:
+  2,119 ranked rows → **1,252 contacts (253 engineers, 999 owners)** — matching the
+  source README exactly — 48 buildings skipped (no name on either channel), 44 with
+  phone, 61 with email, 63 dialable, 5 NYCHA names tagged `dnc` (README says 4: two are
+  `lic`-token variants of Morrison and Patel that whitespace normalization cannot
+  collapse), buildings covered 2,071 engineer-channel / 2,067 owner.
+- `xlsx` added as a devDependency for the script only; no page imports it.
+
+Migration applied and import run against production on 3 August; the pages render 63
+dialable people, Christopher Krepcio (65 buildings) at the top.
+
+**Open:** the frontend is not yet pushed to `main`, so the live site does not show
+`/calls` until that deploy happens; the engineer referral script seeded into
+`summary_md` (`data/campaign02_summary.md`) is a first draft, untested on a real call;
+only 63 of 1,252 people are dialable until the free name harvest and enrichment wave run.
+
+---
+
 ## The person hub — 29 July 2026
 
 Every number opened onto a list of people, and every person in that list was a dead end.
@@ -400,6 +461,7 @@ Migrations added this session:
     20260728232200_refresh_lemlist_people.sql
     20260728234500_conflicts_and_human_classification.sql
     20260729110000_hide_shadow_draft_campaigns.sql
+    20260803120000_call_campaigns_workspace.sql
 
 Commits:
 
