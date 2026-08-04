@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function Calls() {
   const [{ reps, campaigns }, { data: calls }] = await Promise.all([
     callRepList(),
-    db.from("phone_calls").select("rep, outcome"),
+    db.from("phone_calls").select("rep, outcome").is("deleted_at", null),
   ]);
 
   const campaignsOf = (name) => campaigns.filter((c) => c.owner?.trim() === name).length;

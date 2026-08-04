@@ -1,7 +1,7 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
 import { contactsFor, callsFor, callStats } from "../../../../lib/calls";
 import { Tile, Pill } from "../../../../components/ui";
-import { logCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
+import { logCall, editCall, deleteCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +131,19 @@ export default async function CallWorkspace({ params, searchParams }) {
     if (f) q.set("f", f);
     if (v === "all") q.set("v", "all");
     return `${base}${q.size ? `?${q}` : ""}#list`;
+  };
+
+  // Editing a call history row reuses the "open" mechanism above — the
+  // contact stays expanded — plus an editCall id that swaps one row for
+  // its edit form. Filter/view state rides along so cancelling an edit
+  // doesn't also drop the list back to the unfiltered view.
+  const rowHref = (ct, callId) => {
+    const q = new URLSearchParams();
+    if (filter) q.set("f", filter);
+    if (showAll) q.set("v", "all");
+    q.set("open", ct.id);
+    if (callId) q.set("editCall", callId);
+    return `${base}?${q}#c-${ct.id}`;
   };
 
   // The working list: dnc rows are out unless asked for, and — because only
@@ -300,17 +313,53 @@ export default async function CallWorkspace({ params, searchParams }) {
                             <table>
                               <thead><tr>
                                 <th>Date</th><th>Outcome</th><th>Rep</th>
-                                <th style={{ textAlign: "left" }}>Note</th><th>Callback</th>
+                                <th style={{ textAlign: "left" }}>Note</th><th>Callback</th><th></th>
                               </tr></thead>
                               <tbody>
                                 {history.map((c) => (
-                                  <tr key={c.id}>
-                                    <td className="dim">{prettyDate(c.call_date)}</td>
-                                    <td><Pill status={c.outcome} /></td>
-                                    <td>{c.rep || "—"}</td>
-                                    <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
-                                    <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
-                                  </tr>
+                                  String(sp.editCall) === String(c.id) ? (
+                                    <tr key={c.id}>
+                                      {/* One cell holding the whole form — a <form> can't
+                                          wrap a <tr> without the browser fostering it out
+                                          of the table, so it lives inside a single <td>. */}
+                                      <td colSpan={6}>
+                                        <form action={editCall} className="gapform">
+                                          <input type="hidden" name="call_id" value={c.id} />
+                                          <input type="hidden" name="contact_id" value={ct.id} />
+                                          <input type="hidden" name="rep" value={rep} />
+                                          <input type="hidden" name="path" value={base} />
+                                          <input type="date" name="call_date" defaultValue={c.call_date} required />
+                                          <select name="outcome" defaultValue={c.outcome} required>
+                                            {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                                          </select>
+                                          <input name="note" defaultValue={c.note ?? ""} placeholder="Note"
+                                            style={{ flex: 2, minWidth: 200 }} />
+                                          <input type="date" name="callback_date" defaultValue={c.callback_date ?? ""}
+                                            title="Callback date, if any" />
+                                          <button className="choice" type="submit">Save</button>
+                                          <a className="choice" href={rowHref(ct, null)}>Cancel</a>
+                                        </form>
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    <tr key={c.id}>
+                                      <td className="dim">{prettyDate(c.call_date)}</td>
+                                      <td><Pill status={c.outcome} /></td>
+                                      <td>{c.rep || "—"}</td>
+                                      <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
+                                      <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
+                                      <td className="rowactions">
+                                        <a href={rowHref(ct, c.id)}>edit</a>
+                                        <form action={deleteCall}>
+                                          <input type="hidden" name="call_id" value={c.id} />
+                                          <input type="hidden" name="contact_id" value={ct.id} />
+                                          <input type="hidden" name="rep" value={rep} />
+                                          <input type="hidden" name="path" value={base} />
+                                          <button type="submit">delete</button>
+                                        </form>
+                                      </td>
+                                    </tr>
+                                  )
                                 ))}
                               </tbody>
                             </table>

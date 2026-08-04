@@ -28,8 +28,8 @@ export default async function Overview({ searchParams }) {
       // outside any campaign in this database), so unlike meetings/proposals they
       // can't be scoped to a rep — same as how /meetings already shows them unscoped.
       (w.range === "all"
-        ? db.from("phone_calls").select("id, call_date")
-        : db.from("phone_calls").select("id, call_date").gte("call_date", w.from).lte("call_date", w.to)),
+        ? db.from("phone_calls").select("id, call_date").is("deleted_at", null)
+        : db.from("phone_calls").select("id, call_date").is("deleted_at", null).gte("call_date", w.from).lte("call_date", w.to)),
     ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");

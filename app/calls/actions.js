@@ -56,6 +56,25 @@ export async function logCall(formData) {
   done(formData, null);
 }
 
+/** Fixing a logged call — one row, so one outcome, unlike logCall's checkboxes. */
+export async function editCall(formData) {
+  const { error } = await db.rpc("edit_call", {
+    p_call: formData.get("call_id"),
+    p_rep: formData.get("rep") ?? "",
+    p_call_date: formData.get("call_date"),
+    p_outcome: formData.get("outcome"),
+    p_note: formData.get("note") ?? "",
+    p_callback: formData.get("callback_date") || null,
+  });
+  done(formData, error);
+}
+
+/** Soft delete — the row stays, deleted_at just takes it out of every count. */
+export async function deleteCall(formData) {
+  const { error } = await db.rpc("delete_call", { p_call: formData.get("call_id") });
+  done(formData, error);
+}
+
 export async function setContactDnc(formData) {
   const { error } = await db.rpc("set_contact_dnc", {
     p_contact: formData.get("contact_id"),

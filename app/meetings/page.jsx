@@ -18,7 +18,7 @@ export default async function Meetings({ searchParams }) {
     db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, status, leads, replied, source"),
     db.from("meetings").select("*").order("meeting_date", { ascending: false }),
     db.from("proposals").select("id, campaign_id"),
-    db.from("phone_calls").select("*").order("call_date", { ascending: false }),
+    db.from("phone_calls").select("*").is("deleted_at", null).order("call_date", { ascending: false }),
   ]);
 
   const groupById = new Map(groups.map((g) => [g.id, g]));
