@@ -213,6 +213,7 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .p-referral,.p-open{color:var(--warn-ink);border-color:var(--warn-soft)}
 .p-unclassified,.p-auto_reply{color:var(--ink-3);border-style:dashed}
 .p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now,.p-never_called,.p-no_answer,.p-dnc{color:var(--ink-3);border-style:dashed}
+.p-left_voicemail,.p-left_email{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 40%,transparent);border-style:dashed}
 
 /* ---- campaign group cards ---- */
 .gcard{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
@@ -335,6 +336,10 @@ details[open] > summary .chev{transform:rotate(180deg)}
 .gapform select{flex:0 1 auto;min-width:0}
 .gapform input:focus,.gapform select:focus{outline:none;border-color:var(--axis)}
 .gapform .choice{padding:0 18px;flex:0 0 auto}
+.outcomes{display:flex;gap:4px 12px;flex-wrap:wrap;align-items:center;flex:2 1 260px;
+  padding:7px 11px;border-radius:9px;border:1px solid var(--border);background:var(--surface-1)}
+.outcome{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--ink-2);white-space:nowrap}
+.outcome input{min-width:0;flex:none;width:auto;padding:0;border:none;background:none}
 
 /* ---- misc ---- */
 .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 26px}

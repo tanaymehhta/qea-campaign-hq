@@ -33,16 +33,27 @@ function done(formData, error) {
   redirect(`${path}?${q}${contact ? `#c-${contact}` : ""}`);
 }
 
+// A single dial can end more than one way — "no answer, left a voicemail"
+// is two outcomes, not one. The checkboxes post one row per outcome,
+// sharing the same date/note/callback; log_call's dedup guard keys on
+// outcome too, so this can't double-log any one of them.
 export async function logCall(formData) {
-  const { error } = await db.rpc("log_call", {
-    p_contact: formData.get("contact_id"),
-    p_rep: formData.get("rep") ?? "",
-    p_call_date: formData.get("call_date"),
-    p_outcome: formData.get("outcome"),
-    p_note: formData.get("note") ?? "",
-    p_callback: formData.get("callback_date") || null,
-  });
-  done(formData, error);
+  const outcomes = formData.getAll("outcome");
+  if (!outcomes.length) {
+    return done(formData, new Error("pick at least one outcome"));
+  }
+  for (const outcome of outcomes) {
+    const { error } = await db.rpc("log_call", {
+      p_contact: formData.get("contact_id"),
+      p_rep: formData.get("rep") ?? "",
+      p_call_date: formData.get("call_date"),
+      p_outcome: outcome,
+      p_note: formData.get("note") ?? "",
+      p_callback: formData.get("callback_date") || null,
+    });
+    if (error) return done(formData, error);
+  }
+  done(formData, null);
 }
 
 export async function setContactDnc(formData) {

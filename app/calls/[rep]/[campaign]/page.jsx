@@ -25,17 +25,23 @@ function Markdown({ text }) {
   });
 }
 
+// Insert order doubles as priority: log_call inserts one row per checked
+// outcome in this order, so when several apply — "no answer" and "left
+// voicemail" — the later, more telling one lands last and wins the row's
+// status pill (statusOf reads the newest row).
 const OUTCOMES = [
-  ["booked_meeting", "Booked a meeting"],
+  ["no_answer", "No answer"],
+  ["left_voicemail", "Left voicemail"],
+  ["left_email", "Left email"],
   ["follow_up", "Follow up"],
   ["not_interested", "Not interested"],
-  ["no_answer", "No answer"],
   ["other", "Other"],
+  ["booked_meeting", "Booked a meeting"],
 ];
 
 const FILTERS = {
   called: "with at least one call",
-  reached: "reached — a call that wasn't a no-answer",
+  reached: "reached — a live conversation, not just a voicemail or email",
   meetings: "with a meeting booked",
   due: "with a follow-up due",
   never: "never called",
@@ -277,9 +283,14 @@ export default async function CallWorkspace({ params, searchParams }) {
                           <input type="hidden" name="rep" value={rep} />
                           <input type="hidden" name="path" value={base} />
                           <input type="date" name="call_date" defaultValue={t} required />
-                          <select name="outcome" required>
-                            {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                          </select>
+                          <span className="outcomes">
+                            {OUTCOMES.map(([k, l]) => (
+                              <label key={k} className="outcome">
+                                <input type="checkbox" name="outcome" value={k} />
+                                {l}
+                              </label>
+                            ))}
+                          </span>
                           <input name="note" placeholder="What happened? Notes go here." style={{ flex: 2, minWidth: 220 }} />
                           <input type="date" name="callback_date" title="Callback date, if any" />
                           <button className="choice" type="submit">Log call</button>
