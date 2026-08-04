@@ -25,18 +25,19 @@ function Markdown({ text }) {
   });
 }
 
-// Insert order doubles as priority: log_call inserts one row per checked
-// outcome in this order, so when several apply — "no answer" and "left
-// voicemail" — the later, more telling one lands last and wins the row's
-// status pill (statusOf reads the newest row).
+// Just the checkbox row's reading order. logCall decides insert order (and
+// so which outcome wins the row's status pill) from its own priority list,
+// not from this — this list used to double as both, which put "Booked a
+// meeting" right next to the Log call button and made it a one-click
+// misclick away from every voicemail drop.
 const OUTCOMES = [
+  ["booked_meeting", "Booked a meeting"],
+  ["follow_up", "Follow up"],
+  ["not_interested", "Not interested"],
   ["no_answer", "No answer"],
   ["left_voicemail", "Left voicemail"],
   ["left_email", "Left email"],
-  ["follow_up", "Follow up"],
-  ["not_interested", "Not interested"],
   ["other", "Other"],
-  ["booked_meeting", "Booked a meeting"],
 ];
 
 const FILTERS = {
@@ -349,13 +350,13 @@ export default async function CallWorkspace({ params, searchParams }) {
                                       <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
                                       <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
                                       <td className="rowactions">
-                                        <a href={rowHref(ct, c.id)}>edit</a>
+                                        <a className="choice" href={rowHref(ct, c.id)}>Edit</a>
                                         <form action={deleteCall}>
                                           <input type="hidden" name="call_id" value={c.id} />
                                           <input type="hidden" name="contact_id" value={ct.id} />
                                           <input type="hidden" name="rep" value={rep} />
                                           <input type="hidden" name="path" value={base} />
-                                          <button type="submit">delete</button>
+                                          <button className="choice" type="submit">Delete</button>
                                         </form>
                                       </td>
                                     </tr>
