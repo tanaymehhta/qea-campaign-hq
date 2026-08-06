@@ -18,7 +18,11 @@ function origin() {
   if (!ref) return { page: "unknown", rep: null };
   try {
     const u = new URL(ref);
-    return { page: `${u.pathname}${u.search}`, rep: u.searchParams.get("rep") };
+    // The Calls section carries the rep in the path, not a ?rep= param —
+    // /calls/Mark%20Vasu/nyc-ll11-safe. /calls alone has no rep segment.
+    const m = u.pathname.match(/^\/calls\/([^/]+)/);
+    const rep = u.searchParams.get("rep") ?? (m ? decodeURIComponent(m[1]) : null);
+    return { page: `${u.pathname}${u.search}`, rep };
   } catch {
     return { page: "unknown", rep: null };
   }

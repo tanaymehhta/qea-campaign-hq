@@ -19,7 +19,8 @@ const LABELS = [
  * itself and disappears the moment it agrees. There is nothing to mark as done,
  * so nothing can sit here stale and wrong.
  */
-export default async function Conflicts() {
+export default async function Conflicts({ searchParams }) {
+  const sp = searchParams ?? {};
   const { data: conflicts } = await db.from("v_conflicts").select("*").order("conflict_date", { ascending: false });
   const list = conflicts ?? [];
 
@@ -67,6 +68,17 @@ export default async function Conflicts() {
         Where the tools contradict themselves, or leave a gap only you can close. Nothing here is
         guessed on your behalf — confirm it and the sync will never overwrite your answer.
       </p>
+
+      {/* A write that the database refused. It says why in a sentence; the
+          person needs to read it, not a stack trace. */}
+      {sp.err ? (
+        <div className="card" style={{ marginBottom: 18, borderColor: "var(--warn-ink)" }}>
+          <p style={{ margin: 0 }}>
+            <b>That didn&rsquo;t save.</b> {sp.err}{" "}
+            <a href="/conflicts">dismiss</a>
+          </p>
+        </div>
+      ) : null}
 
       {!list.length ? (
         <div className="card">
@@ -155,7 +167,8 @@ export default async function Conflicts() {
           </div>
           <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
             {nameOf.get(m.campaign_id) ?? "—"} · Unclassified for over 48 hours. Read it, classify it —
-            and if it is a booked call, log the meeting from the Meetings page.
+            and if it is a booked meeting, there is no form for that yet: for now it means a
+            hand-written row in the meetings table.
           </div>
           <div className="msg">
             <div className="msg-head">

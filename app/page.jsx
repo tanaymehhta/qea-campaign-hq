@@ -244,7 +244,7 @@ export default async function Overview({ searchParams }) {
           raw={callCount}
           tone={callCount ? undefined : "muted"}
           note="Hand-logged, not scoped to a rep"
-          href="/meetings"
+          href="/calls"
         />
       </div>
 
