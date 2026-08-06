@@ -258,7 +258,50 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .p-referral,.p-open{color:var(--warn-ink);border-color:var(--warn-soft)}
 .p-unclassified,.p-auto_reply{color:var(--ink-3);border-style:dashed}
 .p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now,.p-never_called,.p-no_answer,.p-dnc{color:var(--ink-3);border-style:dashed}
-.p-left_voicemail,.p-left_email{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 40%,transparent);border-style:dashed}
+.p-left_voicemail,.p-left_email,.p-email_sent{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 40%,transparent);border-style:dashed}
+/* stage badges — the outcome you want green, the end crimson, in-motion blue/amber */
+.p-won,.p-meeting{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.p-lost{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
+.p-connected{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 40%,transparent)}
+.p-proposal,.p-proposal_sent{color:var(--warn-ink);border-color:var(--warn-soft)}
+.p-new,.p-attempted{color:var(--ink-3);border-style:dashed}
+
+/* ---- stage strip: the funnel a contact has moved through ---- */
+.ststrip{list-style:none;display:flex;gap:0;margin:2px 0 18px;padding:0;overflow-x:auto}
+.ststep{flex:1 0 auto;min-width:84px;position:relative;display:flex;flex-direction:column;
+  align-items:center;text-align:center;padding-top:16px;gap:2px}
+.ststep::before{content:"";position:absolute;top:5px;left:-50%;width:100%;height:2px;background:var(--border)}
+.ststep:first-child::before{display:none}
+.ststep.done::before{background:var(--s1)}
+.stdot{position:absolute;top:0;width:12px;height:12px;border-radius:50%;
+  background:var(--surface-1);border:2px solid var(--border);box-sizing:border-box}
+.ststep.done .stdot{background:var(--s1);border-color:var(--s1)}
+.ststep.now .stdot{box-shadow:0 0 0 3px color-mix(in srgb,var(--s1) 25%,transparent)}
+.stlbl{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--ink-3)}
+.ststep.done .stlbl{color:var(--ink-1)}
+.ststep.now .stlbl{color:var(--s1)}
+.stdate{font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums;min-height:12px}
+.ststrip[data-variant="won"] .ststep:last-child.done::before,
+.ststrip[data-variant="won"] .ststep:last-child.done .stdot{background:var(--good);border-color:var(--good)}
+.ststrip[data-variant="won"] .ststep:last-child .stlbl{color:var(--good)}
+.ststrip[data-variant="lost"] .ststep:last-child.done::before,
+.ststrip[data-variant="lost"] .ststep:last-child.done .stdot{background:var(--crit);border-color:var(--crit)}
+.ststrip[data-variant="lost"] .ststep:last-child .stlbl{color:var(--crit)}
+.ststrip[data-variant="lost"] .ststep:last-child.now .stdot{box-shadow:0 0 0 3px color-mix(in srgb,var(--crit) 22%,transparent)}
+
+/* ---- journey timeline: every touch, oldest first ---- */
+.jtl{list-style:none;margin:6px 0 2px;padding:0 0 0 4px;border-left:2px solid var(--border);margin-left:6px}
+.jtl-i{position:relative;padding:5px 0 5px 18px;display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+.jtl-i::before{content:"";position:absolute;left:-6px;top:11px;width:9px;height:9px;border-radius:50%;
+  background:var(--ink-3);border:2px solid var(--surface-1);box-sizing:content-box}
+.jtl-i.good::before{background:var(--good)}
+.jtl-i.crit::before{background:var(--crit)}
+.jtl-i.s1::before{background:var(--s1)}
+.jtl-i.warn::before{background:var(--warn-ink)}
+.jtl-d{font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums;min-width:62px}
+.jtl-ic{font-size:12px}
+.jtl-t{font-size:13px;font-weight:600}
+.jtl-n{font-size:12px;color:var(--ink-2)}
 
 /* ---- campaign group cards ---- */
 .gcard{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
@@ -411,6 +454,10 @@ details[open] > summary .chev{transform:rotate(180deg)}
   display:inline-flex;align-items:center;transition:background .16s,border-color .16s,color .16s}
 .choice:hover{background:var(--wash-2);color:var(--ink-1);border-color:var(--axis)}
 .choice.on{border-color:var(--axis);color:var(--ink-1);font-weight:600;background:var(--wash-2)}
+.choice.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.choice.good:hover{border-color:var(--good)}
+.choice.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
+.choice.crit:hover{border-color:var(--crit)}
 .gapform{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
 .gapform input,.gapform select{font:inherit;font-size:13px;padding:7px 11px;border-radius:9px;
   border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);

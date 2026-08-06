@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "../../lib/db";
+import { OUTCOME_PRIORITY } from "../../lib/calls";
 
 /**
  * The Calls write path. Same shape as app/conflicts/actions.js: every write
@@ -33,26 +34,19 @@ function done(formData, error) {
   redirect(`${path}?${q}${contact ? `#c-${contact}` : ""}`);
 }
 
-// The order calls go in matters: log_call inserts one row per outcome, and
-// statusOf (the row's pill) reads the newest one — so whichever outcome
-// goes in last wins the display. That has to be a fixed priority, not
-// "whatever order the checkboxes happen to render in" — a voicemail with
-// a stray "booked meeting" click should still show as a voicemail.
-const OUTCOME_PRIORITY = [
-  "left_email", "left_voicemail", "no_answer",
-  "other", "not_interested", "follow_up", "booked_meeting",
-];
-
 // A single dial can end more than one way — "no answer, left a voicemail"
 // is two outcomes, not one. The checkboxes post one row per outcome,
 // sharing the same date/note/callback; log_call's dedup guard keys on
-// outcome too, so this can't double-log any one of them.
+// outcome too, so this can't double-log any one of them. The order matters:
+// statusOf reads the newest row, so the last one inserted wins the pill —
+// OUTCOME_PRIORITY (from lib/calls) fixes that order.
 export async function logCall(formData) {
   const outcomes = formData.getAll("outcome")
     .sort((a, b) => OUTCOME_PRIORITY.indexOf(a) - OUTCOME_PRIORITY.indexOf(b));
   if (!outcomes.length) {
     return done(formData, new Error("pick at least one outcome"));
   }
+  const channel = formData.get("channel") || "phone";
   for (const outcome of outcomes) {
     const { error } = await db.rpc("log_call", {
       p_contact: formData.get("contact_id"),
@@ -61,6 +55,7 @@ export async function logCall(formData) {
       p_outcome: outcome,
       p_note: formData.get("note") ?? "",
       p_callback: formData.get("callback_date") || null,
+      p_channel: channel,
     });
     if (error) return done(formData, error);
   }

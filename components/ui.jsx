@@ -5,6 +5,29 @@ export function Pill({ status }) {
 }
 
 /**
+ * The funnel as a strip: New → Attempted → Connected → Meeting → Proposal →
+ * Closed, with every rung the contact has reached filled in and dated, the
+ * current rung ringed, and the rest waiting. The stage is derived (stageOf),
+ * so this only draws what the touches already prove — it is never out of step
+ * with the timeline below it. A Closed node reads green for Won, crimson for
+ * Lost, carried on the strip's data-variant.
+ */
+export function StageStrip({ stage }) {
+  if (!stage) return null;
+  return (
+    <ol className="ststrip" data-variant={stage.variant ?? ""}>
+      {stage.steps.map((s) => (
+        <li key={s.key} className={`ststep${s.done ? " done" : ""}${s.current ? " now" : ""}`}>
+          <span className="stdot" aria-hidden="true" />
+          <span className="stlbl">{s.label}</span>
+          <span className="stdate">{s.date ? prettyDate(s.date) : ""}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
  * The disclosure chevron. An SVG rather than the "⌄" glyph it replaced: the
  * glyph carried its ink high in its line box, so beside a label like "Detail"
  * it rode above the text and never looked centred. The SVG is symmetric about

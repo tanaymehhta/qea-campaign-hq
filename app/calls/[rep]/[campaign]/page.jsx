@@ -1,6 +1,9 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
-import { contactsFor, callsFor, callStats } from "../../../../lib/calls";
-import { Tile, Pill, Chev } from "../../../../components/ui";
+import {
+  contactsFor, callsFor, callStats, repliesForContacts,
+  timelineFor, stageOf, CALL_OUTCOMES, ACTIVITY_LABEL,
+} from "../../../../lib/calls";
+import { Tile, Pill, Chev, StageStrip } from "../../../../components/ui";
 import { logCall, editCall, deleteCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -67,20 +70,31 @@ const GLYPH_TINT = {
   left_email: ["var(--tint-1)", "var(--s1)"],
 };
 
-// Just the checkbox row's reading order. logCall decides insert order (and
-// so which outcome wins the row's status pill) from its own priority list,
-// not from this — this list used to double as both, which put "Booked a
-// meeting" right next to the Log call button and made it a one-click
-// misclick away from every voicemail drop.
-const OUTCOMES = [
-  ["booked_meeting", "Booked a meeting"],
-  ["follow_up", "Follow up"],
-  ["not_interested", "Not interested"],
-  ["no_answer", "No answer"],
-  ["left_voicemail", "Left voicemail"],
-  ["left_email", "Left email"],
-  ["other", "Other"],
+// The phone-dial checkboxes come from CALL_OUTCOMES (lib/calls, the single
+// source shared with logCall's priority sort). The edit dropdown offers every
+// activity type, including the stage markers, so a row logged as proposal_sent
+// or won can still be corrected rather than silently reset to a phone outcome.
+const EDIT_OPTIONS = Object.entries(ACTIVITY_LABEL);
+
+// The stage-advancing buttons: the touches a pure call log can't express.
+// Each posts a single outcome on its own channel — logCall threads the channel
+// through to log_call. tone drives the button's accent.
+const ADVANCE = [
+  { outcome: "email_sent", channel: "email", label: "Log email sent" },
+  { outcome: "proposal_sent", channel: "proposal", label: "Proposal sent" },
+  { outcome: "won", channel: "system", label: "Mark won", tone: "good" },
+  { outcome: "lost", channel: "system", label: "Mark lost", tone: "crit" },
 ];
+
+// Which timeline dot each activity/reply wears — same meaning as the pills:
+// green is the win, crimson the end, blue in motion, amber the proposal.
+const TL_TONE = {
+  booked_meeting: "good", won: "good", interested: "good",
+  not_interested: "crit", lost: "crit",
+  follow_up: "s1", other: "s1", left_voicemail: "s1", left_email: "s1",
+  email_sent: "s1", referral: "s1",
+  proposal_sent: "warn",
+};
 
 const FILTERS = {
   called: "with at least one call",
@@ -166,7 +180,17 @@ export default async function CallWorkspace({ params, searchParams }) {
 
   const [contacts, calls] = await Promise.all([contactsFor(camp.id), callsFor(camp.id)]);
   const s = callStats(contacts, calls);
+  const repliesByEmail = await repliesForContacts(contacts);
   const t = today();
+
+  // The per-contact activity map the timeline reads (newest-first, as callsFor
+  // returns them; timelineFor re-sorts to oldest-first for reading).
+  const callsByContact = new Map();
+  for (const c of calls) {
+    if (!c.contact_id) continue;
+    if (!callsByContact.has(c.contact_id)) callsByContact.set(c.contact_id, []);
+    callsByContact.get(c.contact_id).push(c);
+  }
 
   const base = `/calls/${encodeURIComponent(rep)}/${camp.slug}`;
   const here = (f, v = sp.v) => {
@@ -285,6 +309,8 @@ export default async function CallWorkspace({ params, searchParams }) {
       {list.map((ct, i) => {
               const history = s.callsOf(ct);
               const due = s.is.due(ct);
+              const timeline = timelineFor(ct, callsByContact, repliesByEmail);
+              const stage = stageOf(timeline, ct);
               const [glyphBg, glyphInk] = GLYPH_TINT[statusOf(ct)] ?? ["var(--tint-n)", "var(--ink-1)"];
               return (
                     <details
@@ -313,7 +339,7 @@ export default async function CallWorkspace({ params, searchParams }) {
                         <span className="who" style={{ fontVariantNumeric: "tabular-nums" }}>
                           {num(ct.buildings_count)} bldg{ct.buildings_count === 1 ? "" : "s"}
                         </span>
-                        <Pill status={statusOf(ct)} />
+                        <Pill status={stage.badge} />
                         <span className="when">
                           {ct.callback_date ? `cb ${prettyDate(ct.callback_date)}` : `#${ct.best_rank}`}
                         </span>
@@ -321,6 +347,11 @@ export default async function CallWorkspace({ params, searchParams }) {
                       </summary>
 
                       <div className="mbody"><div className="inner">
+                        {/* Where this person is in the funnel, derived from the
+                            touches below — never typed in, so it can't disagree
+                            with the timeline. */}
+                        <StageStrip stage={stage} />
+
                         {/* The two things that matter mid-call: what to dial, then
                             where to write down what happened. Everything else is
                             reference and sits below or folds away. */}
@@ -340,9 +371,10 @@ export default async function CallWorkspace({ params, searchParams }) {
                           <input type="hidden" name="contact_id" value={ct.id} />
                           <input type="hidden" name="rep" value={rep} />
                           <input type="hidden" name="path" value={base} />
+                          <input type="hidden" name="channel" value="phone" />
                           <input type="date" name="call_date" defaultValue={t} required />
                           <span className="outcomes">
-                            {OUTCOMES.map(([k, l]) => (
+                            {CALL_OUTCOMES.map(([k, l]) => (
                               <label key={k} className="outcome">
                                 <input type="checkbox" name="outcome" value={k} />
                                 {l}
@@ -353,8 +385,60 @@ export default async function CallWorkspace({ params, searchParams }) {
                           <input type="date" name="callback_date" title="Callback date, if any" />
                           <button className="choice" type="submit">Log call</button>
                         </form>
+
+                        {/* The other channels a call log can't hold — an email
+                            sent, a proposal out, and the two ways it ends. Each
+                            advances the stage strip above. */}
+                        <div className="choices" style={{ marginTop: 10 }}>
+                          <span className="choices-label">Advance the deal</span>
+                          {ADVANCE.map((a) => (
+                            <form key={a.outcome} action={logCall} className="gapform">
+                              <input type="hidden" name="contact_id" value={ct.id} />
+                              <input type="hidden" name="rep" value={rep} />
+                              <input type="hidden" name="path" value={base} />
+                              <input type="hidden" name="call_date" value={t} />
+                              <input type="hidden" name="channel" value={a.channel} />
+                              <input type="hidden" name="outcome" value={a.outcome} />
+                              <button className={`choice${a.tone ? ` ${a.tone}` : ""}`} type="submit">{a.label}</button>
+                            </form>
+                          ))}
+                        </div>
+
+                        {/* The journey: every touch across phone and email, oldest
+                            first — the story the stage strip summarises. Read-only;
+                            corrections happen in the editable history below. */}
+                        {timeline.length ? (
+                          <>
+                            <h2>Journey</h2>
+                            <ol className="jtl">
+                              {timeline.map((e, j) => {
+                                const isReply = e.kind === "reply";
+                                const code = isReply ? e.sentiment : e.outcome;
+                                const tone = TL_TONE[code] ?? "";
+                                const label = isReply
+                                  ? `Email reply — ${(e.sentiment ?? "unclassified").replace(/_/g, " ")}`
+                                  : e.channel === "email" ? "Email sent"
+                                  : e.channel === "proposal" ? "Proposal sent"
+                                  : e.outcome === "won" ? "Marked won"
+                                  : e.outcome === "lost" ? "Marked lost"
+                                  : `Call — ${(ACTIVITY_LABEL[e.outcome] ?? e.outcome).toLowerCase()}`;
+                                const icon = isReply ? "↩" : e.channel === "email" ? "✉" : e.channel === "proposal" ? "📄" : "📞";
+                                return (
+                                  <li key={j} className={`jtl-i${tone ? ` ${tone}` : ""}`}>
+                                    <span className="jtl-d">{prettyDate(e.date)}</span>
+                                    <span className="jtl-ic" aria-hidden="true">{icon}</span>
+                                    <span className="jtl-t">{label}</span>
+                                    {e.note ? <span className="jtl-n">{e.note}</span> : null}
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          </>
+                        ) : null}
+
                         {history.length ? (
                           <div className="tw" style={{ marginTop: 14 }}>
+                            <p className="note" style={{ margin: "0 0 6px" }}>Logged activity — edit or remove</p>
                             <table>
                               <thead><tr>
                                 <th>Date</th><th>Outcome</th><th>Rep</th>
@@ -375,7 +459,7 @@ export default async function CallWorkspace({ params, searchParams }) {
                                           <input type="hidden" name="path" value={base} />
                                           <input type="date" name="call_date" defaultValue={c.call_date} required />
                                           <select name="outcome" defaultValue={c.outcome} required>
-                                            {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                                            {EDIT_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                                           </select>
                                           <input name="note" defaultValue={c.note ?? ""} placeholder="Note"
                                             style={{ flex: 2, minWidth: 200 }} />

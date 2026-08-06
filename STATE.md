@@ -13,6 +13,52 @@ tab for a person to settle rather than being guessed at silently.
 
 ---
 
+## Contact stages — the funnel, per person — 6 August 2026
+
+Each contact in the Calls workspace now shows **where they are in the funnel** and
+**how they got there**, both derived — never typed in, so neither can disagree with
+what was actually logged.
+
+**The stage strip.** A six-rung strip at the top of every expanded contact:
+`New → Attempted → Connected → Meeting → Proposal → Closed`. The filled rungs are the
+ones the history reaches, each dated; the current rung is ringed; a Closed node reads
+green for Won, crimson for Lost. `stageOf()` in `lib/calls.js` computes the rung as the
+furthest point the touches prove — a later follow-up never drags someone back a stage,
+and Won/Lost are terminal ("then ended"). The contact's summary pill now shows this
+stage instead of the last raw call outcome.
+
+**The Journey timeline.** Beneath it, every touch oldest-first — phone calls *and*
+matched email replies in one stream (`timelineFor()` merges them; `repliesForContacts()`
+joins the email world by address, the only link there is between the two worlds). This is
+the narrative the strip summarises; the editable history table stays below it for
+corrections.
+
+**Two new signals a call log couldn't hold.** `phone_calls` becomes the one per-contact
+activity log it already half was: a `channel` column (`phone`/`email`/`proposal`/`system`,
+defaulting to phone so every existing row's meaning is unchanged) and four new outcomes —
+`email_sent`, `proposal_sent`, `won`, `lost`. Reps set the last four from an **Advance the
+deal** button row. Still no second table: the timeline, the strip and the Overview Calls
+tile all read the same `phone_calls`, so nothing new to reconcile. `log_call` gained a
+`p_channel` argument (the 6-arg signature is dropped); `edit_call` accepts the widened
+outcome set so a stage marker can still be corrected.
+
+**Cleanup.** The call-outcome list lived in three places that had to be kept in sync by
+hand; it now has one home (`CALL_OUTCOMES` / `OUTCOME_PRIORITY` / `ACTIVITY_LABEL` in
+`lib/calls.js`), imported by `actions.js` and the workspace page.
+
+Migration: `20260807120000_contact_stages.sql`. **Not yet applied to production** — the
+schema change (new column, widened enum, function replacements) needs to run against
+Supabase before the UI has data to read; run it and reload the workspace to see the
+strips populate.
+
+Open: outbound *sent* emails still aren't in Postgres (lemlist owns them), so "email 1
+sent" to a specific person only appears when a rep logs it via **Log email sent** or when a
+*reply* comes back; inbound replies are matched best-effort by address. `edit_call` /
+`delete_call` still don't retro-touch a `booked_meeting`'s `meetings` row — unchanged, and
+noted here so it isn't mistaken for new.
+
+---
+
 ## Design refresh — 29 July 2026
 
 The Claude Design pass, applied to the live pages. Frontend only: no schema change, no
@@ -578,6 +624,7 @@ Migrations added this session:
     20260803120000_call_campaigns_workspace.sql
     20260803160000_calls_hardening.sql
     20260803170000_feedback.sql
+    20260807120000_contact_stages.sql
 
 Commits:
 
