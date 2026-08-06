@@ -1,5 +1,5 @@
 import { db, num, pct, today, dailyRange, prettyWhen } from "../../lib/db";
-import { Num, Pill } from "../../components/ui";
+import { Num, Pill, Chev } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +91,7 @@ export default async function Health() {
               <span className={used === null ? "when zero" : used < 25 ? "when mid" : "when"}>
                 {used === null ? "—" : `${used}% used`}
               </span>
-              <span className="chev">⌄</span>
+              <Chev />
             </summary>
             <div className="mbody"><div className="inner">
               <div className="tw">

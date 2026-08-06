@@ -1,6 +1,6 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
 import { contactsFor, callsFor, callStats } from "../../../../lib/calls";
-import { Tile, Pill } from "../../../../components/ui";
+import { Tile, Pill, Chev } from "../../../../components/ui";
 import { logCall, editCall, deleteCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -317,7 +317,7 @@ export default async function CallWorkspace({ params, searchParams }) {
                         <span className="when">
                           {ct.callback_date ? `cb ${prettyDate(ct.callback_date)}` : `#${ct.best_rank}`}
                         </span>
-                        <span className="chev">⌄</span>
+                        <Chev />
                       </summary>
 
                       <div className="mbody"><div className="inner">

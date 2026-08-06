@@ -5,6 +5,22 @@ export function Pill({ status }) {
 }
 
 /**
+ * The disclosure chevron. An SVG rather than the "⌄" glyph it replaced: the
+ * glyph carried its ink high in its line box, so beside a label like "Detail"
+ * it rode above the text and never looked centred. The SVG is symmetric about
+ * its own box, so it sits on the text's midline and rotates cleanly to point up
+ * when the surrounding <details> is open (`details[open] .chev` flips it).
+ */
+export function Chev() {
+  return (
+    <svg className="chev" viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+      <path d="M4 6.5 8 10.5 12 6.5" stroke="currentColor" strokeWidth="1.6"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
  * A person's name, opening their hub. The email is the key, so a row without
  * one stays inert text rather than linking somewhere that cannot resolve.
  */

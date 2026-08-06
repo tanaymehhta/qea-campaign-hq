@@ -1,5 +1,5 @@
 import { db, num, prettyDate, today, initials, repList, listHref } from "../../lib/db";
-import { Tile, Reps, Pill, PersonLink } from "../../components/ui";
+import { Tile, Reps, Pill, PersonLink, Chev } from "../../components/ui";
 import { logMeeting } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -135,7 +135,7 @@ export default async function Meetings({ searchParams }) {
               The one thing no tool records — booked over email, phone or anywhere else.
             </span>
           </span>
-          <span className="chev">⌄</span>
+          <Chev />
         </summary>
         <div className="mbody"><div className="inner">
           <form action={logMeeting} className="gapform">
@@ -214,7 +214,7 @@ export default async function Meetings({ searchParams }) {
               </span>
               <Pill status={m.status} />
               <span className="when">{prettyDate(m.meeting_date)}</span>
-              <span className="chev">⌄</span>
+              <Chev />
             </summary>
 
             <div className="mbody">
@@ -293,7 +293,7 @@ export default async function Meetings({ searchParams }) {
               </span>
               <Pill status={c.outcome} />
               <span className="when">{prettyDate(c.call_date)}</span>
-              <span className="chev">⌄</span>
+              <Chev />
             </summary>
             <div className="mbody">
               <div className="inner">

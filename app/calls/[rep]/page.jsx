@@ -1,6 +1,6 @@
 import { db, num, prettyDate } from "../../../lib/db";
 import { callRepList, contactsFor, callsFor, callStats } from "../../../lib/calls";
-import { Pill } from "../../../components/ui";
+import { Pill, Chev } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +75,7 @@ export default async function RepCalls({ params }) {
                     {num(s.doNotCall)} do-not-call
                   </div>
                 </div>
-                <span className="ghost">Detail<span className="chev">⌄</span></span>
+                <span className="ghost">Detail<Chev /></span>
                 <a className="solid" href={open}>Open &rarr;</a>
               </div>
             </summary>

@@ -1,5 +1,5 @@
 import { db, num, pct, prettyDate, listHref } from "../../lib/db";
-import { Seg, BounceCell, DrillCell, Num } from "../../components/ui";
+import { Seg, BounceCell, DrillCell, Num, Chev } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -143,7 +143,7 @@ export default async function Campaigns({ searchParams }) {
                     {num(g.bounced)} bounced · {num(g.delivered)} delivered · {num(g.replied)} replied
                   </div>
                 </div>
-                <span className="ghost">Detail<span className="chev">⌄</span></span>
+                <span className="ghost">Detail<Chev /></span>
                 <a className="solid" href={`/campaigns/${g.slug}`}>Open &rarr;</a>
               </div>
             </summary>

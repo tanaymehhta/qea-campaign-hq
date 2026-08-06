@@ -1,4 +1,5 @@
 import { submitFeedback } from "../app/feedback/actions";
+import { Chev } from "./ui";
 
 /**
  * The box that sits at the foot of every page, folded shut.
@@ -13,7 +14,7 @@ export default function FeedbackBox() {
   return (
     <details className="fb" id="feedback">
       <summary>
-        Something wrong, missing, or worth building? <span className="chev">⌄</span>
+        Something wrong, missing, or worth building? <Chev />
       </summary>
       <div className="fbbody">
         <form action={submitFeedback} className="fbform">

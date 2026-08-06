@@ -1,5 +1,5 @@
 import { db, num, prettyWhen, initials } from "../../lib/db";
-import { PersonLink, Pill } from "../../components/ui";
+import { PersonLink, Pill, Chev } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +87,7 @@ export default async function Replies({ searchParams }) {
             </span>
             <Pill status={r.sentiment} />
             <span className="when">{prettyWhen(r.received_at)}</span>
-            <span className="chev">⌄</span>
+            <Chev />
           </summary>
           <div className="mbody">
             <div className="inner">
