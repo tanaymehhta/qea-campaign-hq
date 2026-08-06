@@ -166,7 +166,6 @@ export default async function Overview({ searchParams }) {
         />
         <Tile
           hero
-          shader
           label="Leads contacted"
           value={num(overall.new_leads_contacted)}
           raw={overall.new_leads_contacted}

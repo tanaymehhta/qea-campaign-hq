@@ -144,13 +144,6 @@ h2{font-size:12px;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-
 .tile.hero .note{font-size:12.5px;color:var(--ink-2);margin-top:7px}
 .tile.plus .val{font-size:30px}
 .tile.plus .note{font-size:12.5px;color:var(--ink-2);margin-top:7px}
-/* A tile wearing the mesh shader: canvas pinned behind, content lifted above.
-   Ink is fixed dark with a soft white glow so it stays readable wherever the
-   shader's dark corners drift — same in both themes, the shader IS the theme. */
-.tile.shaded{position:relative;overflow:hidden}
-.tile.shaded>*:not(canvas){position:relative;z-index:1}
-.tile.shaded .lbl,.tile.shaded .note{color:#2a2a2a;text-shadow:0 1px 10px rgba(255,255,255,.75)}
-.tile.shaded .val,.tile.shaded .drill{color:#0b0b0b;text-shadow:0 1px 12px rgba(255,255,255,.75)}
 .tile .val.muted{color:var(--ink-3)}
 .tile .val.bad{color:var(--crit)}
 a.tile{display:block;color:inherit;

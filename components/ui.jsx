@@ -1,5 +1,4 @@
 import { num, pct, prettyDate, prettyWhen, personHref, PAGE_SIZES } from "../lib/db";
-import ShaderBg from "./shader-bg";
 
 export function Pill({ status }) {
   return <span className={`pill p-${status ?? "unknown"}`}>{(status ?? "unknown").replace(/_/g, " ")}</span>;
@@ -60,17 +59,16 @@ export function Reps({ reps, current, hrefFor, big, subtitleFor }) {
 }
 
 /** A number. Give it an href and it becomes the way into the people behind it. */
-export function Tile({ label, value, raw, note, tone, hero, plus, href, shader }) {
+export function Tile({ label, value, raw, note, tone, hero, plus, href }) {
   const inner = (
     <>
-      {shader ? <ShaderBg /> : null}
       <div className="lbl">{label}</div>
       <div className={`val${tone ? ` ${tone}` : ""}`} data-count={raw != null ? raw : undefined}>{value}</div>
       {note ? <div className="note">{note}</div> : null}
       {href ? <div className="drill">see who &rarr;</div> : null}
     </>
   );
-  const cls = `tile${hero ? " hero" : ""}${plus ? " plus" : ""}${shader ? " shaded" : ""}`;
+  const cls = `tile${hero ? " hero" : ""}${plus ? " plus" : ""}`;
   return href ? <a className={cls} href={href}>{inner}</a> : <div className={cls}>{inner}</div>;
 }
 
