@@ -198,8 +198,9 @@ export function DrillCell({ v, href }) {
   return <td><a className="drilled" href={href}>{num(v)}</a></td>;
 }
 
-export function RangePicker({ base, current, day, note }) {
-  const q = (s) => (base.includes("?") ? `${base}&${s}` : `${base}?${s}`);
+export function RangePicker({ base, current, day, note, anchor }) {
+  const hash = anchor ? `#${anchor}` : "";
+  const q = (s) => (base.includes("?") ? `${base}&${s}${hash}` : `${base}?${s}${hash}`);
   const opts = [
     ["today", "Today"],
     ["7", "7 days"],
@@ -248,6 +249,7 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
         <table>
           <thead>
             <tr>
+              <th>#</th>
               <th style={{ textAlign: "left" }}>Name</th>
               <th style={{ textAlign: "left" }}>Email</th>
               <th style={{ textAlign: "left" }}>Company</th>
@@ -256,8 +258,9 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {rows.map((r, i) => (
               <tr key={r.id}>
+                <td className="dim" style={{ fontVariantNumeric: "tabular-nums" }}>{offset + i + 1}</td>
                 <td className="name"><PersonLink email={r.email} name={r.name} /></td>
                 <td className="dim" style={{ textAlign: "left" }}>{r.email}</td>
                 <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
@@ -272,7 +275,7 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
               </tr>
             ))}
             {!rows.length ? (
-              <tr><td colSpan={9} className="empty">
+              <tr><td colSpan={campaignOf ? 11 : 10} className="empty">
                 No people synced for this campaign yet.
               </td></tr>
             ) : null}
@@ -293,38 +296,63 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
   );
 }
 
-/** Stacked daily bars, Instantly over lemlist. No library — it's two divs. */
+/** "Wed 6 Aug" without the weekday, for tight axis labels. */
+const shortDate = (iso) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })
+    .format(new Date(`${iso}T12:00:00Z`));
+
+/**
+ * Stacked daily bars, Instantly over lemlist. No library — it's two divs.
+ * Long windows scroll inside the card (newest day in view first) instead of
+ * overflowing the page; every column keeps enough width for its date label,
+ * and each colored segment carries its own hover tooltip.
+ */
 export function DailyBars({ days }) {
   const max = Math.max(1, ...days.map((d) => d.instantly + d.lemlist));
+  const wide = days.length > 16;
   return (
     <div className="card">
       <div className="legend">
         <span><i style={{ background: "var(--s1)" }} />Instantly</span>
         <span><i style={{ background: "var(--s2)" }} />lemlist</span>
-        <span className="dim">emails sent per day</span>
+        <span className="dim">emails sent per day{wide ? " · scroll for older days" : ""}</span>
       </div>
-      <div className="bars">
-        {days.map((d, i) => {
-          const total = d.instantly + d.lemlist;
-          return (
-            <div className="bcol" key={d.date} title={`${prettyDate(d.date)} — ${num(total)} sent (${num(d.instantly)} Instantly, ${num(d.lemlist)} lemlist)`}>
-              <div className={total ? "bval" : "bval dim"}>{total ? num(total) : "—"}</div>
-              <div
-                className="bstack"
-                style={{ height: `${(total / max) * 100}%`, animationDelay: `${0.1 + i * 0.03}s` }}
-              >
-                {d.instantly ? <span className="bar" style={{ flex: d.instantly }} /> : null}
-                {d.lemlist ? (
-                  <span className={d.instantly ? "bar lem" : "bar lem only"} style={{ flex: d.lemlist }} />
-                ) : null}
-                {!total ? <span className="bar off" style={{ height: 3 }} /> : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="bx">
-        {days.map((d) => <span key={d.date}>{prettyDate(d.date).replace(/,/, "")}</span>)}
+      <div className="bscroll">
+        <div className="binner" style={wide ? { minWidth: days.length * 46 } : undefined}>
+          <div className="bars">
+            {days.map((d, i) => {
+              const total = d.instantly + d.lemlist;
+              const when = prettyDate(d.date);
+              return (
+                <div className="bcol" key={d.date}
+                  title={`${when} — ${num(total)} sent (${num(d.instantly)} Instantly, ${num(d.lemlist)} lemlist)`}>
+                  <div className={total ? "bval" : "bval dim"}>{total ? num(total) : "—"}</div>
+                  <div
+                    className="bstack"
+                    style={{ height: `${(total / max) * 100}%`, animationDelay: `${0.1 + Math.min(i, 20) * 0.03}s` }}
+                  >
+                    {d.instantly ? (
+                      <span className="bar" style={{ flex: d.instantly }}
+                        title={`${when} — ${num(d.instantly)} Instantly`} />
+                    ) : null}
+                    {d.lemlist ? (
+                      <span className={d.instantly ? "bar lem" : "bar lem only"} style={{ flex: d.lemlist }}
+                        title={`${when} — ${num(d.lemlist)} lemlist`} />
+                    ) : null}
+                    {!total ? <span className="bar off" style={{ height: 3 }} /> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="bx">
+            {days.map((d) => (
+              <span key={d.date} title={prettyDate(d.date)}>
+                {wide ? shortDate(d.date) : prettyDate(d.date).replace(/,/, "")}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

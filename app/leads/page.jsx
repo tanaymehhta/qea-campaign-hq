@@ -16,6 +16,14 @@ async function countWhere(filters) {
   return count ?? 0;
 }
 
+/** Head-count across a set of groups — the multi-select needs an in-list, not an eq. */
+async function countIn(groupIds, status) {
+  let q = db.from("leads").select("*", { count: "exact", head: true }).in("group_id", groupIds);
+  if (status) q = q.eq("status", status);
+  const { count } = await q;
+  return count ?? 0;
+}
+
 export default async function Leads({ searchParams }) {
   const sp = searchParams ?? {};
 
@@ -38,23 +46,37 @@ export default async function Leads({ searchParams }) {
 
   const bySlug = new Map((groups ?? []).map((g) => [g.slug, g]));
   const populatedGroups = (groups ?? []).filter((g) => countsByGroup.get(g.id));
-  const activeGroup = bySlug.get(sp.group) ?? populatedGroups[0] ?? null;
+
+  // ?group=slug1,slug2 — a set, not a single pick. No selection means all of them.
+  const selSlugs = [...new Set((sp.group ?? "").split(",").filter((s) => bySlug.has(s)))];
+  const activeGroups = selSlugs.length ? selSlugs.map((s) => bySlug.get(s)) : populatedGroups;
+  const allSelected = !selSlugs.length;
   const activeStatus = STATUSES.includes(sp.status) ? sp.status : null;
+  const activeIds = activeGroups.map((g) => g.id);
+
+  // Clicking a group toggles it in or out of the set; "All" clears the set.
+  const groupHref = (slug) => {
+    const next = slug === null ? []
+      : selSlugs.includes(slug) ? selSlugs.filter((s) => s !== slug)
+      : [...selSlugs, slug];
+    return next.length ? `/leads?group=${next.join(",")}` : "/leads";
+  };
+  const groupParam = selSlugs.length ? `group=${selSlugs.join(",")}` : null;
+  const withFilters = (extra) =>
+    `/leads?${[groupParam, extra].filter(Boolean).join("&")}` .replace(/\?$/, "");
 
   let rows = [];
   const gc = { ...EMPTY_COUNTS };
   const search = (sp.q ?? "").replace(/[,()%]/g, "").trim();
-  if (activeGroup) {
-    gc.total = countsByGroup.get(activeGroup.id) ?? 0;
-    const statusBreakdown = await Promise.all(
-      STATUSES.map((s) => countWhere({ group_id: activeGroup.id, status: s }))
-    );
+  if (activeGroups.length) {
+    gc.total = activeGroups.reduce((a, g) => a + (countsByGroup.get(g.id) ?? 0), 0);
+    const statusBreakdown = await Promise.all(STATUSES.map((s) => countIn(activeIds, s)));
     STATUSES.forEach((s, i) => { gc[s] = statusBreakdown[i]; });
 
     let q = db
       .from("leads")
       .select("id, name, email, company, title, status, email_quality, source_list")
-      .eq("group_id", activeGroup.id)
+      .in("group_id", activeIds)
       .order("name")
       .limit(1000);
     if (activeStatus) q = q.eq("status", activeStatus);
@@ -96,38 +118,51 @@ export default async function Leads({ searchParams }) {
         />
       </div>
 
-      <div className="seg" style={{ marginBottom: 20 }}>
-        {populatedGroups.map((g) => (
-          <a key={g.id} href={`/leads?group=${g.slug}`} className={activeGroup?.id === g.id ? "on" : ""}>
-            {g.display_name} ({num(countsByGroup.get(g.id) ?? 0)})
+      <div className="segrow" style={{ marginBottom: 20 }}>
+        <span className="note">Campaigns — pick several</span>
+        <div className="seg">
+          <a href={groupHref(null)} className={allSelected ? "on" : ""}>
+            All ({num(totalCount)})
           </a>
-        ))}
+          {populatedGroups.map((g) => (
+            <a key={g.id} href={groupHref(g.slug)} className={!allSelected && selSlugs.includes(g.slug) ? "on" : ""}>
+              {g.display_name} ({num(countsByGroup.get(g.id) ?? 0)})
+            </a>
+          ))}
+        </div>
       </div>
 
-      {activeGroup ? (
+      {activeGroups.length ? (
         <>
-          <h2>{activeGroup.display_name}</h2>
+          <h2>
+            {activeGroups.length === populatedGroups.length
+              ? "All campaigns"
+              : activeGroups.map((g) => g.display_name).join(" + ")}
+          </h2>
 
-          <form action="/leads" method="GET" style={{ marginBottom: 14 }}>
-            <input type="hidden" name="group" value={activeGroup.slug} />
+          <form action="/leads" method="GET" className="searchbox" style={{ marginBottom: 14 }}>
+            {selSlugs.length ? <input type="hidden" name="group" value={selSlugs.join(",")} /> : null}
             {activeStatus ? <input type="hidden" name="status" value={activeStatus} /> : null}
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
             <input
               type="search"
               name="q"
               placeholder="Search name, email, or company…"
               defaultValue={sp.q ?? ""}
-              style={{ width: 320, maxWidth: "100%" }}
             />
           </form>
 
           <div className="seg" style={{ marginBottom: 14 }}>
-            <a href={`/leads?group=${activeGroup.slug}${search ? `&q=${encodeURIComponent(search)}` : ""}`} className={!activeStatus ? "on" : ""}>
+            <a href={withFilters(search ? `q=${encodeURIComponent(search)}` : null)} className={!activeStatus ? "on" : ""}>
               All ({num(gc.total)})
             </a>
             {STATUSES.map((s) => (
               <a
                 key={s}
-                href={`/leads?group=${activeGroup.slug}&status=${s}${search ? `&q=${encodeURIComponent(search)}` : ""}`}
+                href={withFilters(`status=${s}${search ? `&q=${encodeURIComponent(search)}` : ""}`)}
                 className={activeStatus === s ? "on" : ""}
               >
                 {s.replace(/_/g, " ")} ({num(gc[s] ?? 0)})
@@ -135,18 +170,33 @@ export default async function Leads({ searchParams }) {
             ))}
           </div>
 
-          {/* The whole group, not the page: the counts come from head-counts
-              above, so the picture matches the filter rather than the slice. */}
+          {/* The whole selection, not the page: the counts come from head-counts
+              above, so the picture matches the filter rather than the slice.
+              Under 3 non-zero statuses the donut deliberately renders nothing
+              (a 2-slice ring is a worse way of writing one number), so say the
+              number instead of leaving a silent gap. */}
           <ShareDonut
             title={activeStatus ? "shown" : "leads"}
             items={STATUSES.map((s) => ({ label: s, value: gc[s] ?? 0 }))}
-            note={activeStatus ? `Filtered to ${activeStatus.replace(/_/g, " ")} — the ring is the whole group.` : null}
+            note={activeStatus ? `Filtered to ${activeStatus.replace(/_/g, " ")} — the ring is the whole selection.` : null}
           />
+          {STATUSES.filter((s) => gc[s] > 0).length < 3 && gc.total ? (
+            <p className="note" style={{ marginBottom: 14 }}>
+              No breakdown ring for this selection —{" "}
+              {STATUSES.filter((s) => gc[s] > 0)
+                .map((s) => `${num(gc[s])} ${s.replace(/_/g, " ")}`)
+                .join(" · ")}{" "}
+              {STATUSES.filter((s) => gc[s] > 0).length === 1
+                ? "is every lead here, so there is nothing to divide."
+                : "are the only statuses here."}
+            </p>
+          ) : null}
 
           <div className="card tw">
             <table>
               <thead>
                 <tr>
+                  <th>#</th>
                   <th>Name</th>
                   <th style={{ textAlign: "left" }}>Email</th>
                   <th style={{ textAlign: "left" }}>Company</th>
@@ -156,8 +206,9 @@ export default async function Leads({ searchParams }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {rows.map((r, i) => (
                   <tr key={r.id}>
+                    <td className="dim" style={{ fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
                     <td className="name"><PersonLink email={r.email} name={r.name} /></td>
                     <td className="dim" style={{ textAlign: "left" }}>{r.email || "—"}</td>
                     <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
@@ -167,7 +218,7 @@ export default async function Leads({ searchParams }) {
                   </tr>
                 ))}
                 {!rows.length ? (
-                  <tr><td colSpan={6} className="empty">No leads match this filter.</td></tr>
+                  <tr><td colSpan={7} className="empty">No leads match this filter.</td></tr>
                 ) : null}
               </tbody>
             </table>
