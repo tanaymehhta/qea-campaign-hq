@@ -65,12 +65,22 @@ export default async function Overview({ searchParams }) {
   );
   const scopedProposals = (proposals ?? []).filter((p) => inScope(p.campaign_id));
 
-  // last 14 days for the chart, always, regardless of the selected window
-  const chartFrom = shift(t, -13);
-  const chartRows = await dailyRange(chartFrom, t);
+  // The chart follows the range picker exactly: Today / a picked day = one
+  // bar, 7/30/90 = that many days, All time = from the first day with data.
+  const SPAN = { 7: 7, 30: 30, 90: 90 };
+  const chartTo = w.range === "day" ? w.from : t;
+  let chartFrom =
+    w.range === "today" ? t
+    : w.range === "day" ? w.from
+    : SPAN[w.range] ? shift(t, -(SPAN[w.range] - 1))
+    : null; // all time — resolved from the data below
+  const chartRows = await dailyRange(chartFrom ?? "2020-01-01", chartTo);
+  if (!chartFrom) {
+    const dates = chartRows.filter((r) => inScope(r.campaign_id) && r.sent).map((r) => r.metric_date);
+    chartFrom = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : shift(chartTo, -6);
+  }
   const perDay = new Map();
-  for (let i = 0; i < 14; i++) {
-    const d = shift(chartFrom, i);
+  for (let d = chartFrom; d <= chartTo; d = shift(d, 1)) {
     perDay.set(d, { date: d, instantly: 0, lemlist: 0 });
   }
   for (const r of chartRows) {
@@ -78,6 +88,21 @@ export default async function Overview({ searchParams }) {
     const slot = perDay.get(r.metric_date);
     if (c && slot && inScope(r.campaign_id)) slot[c.source] += r.sent ?? 0;
   }
+
+  // Sends happen on weekdays; empty Sat/Sun columns are dead width. Display
+  // only — if a weekend ever does send, the columns come back on their own.
+  const isWeekend = (d) => [0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay());
+  const allDays = [...perDay.values()];
+  const weekdaysOnly = allDays.filter((x) => !isWeekend(x.date));
+  const weekendsEmpty =
+    weekdaysOnly.length > 0 &&
+    allDays.filter((x) => isWeekend(x.date)).every((x) => !x.instantly && !x.lemlist);
+  const chartDays = weekendsEmpty ? weekdaysOnly : allDays;
+  const chartLabel =
+    w.range === "today" ? "Today"
+    : w.range === "day" ? prettyDate(w.from)
+    : SPAN[w.range] ? `Last ${SPAN[w.range]} days`
+    : "All time";
 
   const scopedCampaigns = (campaigns ?? []).filter((c) => inScope(c.id));
   const running = scopedCampaigns.filter((c) => c.status === "running").length;
@@ -221,8 +246,18 @@ export default async function Overview({ searchParams }) {
         />
       </div>
 
-      <h2 style={{ marginTop: 0 }}>Last 14 days</h2>
-      <DailyBars days={[...perDay.values()]} />
+      <h2 style={{ marginTop: 0 }} id="chart">
+        {chartLabel}{weekendsEmpty ? " — weekdays" : ""}
+      </h2>
+      {/* Same picker as the one at the top, same URL param — either one moves
+          both. The anchor lands the reload back here instead of at the top. */}
+      <RangePicker
+        base={here({ rep: rep === "all" ? "" : rep })}
+        current={w.range}
+        anchor="chart"
+        note={weekendsEmpty ? "empty weekends hidden" : null}
+      />
+      <DailyBars days={chartDays} />
 
       <h2>By campaign — {w.range === "day" ? prettyDate(w.from) : w.label.toLowerCase()}</h2>
       <div className="card tw">
