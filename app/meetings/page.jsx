@@ -1,4 +1,4 @@
-import { db, num, pct, prettyDate, prettyWhen, initials, repList, listHref } from "../../lib/db";
+import { db, num, prettyDate, initials, repList, listHref } from "../../lib/db";
 import { Tile, Reps, Pill, PersonLink } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +13,15 @@ export const dynamic = "force-dynamic";
 export default async function Meetings({ searchParams }) {
   const rep = searchParams?.rep ?? "all";
 
-  const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }, { data: calls }] = await Promise.all([
+  const showAllCalls = searchParams?.calls === "all";
+
+  const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }, { data: calls }, { data: callCamps }] = await Promise.all([
     repList(),
-    db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, status, leads, replied, source"),
+    db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, group_name, group_slug, status, leads, replied, source"),
     db.from("meetings").select("*").order("meeting_date", { ascending: false }),
     db.from("proposals").select("id, campaign_id"),
-    db.from("phone_calls").select("*").is("deleted_at", null).order("call_date", { ascending: false }),
+    db.from("phone_calls").select("*, call_contacts(id, call_campaign_id)").is("deleted_at", null).order("call_date", { ascending: false }),
+    db.from("call_campaigns").select("id, slug, display_name, owner"),
   ]);
 
   const groupById = new Map(groups.map((g) => [g.id, g]));
@@ -43,23 +46,25 @@ export default async function Meetings({ searchParams }) {
   const running = mine.filter((s) => s.status === "running").length;
   const countFor = (r) => (r.id === "all" ? allMeetings.length : allMeetings.filter((m) => ownerOfMeeting(m) === r.id).length);
 
-  // Replies that have not yet become a meeting. Matching on email is the only
-  // join the two tables share; a reply from someone we already met drops out.
-  const met = new Set(allMeetings.map((m) => (m.prospect_email ?? "").toLowerCase()).filter(Boolean));
-  const scopedIds = new Set(mine.map((s) => s.campaign_id));
-  const { data: replies } = await db
-    .from("replies")
-    .select("id, campaign_id, lead_name, lead_email, company, sentiment, received_at")
-    .neq("sentiment", "auto_reply")
-    .order("received_at", { ascending: false })
-    .limit(120);
-  const waiting = (replies ?? [])
-    .filter((r) => !met.has((r.lead_email ?? "").toLowerCase()))
-    .filter((r) => !known || scopedIds.has(r.campaign_id))
-    .slice(0, 40);
-
   const here = (id) => (id === "all" ? "/meetings" : `/meetings?rep=${encodeURIComponent(id)}`);
+
+  // A phone call's campaign lives on its contact, not the call row itself.
+  const callCampById = new Map((callCamps ?? []).map((c) => [c.id, c]));
+  const campOfCall = (c) => callCampById.get(c.call_contacts?.call_campaign_id) ?? null;
+  const bookedCalls = (calls ?? []).filter((c) => c.outcome === "booked_meeting");
+  const shownCalls = showAllCalls ? calls ?? [] : bookedCalls;
+  const callToggle = (v) => {
+    const q = new URLSearchParams();
+    if (known) q.set("rep", rep);
+    if (v) q.set("calls", v);
+    return `/meetings${q.size ? `?${q}` : ""}#calls`;
+  };
+  // "Campaign" means the parent group; the sub-campaign label is a detail field.
   const nameOf = (id) => {
+    const s = subById.get(id);
+    return s ? s.group_name || s.sub_campaign_label || s.name : null;
+  };
+  const subLabelOf = (id) => {
     const s = subById.get(id);
     return s ? s.sub_campaign_label || s.name : null;
   };
@@ -70,7 +75,7 @@ export default async function Meetings({ searchParams }) {
         <h1>Meetings</h1>
         <p className="sub">
           The primary KPI, and the only thing on this dashboard no tool records. Pick a rep to see
-          their meetings and the replies still waiting to become one.
+          their meetings and the phone calls that booked one.
         </p>
       </div>
 
@@ -155,7 +160,16 @@ export default async function Meetings({ searchParams }) {
                   <div><div className="k">Company</div><div className="v">{m.company || "—"}</div></div>
                   <div><div className="k">Email</div><div className="v">{m.prospect_email || "—"}</div></div>
                   <div><div className="k">Campaign</div><div className="v">
-                    {campaign ? <a className="drilled" href={`/c/${m.campaign_id}`}>{campaign}</a> : "—"}
+                    {campaign ? (
+                      subById.get(m.campaign_id)?.group_slug
+                        ? <a className="drilled" href={`/campaigns/${subById.get(m.campaign_id).group_slug}`}>{campaign}</a>
+                        : campaign
+                    ) : "—"}
+                  </div></div>
+                  <div><div className="k">Sub-campaign</div><div className="v">
+                    {subLabelOf(m.campaign_id)
+                      ? <a className="drilled" href={`/c/${m.campaign_id}`}>{subLabelOf(m.campaign_id)}</a>
+                      : "—"}
                   </div></div>
                   <div><div className="k">Evidence</div><div className="v">{m.evidence}</div></div>
                   <div><div className="k">Date</div><div className="v">{prettyDate(m.meeting_date)}</div></div>
@@ -179,76 +193,71 @@ export default async function Meetings({ searchParams }) {
         );
       })}
 
-      <h2>Phone calls</h2>
-      <p className="sub">
-        Hand-logged, the same way as meetings — not tied to a campaign row in this database, so
-        each call carries its own free-text label instead of a link.
-      </p>
-      <div className="card tw">
-        <table>
-          <thead>
-            <tr>
-              <th>Prospect</th><th>Company</th><th>Campaign</th><th>Outcome</th><th>Date</th><th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(calls ?? []).map((c) => (
-              <tr key={c.id}>
-                <td className="name">{c.prospect_name}</td>
-                <td style={{ textAlign: "left" }}>{c.company || "—"}</td>
-                <td style={{ textAlign: "left" }}>{c.campaign_label || "—"}</td>
-                <td><Pill status={c.outcome} /></td>
-                <td className="dim">{prettyDate(c.call_date)}</td>
-                <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
-              </tr>
-            ))}
-            {!calls?.length ? (
-              <tr><td colSpan={6} className="empty">No phone calls logged yet.</td></tr>
-            ) : null}
-          </tbody>
-        </table>
+      <h2 id="calls">
+        {showAllCalls ? "Phone calls — every outcome" : "Phone calls that booked a meeting"}
+      </h2>
+      <div className="segrow">
+        <span className="note">
+          {showAllCalls
+            ? `${num(shownCalls.length)} calls logged, every outcome.`
+            : `${num(bookedCalls.length)} booked a meeting · ${num((calls ?? []).length - bookedCalls.length)} other outcomes hidden.`}
+        </span>
+        <a className="choice" href={callToggle(showAllCalls ? null : "all")}>
+          {showAllCalls ? "Booked meetings only" : "Show all outcomes"}
+        </a>
       </div>
 
-      <h2>Replies waiting to become meetings</h2>
-      <p className="sub">
-        {waiting.length
-          ? "Every inbound that is not an out-of-office and does not already have a meeting against it, newest first. Matching is by email address, so a reply from a colleague of someone we met still shows here."
-          : "No named replies against this rep's campaigns are still open."}
-      </p>
-      <div className="card tw">
-        <table>
-          <thead>
-            <tr>
-              <th>Person</th><th>Company</th><th>Campaign</th><th>Owner</th><th>Read as</th><th>Replied</th>
-            </tr>
-          </thead>
-          <tbody>
-            {waiting.map((r) => {
-              const gid = groupOfCampaign(r.campaign_id);
-              return (
-                <tr key={r.id}>
-                  <td className="name">
-                    <PersonLink email={r.lead_email} name={r.lead_name} fallback="Unknown" />
-                    {r.lead_name && r.lead_email ? <span className="alias">{r.lead_email}</span> : null}
-                  </td>
-                  <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
-                  <td className="dim" style={{ textAlign: "left" }}>
-                    {nameOf(r.campaign_id) ? (
-                      <a className="drilled" href={`/c/${r.campaign_id}`}>{nameOf(r.campaign_id)}</a>
-                    ) : "—"}
-                  </td>
-                  <td style={{ textAlign: "left" }}>{ownerOfGroup(gid) ?? "—"}</td>
-                  <td><Pill status={r.sentiment} /></td>
-                  <td className="dim">{prettyWhen(r.received_at)}</td>
-                </tr>
-              );
-            })}
-            {!waiting.length ? (
-              <tr><td colSpan={6} className="empty">Nothing waiting.</td></tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+      {shownCalls.map((c, i) => {
+        const camp = campOfCall(c);
+        const label = camp ? `Outbound — ${camp.display_name}` : c.campaign_label || "Cold Call";
+        const workspace = camp && c.contact_id
+          ? `/calls/${encodeURIComponent(c.rep || camp.owner || "all")}/${camp.slug}?open=${c.contact_id}#c-${c.contact_id}`
+          : null;
+        return (
+          <details className="mrow" key={c.id} style={{ animationDelay: `${0.04 + Math.min(i, 12) * 0.03}s` }}>
+            <summary>
+              <span className="glyph" style={{ background: "var(--tint-n)", color: "var(--ink-1)" }}>
+                {initials(c.prospect_name)}
+              </span>
+              <span className="meat">
+                <span className="who">{c.prospect_name}</span>
+                <span className="line">{[c.company, label].filter(Boolean).join(" — ")}</span>
+              </span>
+              <Pill status={c.outcome} />
+              <span className="when">{prettyDate(c.call_date)}</span>
+              <span className="chev">⌄</span>
+            </summary>
+            <div className="mbody">
+              <div className="inner">
+                <div className="meta">
+                  <div><div className="k">Company</div><div className="v">{c.company || "—"}</div></div>
+                  <div><div className="k">Campaign</div><div className="v">{label}</div></div>
+                  <div><div className="k">Rep</div><div className="v">{c.rep || "—"}</div></div>
+                  <div><div className="k">Date</div><div className="v">{prettyDate(c.call_date)}</div></div>
+                  <div><div className="k">Callback</div><div className="v">
+                    {c.callback_date ? prettyDate(c.callback_date) : "—"}
+                  </div></div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <div className="k">Note</div><div className="v">{c.note || "—"}</div>
+                  </div>
+                </div>
+                {workspace ? (
+                  <p style={{ marginBottom: 0 }}>
+                    <a className="drilled" href={workspace}>
+                      Open {c.prospect_name.split(" ")[0]} in the call workspace — history, crib and buildings &rarr;
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </details>
+        );
+      })}
+      {!shownCalls.length ? (
+        <div className="card"><p className="empty" style={{ padding: 0 }}>
+          {showAllCalls ? "No phone calls logged yet." : "No calls have booked a meeting yet."}
+        </p></div>
+      ) : null}
 
       <div className="range" style={{ marginTop: 18 }}>
         <a href={listHref({ metric: "meetings", range: "all" })}>Every meeting as a list &rarr;</a>

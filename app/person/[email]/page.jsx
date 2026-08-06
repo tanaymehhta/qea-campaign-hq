@@ -108,16 +108,24 @@ export default async function Person({ params }) {
         .in("campaign_id", ids)
     : { data: [] };
   const campaign = new Map((cs ?? []).map((c) => [c.campaign_id, c]));
+  // "Campaign" means the parent group; fall back to the sub-campaign label.
   const labelOf = (id) => {
     const c = campaign.get(id);
-    return c ? c.sub_campaign_label || c.name : "—";
+    return c ? c.group_name || c.sub_campaign_label || c.name : "—";
   };
   const CampaignLink = ({ id }) =>
     campaign.has(id) ? <a href={`/c/${id}`}>{labelOf(id)}</a> : <span className="dim">—</span>;
 
   /** The campaigns a collapsed event belongs to, named once each. */
   const CampaignList = ({ ids: list }) => {
-    const uniq = [...new Set(list.filter(Boolean))];
+    // Dedupe by display label too — two sub-campaigns of one group share a name now.
+    const seen = new Set();
+    const uniq = [...new Set(list.filter(Boolean))].filter((id) => {
+      const l = labelOf(id);
+      if (seen.has(l)) return false;
+      seen.add(l);
+      return true;
+    });
     if (!uniq.length) return <span className="dim">—</span>;
     return uniq.map((id, i) => (
       <span key={id}>{i ? " · " : ""}<CampaignLink id={id} /></span>
