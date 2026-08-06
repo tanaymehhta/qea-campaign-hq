@@ -262,9 +262,17 @@ export default async function Overview({ searchParams }) {
       <DailyBars days={chartDays} />
 
       <h2>By campaign — {w.range === "day" ? prettyDate(w.from) : w.label.toLowerCase()}</h2>
-      <div className="card tw">
+      <div className="card tw banded">
         <table>
           <thead>
+            {/* Three bands over the eleven columns: how much went out, how much
+                of it landed, what came back. colSpans must total 11. */}
+            <tr className="band">
+              <th colSpan={2} />
+              <th colSpan={2}>Volume</th>
+              <th colSpan={2}>Deliverability</th>
+              <th colSpan={5}>Engagement &amp; outcomes</th>
+            </tr>
             <tr>
               <th>Campaign</th><th>Status</th><th>Sent</th><th>New leads</th><th>Bounced</th>
               <th>Bounce %</th><th>Opened</th><th>Replies</th><th>LI acc.</th><th>Meetings</th><th>Proposals</th>

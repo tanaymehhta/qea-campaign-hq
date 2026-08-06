@@ -195,6 +195,48 @@ tr.tot td{border-bottom:none;border-top:1px solid var(--axis);font-weight:600;pa
 tr.tot:hover td{background:none}
 td.name{font-variant-numeric:normal;white-space:normal;min-width:200px}
 td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
+/* ---- banded table: eleven columns read as three groups ----
+   Volume, deliverability, outcomes. The grouping is carried by a column
+   wash rather than a rule, so nothing is boxed off and the row still reads
+   left to right. The band header is a real <tr> with colSpan — it stays
+   over its own columns at any campaign-name width, which an overlaid flex
+   strip would not. Hues are the app's own --s1 / --crit / --good, so a
+   band means here what the same colour means everywhere else; only the
+   mixing strength changes between themes, hence --bw / --bh. */
+.card.banded{padding:0;border-radius:18px}
+.banded{--bw:6%;--bh:15%}
+[data-theme="dark"] .banded{--bw:11%;--bh:22%}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .banded{--bw:11%;--bh:22%}}
+.banded{
+  --band-v:color-mix(in srgb,var(--s1) var(--bw),transparent);
+  --band-d:color-mix(in srgb,var(--crit) var(--bw),transparent);
+  --band-o:color-mix(in srgb,var(--good) var(--bw),transparent);
+  --band-vh:color-mix(in srgb,var(--s1) var(--bh),transparent);
+  --band-dh:color-mix(in srgb,var(--crit) var(--bh),transparent);
+  --band-oh:color-mix(in srgb,var(--good) var(--bh),transparent);
+}
+.banded thead th{padding:12px 10px}
+.banded th:first-child,.banded td:first-child{padding-left:24px}
+.banded th:last-child,.banded td:last-child{padding-right:24px}
+.banded tr:not(.band) :is(th,td):nth-child(3),
+.banded tr:not(.band) :is(th,td):nth-child(4){background:var(--band-v)}
+.banded tr:not(.band) :is(th,td):nth-child(5),
+.banded tr:not(.band) :is(th,td):nth-child(6){background:var(--band-d)}
+.banded tr:not(.band) :is(th,td):nth-child(n+7){background:var(--band-o)}
+.banded tr.tot td:nth-child(3),.banded tr.tot td:nth-child(4){background:var(--band-vh)}
+.banded tr.tot td:nth-child(5),.banded tr.tot td:nth-child(6){background:var(--band-dh)}
+.banded tr.tot td:nth-child(n+7){background:var(--band-oh)}
+.banded tr.tot td{border-top:none}
+.banded tr.tot td:first-child{font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+/* The band tint is a background-colour, so the hover wash layers over it
+   as an image instead of replacing it. */
+.banded tbody tr:hover td{background-image:linear-gradient(var(--wash),var(--wash))}
+.banded .band th{padding:10px;text-align:center;font-size:10px;letter-spacing:.14em;
+  border-bottom:none;font-weight:600}
+.banded .band th:nth-child(2){background:var(--band-vh);color:var(--s1)}
+.banded .band th:nth-child(3){background:var(--band-dh);color:var(--crit)}
+.banded .band th:nth-child(4){background:var(--band-oh);color:var(--good)}
+
 .dim{color:var(--ink-3)}
 .bad{color:var(--crit);font-weight:600}
 .mid{color:var(--serious);font-weight:600}
