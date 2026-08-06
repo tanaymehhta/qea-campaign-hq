@@ -21,6 +21,25 @@ export default async function Health() {
   const capTotal = running.reduce((a, c) => a + (c.daily_limit ?? 0), 0);
   const sentTotal = [...sentToday.values()].reduce((a, b) => a + b, 0);
 
+  // Capacity by parent group, mirroring the Campaigns page's group → sub drill-down.
+  const byGroup = new Map();
+  for (const c of running) {
+    const key = c.group_id ?? "none";
+    if (!byGroup.has(key)) {
+      byGroup.set(key, {
+        key, slug: c.group_slug ?? null, name: c.group_name ?? "Ungrouped",
+        cap: 0, sent: 0, tools: [], subs: [],
+      });
+    }
+    const g = byGroup.get(key);
+    g.cap += c.daily_limit ?? 0;
+    g.sent += sentToday.get(c.campaign_id) ?? 0;
+    if (c.source && !g.tools.includes(c.source)) g.tools.push(c.source);
+    g.subs.push(c);
+  }
+  const capacityGroups = [...byGroup.values()].sort((a, b) => b.cap - a.cap);
+  for (const g of capacityGroups) g.subs.sort((a, b) => (b.daily_limit ?? 0) - (a.daily_limit ?? 0));
+
   const byDomain = new Map();
   for (const a of accounts ?? []) {
     const d = a.domain ?? "—";
@@ -48,27 +67,58 @@ export default async function Health() {
       </div>
 
       <h2>Capacity — configured cap against what actually went out today</h2>
-      <div className="card tw">
-        <table>
-          <thead><tr><th>Campaign</th><th>Tool</th><th>Status</th><th>Cap/day</th><th>Sent today</th><th>Used</th></tr></thead>
-          <tbody>
-            {running.sort((a, b) => (b.daily_limit ?? 0) - (a.daily_limit ?? 0)).map((c) => {
-              const s = sentToday.get(c.campaign_id) ?? 0;
-              const used = c.daily_limit ? pct(s, c.daily_limit) : null;
-              return (
-                <tr key={c.campaign_id}>
-                  <td className="name"><a href={`/c/${c.campaign_id}`}>{c.sub_campaign_label || c.name}</a></td>
-                  <td className="dim">{c.source}</td>
-                  <td><Pill status={c.status} /></td>
-                  <td className="dim">{c.daily_limit ?? "—"}</td>
-                  <Num v={s} />
-                  <td className={used === null ? "zero" : used < 25 ? "mid" : ""}>{used === null ? "—" : `${used}%`}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <p className="sub" style={{ marginTop: -8 }}>
+        One row per campaign, cap and sends summed across its sub-campaigns. Open a row for the
+        per-sub-campaign split.
+      </p>
+      {capacityGroups.map((g, i) => {
+        const used = g.cap ? pct(g.sent, g.cap) : null;
+        return (
+          <details className="mrow" key={g.key} open={i === 0} style={{ animationDelay: `${0.04 + i * 0.04}s` }}>
+            <summary>
+              <span className="meat">
+                <span className="who">
+                  {g.slug ? <a className="drilled" href={`/campaigns/${g.slug}`}>{g.name}</a> : g.name}
+                </span>
+                <span className="line">
+                  {g.subs.length} running campaign{g.subs.length === 1 ? "" : "s"}
+                  {g.tools.length ? ` · ${g.tools.join(", ")}` : ""}
+                </span>
+              </span>
+              <span className="who" style={{ fontVariantNumeric: "tabular-nums" }}>
+                {num(g.sent)} / {num(g.cap)}
+              </span>
+              <span className={used === null ? "when zero" : used < 25 ? "when mid" : "when"}>
+                {used === null ? "—" : `${used}% used`}
+              </span>
+              <span className="chev">⌄</span>
+            </summary>
+            <div className="mbody"><div className="inner">
+              <div className="tw">
+                <table>
+                  <thead><tr><th>Sub-campaign</th><th>Tool</th><th>Status</th><th>Cap/day</th><th>Sent today</th><th>Used</th></tr></thead>
+                  <tbody>
+                    {g.subs.map((c) => {
+                      const s = sentToday.get(c.campaign_id) ?? 0;
+                      const u = c.daily_limit ? pct(s, c.daily_limit) : null;
+                      return (
+                        <tr key={c.campaign_id}>
+                          <td className="name"><a href={`/c/${c.campaign_id}`}>{c.sub_campaign_label || c.name}</a></td>
+                          <td className="dim">{c.source}</td>
+                          <td><Pill status={c.status} /></td>
+                          <td className="dim">{c.daily_limit ?? "—"}</td>
+                          <Num v={s} />
+                          <td className={u === null ? "zero" : u < 25 ? "mid" : ""}>{u === null ? "—" : `${u}%`}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div></div>
+          </details>
+        );
+      })}
 
       <h2>Mailboxes</h2>
       <div className="card tw">
