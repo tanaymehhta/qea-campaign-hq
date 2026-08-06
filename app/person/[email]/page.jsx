@@ -82,7 +82,20 @@ export default async function Person({ params }) {
   const inbound = replies ?? [];
   const met = meetings ?? [];
 
-  if (!people.length && !activities.length && !inbound.length && !met.length) {
+  // The phone world. phone_calls has no email column — the join runs through
+  // call_contacts, whose email is nullable and not unique across campaigns,
+  // so collect every matching contact id.
+  const { data: cts } = await db.from("call_contacts")
+    .select("id, call_campaign_id").eq("email", email);
+  const contactIds = (cts ?? []).map((c) => c.id);
+  const { data: pcalls } = contactIds.length
+    ? await db.from("phone_calls").select("*")
+        .in("contact_id", contactIds).is("deleted_at", null)
+        .order("call_date", { ascending: false })
+    : { data: [] };
+  const calls = pcalls ?? [];
+
+  if (!people.length && !activities.length && !inbound.length && !met.length && !calls.length) {
     return (
       <>
         <h1>{email || "No address"}</h1>
@@ -251,6 +264,33 @@ export default async function Person({ params }) {
           No campaign holds this address any more, though events below still name them.
         </p>
       )}
+
+      {calls.length ? (
+        <>
+          <h2>Phone calls</h2>
+          <div className="card tw">
+            <table>
+              <thead>
+                <tr><th>Date</th><th>Outcome</th><th>Rep</th>
+                  <th style={{ textAlign: "left" }}>Campaign</th>
+                  <th style={{ textAlign: "left" }}>Note</th><th>Callback</th></tr>
+              </thead>
+              <tbody>
+                {calls.map((c) => (
+                  <tr key={c.id}>
+                    <td className="dim">{prettyDate(c.call_date)}</td>
+                    <td><Pill status={c.outcome} /></td>
+                    <td>{c.rep || "—"}</td>
+                    <td className="dim" style={{ textAlign: "left" }}>{c.campaign_label || "—"}</td>
+                    <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
+                    <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
 
       <h2>Everything that happened</h2>
       {timeline.length ? (

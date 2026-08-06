@@ -167,8 +167,8 @@ export default async function Conflicts({ searchParams }) {
           </div>
           <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
             {nameOf.get(m.campaign_id) ?? "—"} · Unclassified for over 48 hours. Read it, classify it —
-            and if it is a booked meeting, there is no form for that yet: for now it means a
-            hand-written row in the meetings table.
+            and if it is a booked meeting,{" "}
+            <a className="drilled" href="/meetings">log it from the Meetings page</a>.
           </div>
           <div className="msg">
             <div className="msg-head">

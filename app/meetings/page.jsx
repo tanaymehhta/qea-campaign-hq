@@ -1,5 +1,6 @@
-import { db, num, prettyDate, initials, repList, listHref } from "../../lib/db";
+import { db, num, prettyDate, today, initials, repList, listHref } from "../../lib/db";
 import { Tile, Reps, Pill, PersonLink } from "../../components/ui";
+import { logMeeting } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +108,60 @@ export default async function Meetings({ searchParams }) {
         <Tile label="Proposals" value={num(myProposals.length)} raw={myProposals.length}
           tone={myProposals.length ? undefined : "muted"} note="logged by hand" />
       </div>
+
+      {/* A write the database refused, said in its own sentence. */}
+      {searchParams?.err ? (
+        <div className="card" style={{ marginBottom: 18, borderColor: "var(--warn-ink)" }}>
+          <p style={{ margin: 0 }}>
+            <b>That didn&rsquo;t save.</b> {searchParams.err}{" "}
+            <a href={here(known ? rep : "all")}>dismiss</a>
+          </p>
+        </div>
+      ) : null}
+      {searchParams?.logged ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <p style={{ margin: 0 }}>
+            Meeting logged — it&rsquo;s in the list below and on the Overview.{" "}
+            <a href={here(known ? rep : "all")}>dismiss</a>
+          </p>
+        </div>
+      ) : null}
+
+      <details className="mrow" style={{ marginBottom: 22 }} open={!!searchParams?.err}>
+        <summary>
+          <span className="meat">
+            <span className="who">Log a meeting</span>
+            <span className="line">
+              The one thing no tool records — booked over email, phone or anywhere else.
+            </span>
+          </span>
+          <span className="chev">⌄</span>
+        </summary>
+        <div className="mbody"><div className="inner">
+          <form action={logMeeting} className="gapform">
+            <input type="hidden" name="rep" value={known ? rep : ""} />
+            <input name="name" placeholder="Prospect name *" required style={{ minWidth: 180 }} />
+            <input name="email" type="email" placeholder="Email" style={{ minWidth: 200 }} />
+            <input name="company" placeholder="Company" style={{ minWidth: 160 }} />
+            <input type="date" name="date" defaultValue={today()} required />
+            <select name="group" defaultValue={known ? (groups.find((g) => g.owner === rep)?.id ?? "") : ""}>
+              <option value="">No campaign</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>{g.display_name}</option>
+              ))}
+            </select>
+            <select name="evidence" defaultValue="calendar" title="How do we know it's booked?">
+              <option value="calendar">calendar invite</option>
+              <option value="tool">in the tool</option>
+              <option value="crm">in the CRM</option>
+              <option value="chat">said in chat</option>
+            </select>
+            <input name="logged_by" placeholder="Logged by" defaultValue={known ? rep : ""} style={{ minWidth: 120 }} />
+            <input name="note" placeholder="Note" style={{ flex: 2, minWidth: 200 }} />
+            <button className="choice" type="submit">Log it</button>
+          </form>
+        </div></div>
+      </details>
 
       <h2 style={{ marginTop: 0 }}>
         {known ? `Meetings booked by ${rep}` : `All meetings — ${num(allMeetings.filter(counted).length)} booked or held, ever`}
