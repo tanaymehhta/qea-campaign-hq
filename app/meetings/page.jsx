@@ -44,7 +44,14 @@ export default async function Meetings({ searchParams }) {
 
   const sum = (k) => mine.reduce((a, s) => a + (s[k] ?? 0), 0);
   const running = mine.filter((s) => s.status === "running").length;
-  const countFor = (r) => (r.id === "all" ? allMeetings.length : allMeetings.filter((m) => ownerOfMeeting(m) === r.id).length);
+  // The KPI counts booked + held only — same rule as the Overview and the
+  // campaign views. The list below still shows every row: a cancellation is
+  // worth seeing, it just isn't worth counting.
+  const counted = (m) => m.status === "booked" || m.status === "held";
+  const kpiMeetings = myMeetings.filter(counted);
+  const countFor = (r) =>
+    (r.id === "all" ? allMeetings : allMeetings.filter((m) => ownerOfMeeting(m) === r.id))
+      .filter(counted).length;
 
   const here = (id) => (id === "all" ? "/meetings" : `/meetings?rep=${encodeURIComponent(id)}`);
 
@@ -95,15 +102,21 @@ export default async function Meetings({ searchParams }) {
         <Tile label="People" value={num(sum("leads"))} raw={sum("leads")} note="in their lists" />
         <Tile label="Replies" value={num(sum("replied"))} raw={sum("replied")}
           tone={sum("replied") ? undefined : "muted"} note="a floor, not a total" />
-        <Tile label="Meetings" value={num(myMeetings.length)} raw={myMeetings.length}
-          tone={myMeetings.length ? undefined : "muted"} note="the primary KPI" />
+        <Tile label="Meetings" value={num(kpiMeetings.length)} raw={kpiMeetings.length}
+          tone={kpiMeetings.length ? undefined : "muted"} note="booked or held — the primary KPI" />
         <Tile label="Proposals" value={num(myProposals.length)} raw={myProposals.length}
           tone={myProposals.length ? undefined : "muted"} note="logged by hand" />
       </div>
 
       <h2 style={{ marginTop: 0 }}>
-        {known ? `Meetings booked by ${rep}` : `All meetings — ${num(allMeetings.length)} logged, ever`}
+        {known ? `Meetings booked by ${rep}` : `All meetings — ${num(allMeetings.filter(counted).length)} booked or held, ever`}
       </h2>
+      {myMeetings.length > kpiMeetings.length ? (
+        <p className="sub" style={{ marginTop: -6 }}>
+          {num(myMeetings.length - kpiMeetings.length)} cancelled or no-show meeting
+          {myMeetings.length - kpiMeetings.length === 1 ? " is" : "s are"} listed below but not counted.
+        </p>
+      ) : null}
 
       {!myMeetings.length ? (
         <div className="card"><p className="empty" style={{ padding: 0 }}>No meetings logged against this rep yet.</p></div>

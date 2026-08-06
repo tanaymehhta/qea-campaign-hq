@@ -17,10 +17,12 @@ export default async function Overview({ searchParams }) {
       repList(),
       dailyRange(w.from, w.to),
       // Meetings/proposals are hand-logged and can be booked for a future date;
-      // "all time" means every one ever logged, not capped at today like send activity.
+      // "all time" means every one ever logged, not capped at today like send
+      // activity. Only booked + held count — a cancelled meeting is not a KPI,
+      // and this is the rule v_campaign_summary already applies.
       (w.range === "all"
-        ? db.from("meetings").select("id, campaign_id, group_id, meeting_date")
-        : db.from("meetings").select("id, campaign_id, group_id, meeting_date").gte("meeting_date", w.from).lte("meeting_date", w.to)),
+        ? db.from("meetings").select("id, campaign_id, group_id, meeting_date").in("status", ["booked", "held"])
+        : db.from("meetings").select("id, campaign_id, group_id, meeting_date").in("status", ["booked", "held"]).gte("meeting_date", w.from).lte("meeting_date", w.to)),
       (w.range === "all"
         ? db.from("proposals").select("id, campaign_id, sent_date")
         : db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to)),

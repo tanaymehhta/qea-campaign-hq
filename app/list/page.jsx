@@ -32,20 +32,23 @@ export default async function List({ searchParams }) {
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * size;
 
-  // scope: a campaign group, a single campaign, or everything
+  // scope: a campaign group, a single campaign, or everything. Group ids ride
+  // along for the meetings branch, where a meeting can carry a group_id and no
+  // campaign_id — the Overview counts those, so this list must too.
   let scopeIds = null;
+  let scopeGroupIds = [];
   let scopeLabel = "all campaigns";
   if (sp.campaign) {
     const { data: c } = await db.from("campaigns").select("id, name").eq("id", sp.campaign).single();
     if (c) { scopeIds = [c.id]; scopeLabel = c.name; }
   } else if (sp.group) {
     const { group, ids } = await campaignIdsForGroup(sp.group);
-    if (group) { scopeIds = ids; scopeLabel = group.display_name; }
+    if (group) { scopeIds = ids; scopeGroupIds = [group.id]; scopeLabel = group.display_name; }
   } else if (sp.rep) {
     // Reps own groups, not campaigns — see campaignIdsForRep. Scoping here keeps
     // a rep-filtered tile and the list behind it counting the same people.
-    const { label, ids } = await campaignIdsForRep(sp.rep);
-    if (label) { scopeIds = ids; scopeLabel = `${label}'s campaigns`; }
+    const { label, ids, groupIds } = await campaignIdsForRep(sp.rep);
+    if (label) { scopeIds = ids; scopeGroupIds = groupIds; scopeLabel = `${label}'s campaigns`; }
   }
 
   const campaignNames = new Map(
@@ -92,8 +95,11 @@ export default async function List({ searchParams }) {
     } else if (m.table === "meetings") {
       // Hand-logged and can be booked for a future date — "all time" means every
       // one ever logged, not capped at today the way send activity is.
+      // Only booked + held count as the KPI — a cancelled meeting is not a
+      // meeting; the same rule the campaign views already apply.
       q = db.from("meetings")
-        .select(cols ?? "id, campaign_id, prospect_name, prospect_email, company, meeting_date, status, evidence, note", { count: "exact" })
+        .select(cols ?? "id, campaign_id, group_id, prospect_name, prospect_email, company, meeting_date, status, evidence, note", { count: "exact" })
+        .in("status", ["booked", "held"])
         .order("meeting_date", { ascending: false });
       if (w.range !== "all") q = q.gte("meeting_date", w.from).lte("meeting_date", w.to);
     } else {
@@ -104,7 +110,18 @@ export default async function List({ searchParams }) {
     }
     // An empty scope means the group has no campaigns; `in ()` is invalid SQL,
     // so the caller short-circuits rather than silently returning everything.
-    if (scopeIds?.length) q = q.in("campaign_id", scopeIds);
+    // Meetings scope on campaign OR group — a group-only meeting (campaign_id
+    // null) is counted by the Overview tile and must not vanish here.
+    if (scopeIds !== null) {
+      if (m.table === "meetings") {
+        const parts = [];
+        if (scopeIds.length) parts.push(`campaign_id.in.(${scopeIds.join(",")})`);
+        if (scopeGroupIds.length) parts.push(`group_id.in.(${scopeGroupIds.join(",")})`);
+        if (parts.length) q = q.or(parts.join(","));
+      } else if (scopeIds.length) {
+        q = q.in("campaign_id", scopeIds);
+      }
+    }
     return q;
   };
 
@@ -114,7 +131,9 @@ export default async function List({ searchParams }) {
   const field = BREAKDOWN[m.table];
   let breakdown = [];
 
-  if (scopeIds?.length !== 0) {
+  const scopeEmpty = scopeIds !== null && !scopeIds.length &&
+    !(m.table === "meetings" && scopeGroupIds.length);
+  if (!scopeEmpty) {
     const [res, cats] = await Promise.all([
       build().range(offset, offset + size - 1),
       field ? build(`campaign_id, ${field}`, true).limit(5000) : Promise.resolve({ data: [] }),
