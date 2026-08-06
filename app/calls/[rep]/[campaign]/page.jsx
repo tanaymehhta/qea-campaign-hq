@@ -25,6 +25,48 @@ function Markdown({ text }) {
   });
 }
 
+/**
+ * summary_md, one card per section instead of one long stack — the headings
+ * ("WHAT THIS CAMPAIGN IS", "THE PITCH", …) already divide it; the layout
+ * just honors the divisions. Content and storage unchanged.
+ */
+function ContextSections({ text }) {
+  const blocks = (text ?? "").replace(/\r/g, "").split(/\n{2,}/).filter((b) => b.trim());
+  const sections = [];
+  let cur = { title: null, body: [] };
+  for (const b of blocks) {
+    const lines = b.trim().split("\n");
+    if (/^#{1,6}\s/.test(lines[0])) {
+      if (cur.title || cur.body.length) sections.push(cur);
+      cur = { title: lines[0].replace(/^#+\s*/, ""), body: [] };
+      if (lines.length > 1) cur.body.push(lines.slice(1).join("\n"));
+    } else {
+      cur.body.push(b);
+    }
+  }
+  if (cur.title || cur.body.length) sections.push(cur);
+  return (
+    <div className="ctxgrid">
+      {sections.map((s, i) => (
+        <section className="ctxcard" key={i}>
+          {s.title ? <h3>{s.title}</h3> : null}
+          <Markdown text={s.body.join("\n\n")} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// Contact avatar tint follows the call status the row already shows — blue for
+// "in motion" outcomes, green for a booked meeting, neutral for the rest.
+// Hues from the validated palette in ui.jsx's CAT_OF, not new colors.
+const GLYPH_TINT = {
+  booked_meeting: ["var(--tint-3)", "var(--good)"],
+  follow_up: ["var(--tint-1)", "var(--s1)"],
+  left_voicemail: ["var(--tint-1)", "var(--s1)"],
+  left_email: ["var(--tint-1)", "var(--s1)"],
+};
+
 // Just the checkbox row's reading order. logCall decides insert order (and
 // so which outcome wins the row's status pill) from its own priority list,
 // not from this — this list used to double as both, which put "Booked a
@@ -190,14 +232,14 @@ export default async function CallWorkspace({ params, searchParams }) {
       ) : null}
 
       {/* Context — prose from summary_md, editable in the database without a deploy. */}
-      <div className="card" style={{ marginBottom: 26 }}>
-        {camp.summary_md
-          ? <Markdown text={camp.summary_md} />
-          : <p className="empty" style={{ padding: 0 }}>
+      {camp.summary_md
+        ? <ContextSections text={camp.summary_md} />
+        : <div className="card" style={{ marginBottom: 26 }}>
+            <p className="empty" style={{ padding: 0 }}>
               No context written yet — set <code>summary_md</code> on this campaign to brief
               the rep on who we&rsquo;re calling, the pitch, and the open questions.
-            </p>}
-      </div>
+            </p>
+          </div>}
 
       {/* Data summary — every tile filters the list beneath it. */}
       <div className="grid g4">
@@ -243,6 +285,7 @@ export default async function CallWorkspace({ params, searchParams }) {
       {list.map((ct, i) => {
               const history = s.callsOf(ct);
               const due = s.is.due(ct);
+              const [glyphBg, glyphInk] = GLYPH_TINT[statusOf(ct)] ?? ["var(--tint-n)", "var(--ink-1)"];
               return (
                     <details
                       className={due ? "mrow hasgap" : "mrow"}
@@ -254,7 +297,8 @@ export default async function CallWorkspace({ params, searchParams }) {
                       style={{ animationDelay: `${0.04 + Math.min(i, 20) * 0.02}s` }}
                     >
                       <summary>
-                        <span className="glyph" style={{ background: "var(--tint-n)", color: "var(--ink-1)" }}>
+                        <span className="idx">{i + 1}</span>
+                        <span className="glyph" style={{ background: glyphBg, color: glyphInk }}>
                           {initials(ct.full_name)}
                         </span>
                         <span className="meat">
