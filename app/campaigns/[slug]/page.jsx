@@ -167,12 +167,10 @@ export default async function Group({ params, searchParams }) {
           <div><div className="k">Owner</div><div className="v">{g.owner ?? "—"}</div></div>
           <div><div className="k">Tools</div><div className="v">{(g.platform ?? []).join(", ") || "—"}</div></div>
           <div><div className="k">Geography</div><div className="v">{g.geography ?? "—"}</div></div>
-          <div><div className="k">Segment</div><div className="v">{g.segment ?? "—"}</div></div>
-          <div><div className="k">Sequence</div><div className="v">{g.sequence_shape ?? "—"}</div></div>
+          <div><div className="k">Emails in sequence</div><div className="v">
+            {(g.sequence_shape?.match(/E\d+/g) ?? []).length || "—"}
+          </div></div>
           <div><div className="k">Started</div><div className="v">{g.started_on ? prettyDate(g.started_on) : "—"}</div></div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <div className="k">List source</div><div className="v">{g.list_source ?? "—"}</div>
-          </div>
         </div>
       </div>
     </>

@@ -41,6 +41,8 @@ export default async function Campaigns({ searchParams }) {
 
   const maxSent = Math.max(1, ...list.map((g) => g.sent ?? 0));
   const toolColor = (g) => ((g.platform ?? []).includes("instantly") ? "var(--s1)" : "var(--s2)");
+  // "E1 d0 · E2 +7 · E3 +14" → 3. The timing string reads as noise; the count doesn't.
+  const emailSteps = (g) => (g.sequence_shape?.match(/E\d+/g) ?? []).length || null;
 
   return (
     <>
@@ -135,8 +137,10 @@ export default async function Campaigns({ searchParams }) {
                     />
                   </div>
                   <div className="note">
-                    {num(g.sent)} sent · {num(g.delivered)} delivered · {num(g.bounced)} bounced ·{" "}
-                    {num(g.replied)} replied
+                    <span className="sw" style={{ background: toolColor(g) }} />
+                    {num(g.sent - g.bounced)} sent minus bounces ·{" "}
+                    <span className="sw" style={{ background: "var(--crit)" }} />
+                    {num(g.bounced)} bounced · {num(g.delivered)} delivered · {num(g.replied)} replied
                   </div>
                 </div>
                 <span className="ghost">Detail<span className="chev">⌄</span></span>
@@ -151,10 +155,8 @@ export default async function Campaigns({ searchParams }) {
                 <div className="meta" style={{ marginBottom: 18 }}>
                   <div><div className="k">Tools</div><div className="v">{(g.platform ?? []).join(", ") || "—"}</div></div>
                   <div><div className="k">Geography</div><div className="v">{g.geography ?? "—"}</div></div>
-                  <div><div className="k">Segment</div><div className="v">{g.segment ?? "—"}</div></div>
                   <div><div className="k">Owner</div><div className="v">{g.owner ?? "—"}</div></div>
-                  <div><div className="k">Sequence</div><div className="v">{g.sequence_shape ?? "—"}</div></div>
-                  <div><div className="k">List source</div><div className="v">{g.list_source ?? "—"}</div></div>
+                  <div><div className="k">Emails in sequence</div><div className="v">{emailSteps(g) ?? "—"}</div></div>
                 </div>
 
                 <div className="tw">
