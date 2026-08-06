@@ -3,6 +3,7 @@ import { db } from "../lib/db";
 import Nav from "../components/nav";
 import Tween from "../components/tween";
 import FeedbackBox from "../components/feedback";
+import MeshFooter from "../components/mesh-footer";
 
 export const metadata = {
   title: "QEA Campaign HQ",
@@ -56,6 +57,7 @@ export default async function RootLayout({ children }) {
             CC&rsquo;d third-party replies, never surface in lemlist.
           </p>
         </div>
+        <MeshFooter />
         <Tween />
       </body>
     </html>
