@@ -1,8 +1,8 @@
-import "../inbound.css";
+import "../pipeline.css";
 import { prettyWhen, num } from "../../../lib/db";
 import {
   companyDetail, latestByStage, nodeState, nodeFacts, nodeErrors, STAGES, money, secs,
-} from "../../../lib/inbound";
+} from "../../../lib/pipeline";
 
 export const dynamic = "force-dynamic";
 
@@ -119,7 +119,7 @@ export default async function InboundCompany({ params, searchParams }) {
       </p>
 
       <div className="range" style={{ marginBottom: 14 }}>
-        <a href="/inbound">&larr; All inbound</a>
+        <a href="/pipeline">&larr; All inbound</a>
       </div>
 
       {c.needs_human_review && c.review_reasons?.length ? (
@@ -130,8 +130,8 @@ export default async function InboundCompany({ params, searchParams }) {
       ) : null}
 
       <div className="ib-tabs">
-        <a href={`/inbound/${c.id}`} className={tab === "overview" ? "on" : ""}>Overview</a>
-        <a href={`/inbound/${c.id}?tab=pipeline`} className={tab === "pipeline" ? "on" : ""}>Pipeline</a>
+        <a href={`/pipeline/${c.id}`} className={tab === "overview" ? "on" : ""}>Overview</a>
+        <a href={`/pipeline/${c.id}?tab=pipeline`} className={tab === "pipeline" ? "on" : ""}>Pipeline</a>
       </div>
 
       {tab === "overview" ? (
@@ -149,7 +149,7 @@ export default async function InboundCompany({ params, searchParams }) {
                     const v = d.visits[0];
                     return (
                       <tr key={p.id}>
-                        <td><a href={`/inbound/person/${p.id}`}>{p.full_name}</a></td>
+                        <td><a href={`/pipeline/person/${p.id}`}>{p.full_name}</a></td>
                         <td className="dim">{p.title ?? "—"}</td>
                         <td className="dim">{p.email ?? "—"}</td>
                         <td>
@@ -180,7 +180,7 @@ export default async function InboundCompany({ params, searchParams }) {
                 {d.people.map((p, i) => (
                   <tr key={p.id}>
                     <td className="dim">{i + 1}</td>
-                    <td><a href={`/inbound/person/${p.id}`}>{p.full_name}</a></td>
+                    <td><a href={`/pipeline/person/${p.id}`}>{p.full_name}</a></td>
                     <td className="dim">{p.title ?? "—"}</td>
                     <td className="dim">{p.role_bucket ?? "—"}</td>
                     <td className="dim">{p.email ?? "—"}</td>
@@ -297,7 +297,7 @@ export default async function InboundCompany({ params, searchParams }) {
                   <div className="subj">{e.subject ?? "(no subject)"}</div>
                   <div className="dim" style={{ fontSize: 12 }}>
                     {personIdOf(e)
-                      ? <a href={`/inbound/person/${personIdOf(e)}`}>{e.full_name}</a>
+                      ? <a href={`/pipeline/person/${personIdOf(e)}`}>{e.full_name}</a>
                       : e.full_name}
                     {" · "}{e.title ?? "—"} · {e.icp_key ?? "—"}
                     {" · "}

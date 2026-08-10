@@ -1,6 +1,6 @@
-import "../../inbound.css";
+import "../../pipeline.css";
 import { prettyWhen, num } from "../../../../lib/db";
-import { personDetail } from "../../../../lib/inbound";
+import { personDetail } from "../../../../lib/pipeline";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +23,13 @@ export default async function InboundPerson({ params }) {
         <h1>{p.full_name || "Unknown"}</h1>
         <p className="sub">
           {[p.title, d.company ? null : "no company linked"].filter(Boolean).join(" · ")}
-          {d.company ? <>{p.title ? " · " : ""}<a href={`/inbound/${d.company.id}`}>{d.company.name}</a></> : null}
+          {d.company ? <>{p.title ? " · " : ""}<a href={`/pipeline/${d.company.id}`}>{d.company.name}</a></> : null}
           {p.city || p.state ? ` · ${[p.city, p.state].filter(Boolean).join(", ")}` : ""}
         </p>
       </div>
 
       <div className="range" style={{ marginBottom: 18 }}>
-        <a href="/inbound?view=person">&larr; All people</a>
+        <a href="/pipeline?view=person">&larr; All people</a>
       </div>
 
       <div className="meta" style={{ marginBottom: 22 }}>
@@ -100,7 +100,7 @@ export default async function InboundPerson({ params }) {
             Company-level research context for the pitch — {num(d.buildings.length)} building
             {d.buildings.length === 1 ? "" : "s"} found, {num(d.hits.length)} compliance rule
             {d.hits.length === 1 ? "" : "s"} in play.{" "}
-            <a href={`/inbound/${d.company.id}`}>Full research on the company page &rarr;</a>
+            <a href={`/pipeline/${d.company.id}`}>Full research on the company page &rarr;</a>
           </p>
           {d.signals.length ? (
             <div className="card">
