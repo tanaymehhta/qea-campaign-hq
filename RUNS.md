@@ -10,6 +10,81 @@ in the backend repo (`github.com/tanaymehhta/qea-inbound`) is the data contract.
 
 ---
 
+## How to read it
+
+**Everything below this section is *why*. This section is *how*.** Start here.
+
+### The one line that answers "is it on"
+
+The bar at the top of every `/pipeline` view:
+
+> ● **Last scheduled run 1 hour ago** — On schedule — it fires every 3 hours. · 10 Aug, 15:27
+
+| Colour | Means |
+|---|---|
+| Green, dot breathing | A GitHub run inside the last 4 hours |
+| Amber | 4–8 hours. Later than the schedule should allow |
+| Red | Over 8 hours. Something has stopped — the Actions tab link is right there |
+| Grey | Nothing has identified itself as GitHub's yet |
+
+It **ignores laptop runs on purpose.** A laptop run means a human was at a keyboard, which
+says nothing about whether the schedule is alive, and a fresh one must never paper over a
+dead one.
+
+### A row in the run log
+
+```
+STARTED                     COMPANY    WHERE   STAGES   COST   TOOK  ERRORS
+10 Aug, 15:58 · 51 min ago  Avrillon   Laptop  1 2 ③    $0     1s    —
+```
+
+- **Where** — `GitHub` is the 3-hourly schedule, `Laptop` is somebody running it by hand,
+  `—` is an execution that wrote no workbook and therefore cannot say. See *Which machine
+  ran it*.
+- **Stages** — 1 research · 2 people · 3 draft. Green ok, amber flagged itself for review,
+  red errored, dashed grey never ran. The stage name is a tooltip.
+- **Errors** — nodes that recorded a failure, **including the ones whose status says `ok`
+  while they wrote nothing.** That combination is this pipeline's recurring failure mode, so
+  it counts as an error here rather than being folded into the clean total.
+
+### Open a row for the cost of each step
+
+A row expands to its stages, and each stage to its nodes, left to right in execution order:
+
+```
+③ Write + send                          ok · 1s · $0.0000 · 0 tokens · 0 searches
+
+0. load_stage2 → 1. pick_opener → 2. render_all → 3. validate_all → 4. export_excel
+   0.3s            0.0s             3 rendered      0 passed          3 rows
+   3 contacts      0 evidence_urls  3 with_body     3 blocked
+
+   emails 3   ·   passed 0   ·   pushed 0   ·   blocked 3
+```
+
+Every chip carries its own duration and dollar cost — the finest grain the pipeline records.
+**An amber chip is where to look:** a node that failed while reporting success. Avrillon's
+stage 1 carries one today, reading `Error code: 402` — the OpenRouter billing errors have not
+stopped.
+
+### The other tabs
+
+| Tab | Answers |
+|---|---|
+| **Runs** | Did it run, when, where, what did each step cost |
+| **By company** · **By person** · **Research** | The three original views, unchanged |
+| **Stuck** | Which companies a run abandoned — and the button that requeues them |
+| `/inbound/drafts` | All 455 emails, and why 450 cannot be sent |
+
+### The number worth acting on today
+
+Open **"Why the blocked ones are blocked"** on the drafts page. **149 drafts are blocked
+only because `assigned_to` is empty** — *"drafted as Mark Vasu, set assigned_to before
+sending"*. No API, no credits, no waiting for 22 August: somebody assigns those accounts and
+149 drafts stop being blocked for that reason. It is the largest cause on the list that is a
+decision rather than a data problem.
+
+---
+
 ## What was missing
 
 `/pipeline` was organised around the **company**: one row each, a status dot per stage, cost
