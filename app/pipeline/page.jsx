@@ -1,7 +1,11 @@
 import "./pipeline.css";
 import { prettyWhen, num } from "../../lib/db";
+import { Seg } from "../../components/ui";
+import { NodeStrip } from "./nodes";
+import { setCompanyRelevant } from "../inbound/actions";
 import {
   inboundOverview, peopleOverview, researchOverview, latestByStage, STAGES, money,
+  runLog, strandedList, runSeconds, nodeErrors, HOSTS, RUN_RANGES, DECIDED,
 } from "../../lib/pipeline";
 
 export const dynamic = "force-dynamic";
@@ -9,24 +13,175 @@ export const dynamic = "force-dynamic";
 const STAGE_MARK = { ok: "ok", needs_review: "review", error: "error",
                      running: "running", cancelled: "killed" };
 
+const TONE = { ok: "ok", error: "bad", running: "", cancelled: "bad" };
+const toneOf = (s) => TONE[s] ?? "warn";
+
 function StageDot({ run }) {
   if (!run) return <span className="pill dim">—</span>;
   const s = run.status ?? "unknown";
-  const cls = s === "ok" ? "ok" : s === "error" ? "bad" : s === "running" ? "" : "warn";
-  return <span className={`pill ${cls}`}>{STAGE_MARK[s] ?? s}</span>;
+  return <span className={`pill ${toneOf(s)}`}>{STAGE_MARK[s] ?? s}</span>;
 }
 
 const VIEWS = [
+  ["runs", "Runs"],
   ["company", "By company"],
   ["person", "By person"],
   ["research", "Research"],
+  ["stuck", "Stuck"],
 ];
 
+/** "3 hours ago", to one unit. A run log is scanned, not read. */
+function ago(iso, now = Date.now()) {
+  if (!iso) return "—";
+  const m = Math.round((now - Date.parse(iso)) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  return `${Math.round(h / 24)} days ago`;
+}
+
+const dur = (s) => (s == null ? "—" : s < 90 ? `${Math.round(s)}s` : `${(s / 60).toFixed(1)}m`);
+
+/**
+ * Is the schedule alive — the first thing on the page, because it is the first
+ * thing anybody asks. It reads GitHub-hosted runs only; a laptop run means a
+ * human was at a keyboard, which is a different question with the same shape.
+ */
+function Health({ health }) {
+  // `h-` prefix for the same reason as `s-` below: bare `ok` and `bad` are text
+  // utilities in globals.css, and inheriting them would have coloured this
+  // banner by accident in two states out of four and left the third plain.
+  return (
+    <div className={`ib-health h-${health.state}`}>
+      <span className="dot" />
+      <div>
+        <b>
+          {health.state === "unknown"
+            ? "No scheduled run identified"
+            : `Last scheduled run ${ago(health.last.startedAt)}`}
+        </b>
+        <div className="dim">
+          {health.note}
+          {health.last ? ` · ${prettyWhen(health.last.startedAt)}` : ""}
+        </div>
+      </div>
+      <a className="ib-gh"
+         href="https://github.com/tanaymehhta/qea-inbound/actions/workflows/inbound-pipeline.yml"
+         target="_blank" rel="noreferrer">
+        Actions log &rarr;
+      </a>
+    </div>
+  );
+}
+
+/**
+ * One execution, expandable to the stages and their nodes.
+ *
+ * A `<details>`, so the whole log works with JavaScript off and nothing on this
+ * page has to hold open/closed state — the same disclosure the campaign cards
+ * and meeting rows use.
+ */
+function RunRow({ e, company, nodesByRun }) {
+  const errs = e.runs.reduce(
+    (t, r) => t + (nodesByRun.get(r.id) ?? []).filter((n) => nodeErrors(n).length).length, 0);
+  return (
+    // `s-` prefix, not the bare status: globals.css carries a `.ok` text
+    // utility, so `class="ib-run ok"` painted every successful row green and
+    // bold — the colour that is supposed to mean "look here" applied to the 87%
+    // of rows where nothing happened.
+    <details className={`ib-run s-${e.status}`}>
+      <summary>
+        <span className="when">
+          {prettyWhen(e.startedAt)}
+          <span className="dim"> · {ago(e.startedAt)}</span>
+        </span>
+        <span className="co">
+          {company
+            ? <a href={`/pipeline/${company.id}`}>{company.name}</a>
+            : <span className="dim">unknown company</span>}
+        </span>
+        <span className="host" title={e.host ? HOSTS[e.host].long : "No workbook path recorded"}>
+          {e.host ? HOSTS[e.host].label : "—"}
+        </span>
+        <span className="stages">
+          {STAGES.map((s) => {
+            const r = e.byStage.get(s.no);
+            return (
+              <span key={s.no} className={`pill ${r ? toneOf(r.status) : "dim"}`}
+                    title={`${s.no}. ${s.label}${r ? ` — ${r.status}` : " — not run"}`}>
+                {s.no}
+              </span>
+            );
+          })}
+        </span>
+        <span className="n">{e.cost ? money(e.cost) : <span className="dim">$0</span>}</span>
+        <span className="n dim">{dur(e.seconds)}</span>
+        <span className={errs ? "n bad" : "n dim"}>{errs ? `${errs} err` : "—"}</span>
+      </summary>
+
+      <div className="ib-runbody">
+        {e.runs.map((r) => {
+          const nodes = nodesByRun.get(r.id) ?? [];
+          const stage = STAGES.find((s) => s.no === (r.stage_no ?? 0)
+            || s.graph === r.graph_name);
+          return (
+            <section className="ib-stage" key={r.id}>
+              <div className="ib-stage-head">
+                <span className="ib-stage-no">{stage?.no ?? "?"}</span>
+                <span className="ib-stage-title">{stage?.label ?? r.graph_name}</span>
+                <span className="ib-stage-meta">
+                  <span className={`pill ${toneOf(r.status)}`}>{r.status}</span>{" "}
+                  {dur(runSeconds(r))} · {money(r.total_cost_usd)} ·{" "}
+                  {num((r.prompt_tokens ?? 0) + (r.completion_tokens ?? 0))} tokens ·{" "}
+                  {num(r.search_calls)} searches
+                  {r.apollo_credits ? ` · ${num(r.apollo_credits)} Apollo credits` : ""}
+                </span>
+              </div>
+              <NodeStrip nodes={nodes} />
+              {r.error ? <div className="warnbox plain">Run error: {r.error}</div> : null}
+              {r.output && typeof r.output === "object" ? (
+                <div className="ib-out">
+                  {Object.entries(r.output)
+                    .filter(([, v]) => typeof v === "number" || typeof v === "string"
+                      || typeof v === "boolean")
+                    .slice(0, 6)
+                    .map(([k, v]) => (
+                      <div key={k}><div className="k">{k}</div><div className="v">{String(v)}</div></div>
+                    ))}
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
+/** "Research this again" — the one write, and the same one `--stranded` makes. */
+function Requeue({ id }) {
+  return (
+    <form action={setCompanyRelevant}>
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="relevant" value="yes" />
+      <button type="submit" className="ib-requeue"
+              title="Sets research_status to 'new'. The next scheduled run picks it up.">
+        Research this again
+      </button>
+    </form>
+  );
+}
+
 export default async function Pipeline({ searchParams }) {
-  const view = VIEWS.some(([k]) => k === searchParams?.view) ? searchParams.view : "company";
+  const view = VIEWS.some(([k]) => k === searchParams?.view) ? searchParams.view : "runs";
+  const range = RUN_RANGES.some(([k]) => k === searchParams?.range) ? searchParams.range : "7";
+
   const { companies, events, runsByCompany } = await inboundOverview();
   const pv = view === "person" ? await peopleOverview() : null;
   const rv = view === "research" ? await researchOverview() : null;
+  const log = view === "runs" ? await runLog({ range }) : null;
+  const stuck = view === "stuck" ? await strandedList() : null;
 
   const researched = companies.filter((c) => c.research_status !== "new");
   const waiting = companies.filter((c) => c.research_status === "new");
@@ -39,9 +194,13 @@ export default async function Pipeline({ searchParams }) {
       <p className="sub">
         Whether each run worked, and what it cost. RB2B identifies a visitor, research builds
         the account, stage 2 finds the people, stage 3 drafts the email — this is the trace of
-        those stages, stage by stage and node by node. Read-only: nothing here starts, stops
-        or approves a run. The leads themselves are at <a href="/inbound">/inbound</a>.
+        those stages, stage by stage and node by node. The one thing it can change is putting a
+        stuck company back in the queue. The leads themselves are at{" "}
+        <a href="/inbound">/inbound</a>, and every draft is at{" "}
+        <a href="/inbound/drafts">/inbound/drafts</a>.
       </p>
+
+      {log ? <Health health={log.health} /> : null}
 
       <div className="grid g4">
         <div className="tile plus"><div className="lbl">Companies seen</div>
@@ -60,10 +219,136 @@ export default async function Pipeline({ searchParams }) {
 
       <div className="ib-tabs">
         {VIEWS.map(([k, l]) => (
-          <a key={k} href={k === "company" ? "/pipeline" : `/pipeline?view=${k}`}
+          <a key={k} href={k === "runs" ? "/pipeline" : `/pipeline?view=${k}`}
             className={view === k ? "on" : ""}>{l}</a>
         ))}
       </div>
+
+      {view === "runs" ? (
+        <>
+          <h2>Every run, newest first</h2>
+          <p className="sub">
+            One row per execution — the three stages of one company going through together.
+            Open one for the stages, their nodes, and what each node cost. Where it ran is read
+            off the workbook path: <b>GitHub</b> is the 3-hourly schedule, <b>Laptop</b> is
+            somebody running it by hand.
+          </p>
+
+          <div className="segrow">
+            <Seg options={RUN_RANGES} current={range}
+                 hrefFor={(k) => `/pipeline?range=${k}`} />
+            <span className="note">
+              {num(log.executions.length)} of {num(log.total)} execution
+              {log.total === 1 ? "" : "s"}
+              {log.truncated ? ` · ${num(log.truncated)} older ones not shown` : ""} ·{" "}
+              {money(log.executions.reduce((a, e) => a + e.cost, 0))} in this window
+            </span>
+          </div>
+
+          <div className="ib-runhead">
+            <span>Started</span><span>Company</span><span>Where</span>
+            <span>Stages</span><span>Cost</span><span>Took</span><span>Errors</span>
+          </div>
+          {log.executions.map((e) => (
+            <RunRow key={e.key} e={e} nodesByRun={log.nodesByRun}
+                    company={log.companyById.get(e.companyId)} />
+          ))}
+          {!log.executions.length ? (
+            <div className="ib-not-run">
+              No runs in this window. <a href="/pipeline?range=all">All time</a> holds{" "}
+              {num(log.total)}.
+            </div>
+          ) : null}
+
+          <p className="note" style={{ marginTop: 14 }}>
+            Cost is what the run itself recorded — LLM tokens plus search calls. An execution
+            with no workbook path cannot say which machine ran it and shows a dash rather than a
+            guess. Duration is measured from the first stage starting to the last one finishing,
+            because <code>duration_sec</code> is NULL on every row in the table.
+          </p>
+        </>
+      ) : null}
+
+      {view === "stuck" ? (
+        <>
+          <h2>Companies a run left half-done</h2>
+          <p className="sub">
+            From <code>v_inbound_stranded</code>. A run can stop for reasons that have nothing to
+            do with the company — the LLM account runs out of credit mid-batch, the Actions job
+            hits its time limit, a stage dies — and before this view a company just sat there,
+            because the runner only ever picks up <code>research_status = &lsquo;new&rsquo;</code>.
+            <b> Research this again</b> writes exactly that value; the next scheduled run does the
+            rest, and it costs money.
+          </p>
+
+          {stuck.groups.map((g) => (
+            <div key={g.reason}>
+              <div className="ib-lane">
+                <h3 className="ib-h3">{g.reason}</h3>
+                <span className="n">{num(g.rows.length)}</span>
+              </div>
+              {g.decided ? (
+                <p className="note" style={{ marginBottom: 8 }}>
+                  Not a failure — a model that actually ran said no. No button, for the same
+                  reason <code>--stranded</code> skips these.
+                </p>
+              ) : null}
+              <div className="ib-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th><th style={{ textAlign: "left" }}>Company</th>
+                      <th style={{ textAlign: "left" }}>Status</th><th>People</th>
+                      <th>Drafts</th><th>Ready</th>
+                      <th style={{ textAlign: "left" }}>Last researched</th>
+                      <th style={{ textAlign: "left" }}>{g.decided ? "Why" : ""}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.rows.map((r, i) => (
+                      <tr key={r.id}>
+                        <td className="dim">{i + 1}</td>
+                        <td className="name" style={{ textAlign: "left" }}>
+                          <a href={`/pipeline/${r.id}`}>{r.name}</a>
+                          <div className="dim">{r.domain ?? "no domain"}</div>
+                        </td>
+                        <td className="dim" style={{ textAlign: "left" }}>
+                          {r.research_status}
+                          {r.account_type ? ` · ${r.account_type}` : ""}
+                        </td>
+                        <td className={r.people_named ? "" : "dim"}>{num(r.people_named)}</td>
+                        <td className={r.drafts ? "" : "dim"}>{num(r.drafts)}</td>
+                        <td className={r.sendable ? "" : "dim"}>{num(r.sendable)}</td>
+                        <td className="dim" style={{ textAlign: "left" }}>
+                          {r.last_researched_at ? prettyWhen(r.last_researched_at) : "never"}
+                        </td>
+                        <td style={{ textAlign: "left" }}>
+                          {g.decided
+                            ? <span className="dim" title={r.account_type_reason ?? ""}>
+                                {(r.account_type_reason ?? "—").slice(0, 90)}
+                              </span>
+                            : <Requeue id={r.id} />}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          {!stuck.rows.length ? (
+            <div className="ib-not-run">Nothing is stuck. Every company reached a verdict.</div>
+          ) : null}
+
+          <p className="note" style={{ marginTop: 14 }}>
+            {num(stuck.recoverable)} of {num(stuck.rows.length)} are worth re-running; the rest
+            were decided. From a terminal the same thing is{" "}
+            <code>python scripts/run_pipeline.py --stranded</code>, which skips{" "}
+            &ldquo;{DECIDED}&rdquo; for the same reason this page does.
+          </p>
+        </>
+      ) : null}
 
       {view === "company" ? (
         <>

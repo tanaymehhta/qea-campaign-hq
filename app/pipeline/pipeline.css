@@ -43,11 +43,11 @@
 }
 .ib-fact b { font-weight: 600; color: var(--ink-1); }
 
-.ib-node.ok       { border-left: 3px solid var(--good); }
-.ib-node.degraded { border-left: 3px solid var(--warn-ink); background: var(--warn-soft); }
-.ib-node.error    { border-left: 3px solid var(--crit); }
-.ib-node.running  { border-left: 3px solid var(--s1); }
-.ib-node.unknown  { border-left: 3px solid var(--border); }
+.ib-node.s-ok       { border-left: 3px solid var(--good); }
+.ib-node.s-degraded { border-left: 3px solid var(--warn-ink); background: var(--warn-soft); }
+.ib-node.s-error    { border-left: 3px solid var(--crit); }
+.ib-node.s-running  { border-left: 3px solid var(--s1); }
+.ib-node.s-unknown  { border-left: 3px solid var(--border); }
 
 .ib-err {
   margin-top: 6px; font-size: 10.5px; color: var(--crit);
@@ -90,6 +90,109 @@
   border: 1px solid var(--border); text-decoration: none; color: var(--ink-2);
 }
 .ib-tabs a.on { background: var(--seg-on); color: var(--ink-1); font-weight: 600; }
+
+/* `pill ok | warn | bad | dim` has been written on these pages since they
+   shipped, but globals.css only ever defined `.pill` and the `p-*` family — so
+   every stage dot rendered the same neutral grey and a stage that flagged itself
+   for review looked exactly like one that passed. `.ok` and `.bad` at least
+   coloured their text; `.warn` matched nothing at all, which is the one state
+   this pipeline is usually in.
+
+   Defined here rather than in globals.css so the blast radius is the two pages
+   that use them, and in the p-* idiom: colour the type, tint the border. */
+.pill.ok   { color: var(--good);     border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.pill.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn-ink) 40%, transparent); }
+.pill.bad  { color: var(--crit);     border-color: color-mix(in srgb, var(--crit) 40%, transparent); }
+.pill.dim  { color: var(--ink-3);    border-style: dashed; }
+
+/* Is the schedule alive. One line, one colour, above everything else on the page.
+   The dot breathes only when it is healthy — a still dot on a red banner is the
+   point, and a pulsing red one reads as "working on it". */
+.ib-health {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--border); border-left: 3px solid var(--good);
+  border-radius: 12px; padding: 12px 16px; margin: 14px 0 4px;
+  background: var(--surface-1); font-size: 13px;
+}
+.ib-health .dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--good); flex: 0 0 auto;
+  animation: breathe 2.6s ease-in-out infinite;
+}
+.ib-health b { color: var(--good); }
+.ib-health.h-warn { border-left-color: var(--serious); }
+.ib-health.h-warn .dot { background: var(--serious); animation: none; }
+.ib-health.h-warn b { color: var(--serious); }
+.ib-health.h-bad { border-left-color: var(--crit); }
+.ib-health.h-bad .dot { background: var(--crit); animation: none; }
+.ib-health.h-bad b { color: var(--crit); }
+/* Nothing has said it is GitHub's. Not a failure and not health — say so in the
+   ink everything else on the page is written in. */
+.ib-health.h-unknown { border-left-color: var(--border); }
+.ib-health.h-unknown .dot { background: var(--ink-3); animation: none; }
+.ib-health.h-unknown b { color: var(--ink-1); }
+.ib-health .dim { font-size: 12px; color: var(--ink-3); }
+.ib-gh {
+  margin-left: auto; font-size: 12px; white-space: nowrap;
+  padding: 5px 11px; border: 1px solid var(--border); border-radius: 8px;
+  text-decoration: none; color: var(--ink-2);
+}
+.ib-gh:hover { background: var(--wash); }
+
+/* The run log. A row is a <details>; the summary is the row and the body holds
+   the stages. Grid rather than a table because a table cannot hold a disclosure
+   without a rowspan trick that breaks the moment a column is added. */
+.ib-runhead, .ib-run > summary {
+  display: grid; align-items: center; gap: 14px;
+  /* 210px for the clock: "10 Aug, 15:58 · 43 min ago" is one nowrap string, and
+     a grid item does not clip itself — undersized, it printed straight over the
+     company name in the next column. */
+  grid-template-columns: 210px minmax(120px, 1fr) 74px 80px 74px 62px 62px;
+}
+.ib-runhead > span, .ib-run > summary > span {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+.ib-runhead {
+  padding: 0 12px 6px; font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--axis);
+}
+.ib-runhead span:nth-child(n+5) { text-align: right; }
+.ib-run {
+  border-bottom: 1px solid var(--grid); background: var(--surface-1);
+}
+.ib-run > summary {
+  padding: 9px 12px; cursor: pointer; list-style: none; font-size: 12.5px;
+}
+.ib-run > summary::-webkit-details-marker { display: none; }
+.ib-run > summary:hover { background: var(--wash); }
+.ib-run .when { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ib-run .co { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-run .host { font-size: 11px; color: var(--ink-3); }
+.ib-run .stages { display: flex; gap: 3px; }
+.ib-run .stages .pill { padding: 1px 6px; font-size: 10.5px; }
+.ib-run .n { text-align: right; font-variant-numeric: tabular-nums; }
+.ib-run .n.bad { color: var(--crit); }
+.ib-run.s-error > summary { border-left: 3px solid var(--crit); padding-left: 9px; }
+.ib-run.s-cancelled > summary { border-left: 3px solid var(--serious); padding-left: 9px; }
+.ib-run.s-needs_review > summary { border-left: 3px solid var(--warn-ink); padding-left: 9px; }
+.ib-run.s-running > summary { border-left: 3px solid var(--s1); padding-left: 9px; }
+.ib-runbody {
+  padding: 4px 12px 16px; border-top: 1px solid var(--grid);
+  animation: slideDown .18s cubic-bezier(.22,.8,.3,1);
+}
+.ib-runbody .ib-stage { margin: 12px 0 0; }
+
+.ib-lane { display: flex; align-items: baseline; gap: 8px; margin-top: 22px; }
+.ib-lane .n {
+  font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.ib-lane .ib-h3 { margin: 0; }
+
+.ib-requeue {
+  font: inherit; font-size: 11.5px; padding: 4px 10px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-1); color: var(--ink-1); white-space: nowrap;
+}
+.ib-requeue:hover { background: var(--wash-2); transform: translateY(-1px); }
 
 .ib-scroll { overflow-x: auto; }
 .ib-h3 {

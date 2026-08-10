@@ -6,7 +6,8 @@ The sales-facing inbound pages. Nothing here writes to the database — the whol
 schema is read-only to this app, which is a locked decision on the backend side, not a gap.
 
 `DESIGN.md` is the visual contract this follows. `README.md` explains the dashboard as a
-whole. `FRONTEND_HANDOFF.md` in the backend repo (`github.com/tanaymehhta/qea-inbound`) is
+whole. `RUNS.md` covers the operator side — the run log, the stuck list and the drafts list.
+`FRONTEND_HANDOFF.md` in the backend repo (`github.com/tanaymehhta/qea-inbound`) is
 the data contract. This file records what was built, why, and what it exposed about the data.
 
 ---
@@ -30,6 +31,7 @@ name says who it is for.
 |---|---|
 | `app/inbound/page.jsx` | The queue — rep chips, lanes, cards or table |
 | `app/inbound/person/[id]/page.jsx` | One person: who they are, visits, research, draft |
+| `app/inbound/drafts/page.jsx` | Every draft in one list, and why 450 of 455 are blocked — `RUNS.md` |
 | `app/inbound/company/[id]/page.jsx` | One company: account, visits, research, people, drafts |
 | `app/inbound/research.jsx` | The research block, shared by both detail pages |
 | `app/inbound/draft.jsx` | The editable draft + copy button (the only client component) |

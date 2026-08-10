@@ -1,36 +1,11 @@
 import "../pipeline.css";
 import { prettyWhen, num } from "../../../lib/db";
 import {
-  companyDetail, latestByStage, nodeState, nodeFacts, nodeErrors, STAGES, money, secs,
+  companyDetail, latestByStage, nodeErrors, STAGES, money,
 } from "../../../lib/pipeline";
+import { NodeStrip } from "../nodes";
 
 export const dynamic = "force-dynamic";
-
-/** One node = one chip. The strip reads left to right in execution order. */
-function NodeChip({ n }) {
-  const state = nodeState(n);
-  const errs = nodeErrors(n);
-  return (
-    <div className={`ib-node ${state}`}>
-      <div className="ib-node-name">{n.sequence}. {n.node_name}</div>
-      <div className="ib-node-time">
-        {state === "running" ? "running…" : secs(n.duration_ms)}
-        {state === "degraded" ? " · degraded" : ""}
-      </div>
-      <div className="ib-facts">
-        {nodeFacts(n).map(([k, v]) => (
-          <div className="ib-fact" key={k}><b>{v}</b> {k}</div>
-        ))}
-      </div>
-      {errs.length ? (
-        <div className="ib-err">
-          {errs.slice(0, 2).map((e, i) => <div key={i}>{e.slice(0, 200)}</div>)}
-          {errs.length > 2 ? <div>+{errs.length - 2} more</div> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function Stage({ stage, run, nodes, children }) {
   if (!run) {
@@ -61,15 +36,7 @@ function Stage({ stage, run, nodes, children }) {
         </span>
       </div>
 
-      <div className="ib-flow">
-        {nodes.map((n, i) => (
-          <>
-            {i > 0 ? <span className="ib-arrow" key={`a${n.id}`}>›</span> : null}
-            <NodeChip n={n} key={n.id} />
-          </>
-        ))}
-        {!nodes.length ? <div className="ib-not-run">No node events recorded.</div> : null}
-      </div>
+      <NodeStrip nodes={nodes} />
 
       {run.error ? <div className="warnbox">Run error: {run.error}</div> : null}
       {children}

@@ -313,3 +313,54 @@
   background: var(--wash); color: var(--serious);
   padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px;
 }
+
+/* ---- the drafts list ----------------------------------------------------
+   One <details> per draft. Native disclosure rather than state, for the same
+   reason as everything else in this section, and because 455 open bodies is a
+   wall of text nobody scrolls past the second screen of. */
+.lab-draft {
+  border-bottom: 1px solid var(--grid);
+  background: var(--surface-1);
+}
+.lab-draft:first-of-type { border-top: 1px solid var(--axis); }
+.lab-draft > summary {
+  display: grid; align-items: center; gap: 10px;
+  grid-template-columns: minmax(140px, 1.3fr) minmax(100px, 1fr) minmax(120px, 1fr) 74px;
+  padding: 10px 12px; cursor: pointer; list-style: none; font-size: 13px;
+}
+.lab-draft > summary::-webkit-details-marker { display: none; }
+.lab-draft > summary:hover { background: var(--wash); }
+.lab-draft > summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-draft .addr { font-size: 12px; }
+/* Only the exception gets a rule. Striping 450 of 455 rows amber says nothing
+   except "this is a list of drafts", which the heading already said. */
+.lab-draft.passes > summary { border-left: 3px solid var(--good); padding-left: 9px; }
+.lab-draft.blocked > summary { border-left: 3px solid transparent; padding-left: 9px; }
+
+.lab-draftbody {
+  padding: 4px 14px 18px; border-top: 1px solid var(--grid);
+  animation: slideDown .18s cubic-bezier(.22,.8,.3,1);
+}
+.lab-draftbody .subj { font-weight: 640; font-size: 13.5px; margin: 10px 0 4px; }
+.lab-draftbody pre {
+  white-space: pre-wrap; word-break: break-word; margin: 0;
+  font: inherit; font-size: 13px; line-height: 1.6; color: var(--ink-2); max-width: 74ch;
+}
+.lab-why {
+  margin: 10px 0 0; padding: 8px 12px 8px 26px; border-radius: 10px;
+  background: var(--warn-soft); color: var(--warn-ink); font-size: 12.5px;
+}
+.lab-why li { margin: 1px 0; }
+.lab-nobody {
+  border: 1px dashed var(--border); border-radius: 10px;
+  padding: 12px; color: var(--ink-3); font-size: 12.5px;
+}
+
+.lab-reasons {
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-1); padding: 12px 16px; margin-bottom: 18px;
+}
+.lab-reasons > summary {
+  cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+}
+.lab-reasons table { margin-top: 10px; }

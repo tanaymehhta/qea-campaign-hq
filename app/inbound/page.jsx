@@ -209,8 +209,9 @@ export default async function Inbound({ searchParams }) {
         <p className="sub">
           One row per company that visited the site, in the queue of the rep who covers where
           they were. Open one for its people — whoever RB2B named is marked <b>visited</b>, the
-          rest are colleagues research found around them. Whether each run succeeded, and what
-          it cost, is at <a href="/pipeline">/pipeline</a>.
+          rest are colleagues research found around them. Every draft in one list is at{" "}
+          <a href="/inbound/drafts">/inbound/drafts</a>; whether each run succeeded, and what it
+          cost, is at <a href="/pipeline">/pipeline</a>.
         </p>
       </div>
 
