@@ -170,7 +170,17 @@ export default async function Person({ params }) {
               </>
             ) : borrowed ? (
               <>
-                <div className="lab-draft">
+                {/* A borrowed draft carries its own verdict, and 350 of the 355
+                    are blocked — so saying nothing here handed a rep a blocked
+                    draft with the words "it is ready" under it. */}
+                {borrowed.validator_status === "blocked" ? (
+                  <div className="warnbox w plain" style={{ marginBottom: 12 }}>
+                    <b>This one is not cleared to send either.</b>{" "}
+                    {(borrowed.validator_reasons ?? []).join("; ")
+                      || "The validator blocked it."}
+                  </div>
+                ) : null}
+                <div className={`lab-draft ${borrowed.validator_status === "blocked" ? "blocked" : ""}`}>
                   <div className="borrowed">
                     Nothing was written for {p.first_name || "them"}. This one was written for{" "}
                     {borrowed.full_name || borrowed.person_email} at the same company — the pitch
@@ -180,9 +190,11 @@ export default async function Person({ params }) {
                   <pre>{borrowed.body}</pre>
                 </div>
                 <p className="lab-receipt" style={{ marginTop: 0 }}>
-                  {p.email
-                    ? "Copy it, change the name, and it is ready."
-                    : "No address for them yet — worth finding one before you rewrite it."}
+                  {!p.email
+                    ? "No address for them yet — worth finding one before you rewrite it."
+                    : borrowed.validator_status === "blocked"
+                    ? "Copy it and change the name, but read the reason above first."
+                    : "Copy it, change the name, and it is ready."}
                 </p>
               </>
             ) : (

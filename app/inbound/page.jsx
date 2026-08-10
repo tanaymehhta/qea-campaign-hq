@@ -161,7 +161,10 @@ function CompanyTable({ rows }) {
 }
 
 export default async function Inbound({ searchParams }) {
-  const rep = searchParams?.rep ?? "all";
+  // Every one of the three has to be checked against its own set. An id that no
+  // longer exists — a stale bookmark, a renamed rep — used to reach `chip.name`
+  // on a null and 500 the whole queue, which is a bad answer to a typo.
+  const rep = repById(searchParams?.rep) ? searchParams.rep : "all";
   const range = RANGES.some(([k]) => k === searchParams?.range) ? searchParams.range : "7";
   const as = searchParams?.as === "table" ? "table" : "cards";
 

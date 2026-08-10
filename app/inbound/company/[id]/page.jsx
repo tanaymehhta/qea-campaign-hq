@@ -43,7 +43,7 @@ export default async function Company({ params }) {
       </div>
 
       <div className="range" style={{ marginBottom: 18 }}>
-        <a href="/inbound?tab=companies">&larr; Companies</a>
+        <a href="/inbound">&larr; Queue</a>
         {c.website || c.domain ? (
           <a href={c.website ?? `https://${c.domain}`} target="_blank" rel="noreferrer">Website &rarr;</a>
         ) : null}
