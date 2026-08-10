@@ -2,13 +2,13 @@ import "../../inbound.css";
 import { prettyWhen, num } from "../../../../lib/db";
 import { loadCompany, pageOf, pathOf } from "../../../../lib/inbound/queue";
 import { REGIONS } from "../../../../lib/inbound/routing";
-import { verdict, emailStatus, bullets } from "../../../../lib/inbound/words";
+import { verdict, bullets } from "../../../../lib/inbound/words";
 import { Research } from "../../research";
 
 export const dynamic = "force-dynamic";
 
 /**
-* a company that visited, in full.
+ * A company that visited, in full.
  *
  * This is where a company-only lead goes. It used to render through the person
  * template, which produced a page of dashes: no email, no title, no role, for a
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * they own, what law bites them, who visited, and is there anyone here to write
  * to — so it gets its own page.
  */
-export default async function LabCompany({ params }) {
+export default async function Company({ params }) {
   const d = await loadCompany(params.id);
   const c = d.company;
   if (!c) return <><h1>Not found</h1><p className="sub">No company with that id.</p></>;

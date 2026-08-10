@@ -2,7 +2,7 @@ import { num } from "../../lib/db";
 import { accountType, bullets, tidy } from "../../lib/inbound/words";
 
 /**
-* the research, inline and in bullets.
+ * The research, inline and in bullets.
  *
  * The pipeline writes its findings as one unbroken 400-word paragraph. Nobody
  * reads that with a phone in their hand, so nothing here is a paragraph: the
@@ -55,16 +55,25 @@ export function Research({ company, buildings = [], hits = [], signals = [],
   if (buildings.length) {
     facts.push(`${num(buildings.length)} of their buildings researched by name${placesOf(buildings)}`);
   }
-  // The laws with real penalties lead. A company under LL97 and LL84 is under
-  // both, but only one of them is a reason to call, and a rep who quotes a
+  // The laws with real penalties lead: a company under both LL97 and LL84 is
+  // under both, but only one is a reason to call, and a rep who quotes a
   // reporting duty as a fine has lost the account.
-  const biting = hits.filter((h) => h.rule?.has_teeth);
-  const reporting = hits.filter((h) => !h.rule?.has_teeth);
+  //
+  // Three states, not two. A law we hold no rule row for is *unknown*, not
+  // toothless — 35 of 117 hits are laws the model found outside the 20-rule seed
+  // table, and some of them bite. Calling those "reporting only" is the same
+  // error as calling a report a fine, pointing the other way.
+  const biting = hits.filter((h) => h.rule?.has_teeth === true);
+  const reporting = hits.filter((h) => h.rule?.has_teeth === false);
+  const unknown = hits.filter((h) => !h.rule);
   if (biting.length) {
     facts.push(`Subject to ${biting.map((h) => h.rule_name).slice(0, 3).join(", ")}${biting.length > 3 ? ` and ${biting.length - 3} more with penalties` : ""}`);
   }
+  if (unknown.length) {
+    facts.push(`${num(unknown.length)} more ${unknown.length === 1 ? "law" : "laws"} apply that we have not checked for penalties — read them before leaning on one`);
+  }
   if (reporting.length) {
-    facts.push(`${num(reporting.length)} more ${reporting.length === 1 ? "law" : "laws"} they only have to report under — no penalty to lean on`);
+    facts.push(`${num(reporting.length)} they only have to report under — no penalty to lean on`);
   }
   if (signals.length) facts.push(`${num(signals.length)} public commitment${signals.length === 1 ? "" : "s"} on record`);
   if (company.employee_count) facts.push(`About ${company.employee_count} staff`);
@@ -129,17 +138,18 @@ export function Research({ company, buildings = [], hits = [], signals = [],
 
       {hits.length ? (
         <details className="lab-more">
-          <summary>Which laws, and why they bite — {num(hits.length)}<span className="chev">&rsaquo;</span></summary>
+          <summary>Which laws, and what each one asks for — {num(hits.length)}<span className="chev">&rsaquo;</span></summary>
           <div className="lab-more-body">
             <ul className="lab-bul">
-              {[...biting, ...reporting].map((h) => (
+              {[...biting, ...unknown, ...reporting].map((h) => (
                 <li key={h.id}>
                   <b>{h.rule_name}</b>
                   {h.jurisdiction ? <span className="dim"> · {h.jurisdiction}</span> : null}
                   {/* Whether it bites, said before what it asks for — it is the
                       difference between a deadline and a bill. */}
                   <span className={h.rule?.has_teeth ? "lab-b" : "lab-b dim"}>
-                    {h.rule?.has_teeth ? "has penalties" : "reporting only"}
+                    {h.rule?.has_teeth ? "has penalties"
+                      : h.rule ? "reporting only" : "penalties not checked"}
                   </span>
                   {h.rule?.must_do ? <div className="said">They must {h.rule.must_do}.</div> : null}
                   {h.summary ? <div className="said">{tidy(h.summary)}</div> : null}

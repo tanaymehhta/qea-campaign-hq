@@ -9,14 +9,14 @@ import { Research } from "../../research";
 export const dynamic = "force-dynamic";
 
 /**
-* one person, read the way a rep reads before reaching out.
+ * One person, read the way a rep reads before reaching out.
  *
  * Evidence on the left, the thing you send on the right, and the right column
  * stays put while the left scrolls. The company research is on this page, in
  * full: a rep asking "why would they care" should never have to leave the name
  * they are looking at to find out.
  */
-export default async function LabPerson({ params }) {
+export default async function Person({ params }) {
   const d = await loadPerson(params.id);
   const p = d.person;
   if (!p) return <><h1>Not found</h1><p className="sub">No person with that id.</p></>;

@@ -2,7 +2,7 @@ import "./inbound.css";
 import { prettyWhen, num } from "../../lib/db";
 import { Seg, Reps } from "../../components/ui";
 import { ALL_REPS, REGIONS, repById } from "../../lib/inbound/routing";
-import { accountType, verdict } from "../../lib/inbound/words";
+import { verdict } from "../../lib/inbound/words";
 import {
   loadQueue, filterLeads, byLane, pageOf, pathOf, CO_LANES, RANGES,
 } from "../../lib/inbound/queue";

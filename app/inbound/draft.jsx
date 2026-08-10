@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /**
-* the draft, editable, with the one thing a rep actually does:
+ * The draft, editable, with the one thing a rep actually does:
  * take it to their own mail client.
  *
  * The clipboard is the only reason this is a client component; everything else
