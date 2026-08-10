@@ -84,11 +84,14 @@ stop the queue looking busy — it made it look empty while hiding the only work
 actually do. They are also not junk: BXP has 25 buildings researched, Related 25, MedStar 16.
 Only Notion Labs (0 people, 0 drafts) is a genuine throwaway.
 
-So they are neither hidden nor mixed in. They get **their own lane at the bottom**, *Test
-accounts — not real inbound*, which claims nothing about a visit that never happened and still puts
-Durst's five ready drafts on the screen. The date filter does not apply to that lane: a
-company that never visited cannot be filtered by when it visited, and hiding it behind a
-window would hide it permanently.
+They are **excluded from the queue**. That is a deliberate call and it has a cost: those
+eleven hold **166 of the 355 drafts, including all five that pass the send gate**, so the
+queue shows no ready work at all until Apollo's credits reset. The alternative — a lane of
+their own — was built first and rejected, because a sales queue that lists accounts nobody
+can sell to is a queue a rep learns to skim past.
+
+The number is not swallowed. The footer counts them out loud and is computed, not written
+down, so it stays true the next time somebody types an account in by hand.
 
 ---
 
@@ -312,8 +315,8 @@ From the running page, 10 August 2026.
 
 | | |
 |---|---|
-| Companies in the queue | 52 |
-| — of which are test accounts (own lane) | 11 |
+| Companies in the queue | 43 |
+| *Excluded test accounts* | *11 companies, 166 drafts* |
 | Named people at them | 387 |
 | — with an email address | 37 |
 | — verified | **6** |

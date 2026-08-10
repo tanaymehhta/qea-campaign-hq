@@ -176,14 +176,13 @@ export default async function Inbound({ searchParams }) {
   const range = RANGES.some(([k]) => k === searchParams?.range) ? searchParams.range : "7";
   const as = searchParams?.as === "table" ? "table" : "cards";
 
-  const { companies } = await loadQueue();
+  const { companies, excluded } = await loadQueue();
   const inRange = filterLeads(companies, { rep: null, range });
   const rows = filterLeads(companies, { rep, range });
   const lanes = CO_LANES.map((l) => ({ ...l, rows: byLane(rows, l.id) }));
 
   const chip = repById(rep);
   const unrouted = companies.filter((l) => l.region === "UNKNOWN").length;
-  const unvisited = companies.filter((l) => !l.visited).length;
   const named = companies.reduce((t, c) => t + c.contacts.length, 0);
 
   return (
@@ -249,9 +248,9 @@ export default async function Inbound({ searchParams }) {
 
       <p className="note" style={{ marginTop: 24 }}>
         {num(companies.length)} companies and the {num(named)} people found at them.{" "}
-        {num(unvisited)} exist to test the pipeline — typed in by hand and never visited, or
-        sitting on a reserved domain that cannot resolve — and keep their own lane at the
-        bottom rather than being counted as inbound.{" "}
+        {num(excluded)} more accounts are left out — typed in by hand to test the pipeline,
+        never visited, or sitting on a domain that cannot resolve. They hold most of the
+        drafted emails, so the number is said here rather than left to be noticed.{" "}
         {num(unrouted)} companies sit under Unrouted because nothing on the record says where
         they are. Ready and Needs a check come from the pipeline itself, not from this page.
       </p>
