@@ -62,13 +62,20 @@ the same person appeared in both, once as a name and once inside their employer.
 
 So no person becomes unreachable. Every one of the 387 is inside exactly one company.
 
-### The ten that never visited
+### The eleven test accounts
 
 Ten of the 52 companies have no visit. Checked against `inbound_webhook_events`: **no RB2B
 payload for any of them**, and all ten were created in three batch inserts at identical
 timestamps — 28 Jul 22:53 (Durst, Verdical, Notion), 28 Jul 23:22 (MedStar, JLL), 4 Aug 17:15
 (BXP, Prologis, Oxford, Related). They are where the research → people → email stages were
 tested.
+
+An **eleventh** joins them on a different signal. Metro Harbor Properties has a visit *and* a
+webhook row, and is still not real: its domain is `metroharbor.example`, and RFC 2606 reserves
+`.example` (with `.test`, `.invalid` and `.localhost`) precisely so it can never resolve. A
+domain that cannot exist never bought anything; its visit is what testing the webhook looks
+like. It sat under **Relevant companies** with a Boston BERDO hook and a contact until the
+reserved-TLD check caught it.
 
 An earlier version **excluded** them, on the reasoning that a sales queue is for people who
 came to the site. That was wrong, and the numbers say why: those ten hold **166 of the 355
@@ -77,8 +84,8 @@ stop the queue looking busy — it made it look empty while hiding the only work
 actually do. They are also not junk: BXP has 25 buildings researched, Related 25, MedStar 16.
 Only Notion Labs (0 people, 0 drafts) is a genuine throwaway.
 
-So they are neither hidden nor mixed in. They get **their own lane at the bottom**, *Added by
-hand — never visited*, which claims nothing about a visit that never happened and still puts
+So they are neither hidden nor mixed in. They get **their own lane at the bottom**, *Test
+accounts — not real inbound*, which claims nothing about a visit that never happened and still puts
 Durst's five ready drafts on the screen. The date filter does not apply to that lane: a
 company that never visited cannot be filtered by when it visited, and hiding it behind a
 window would hide it permanently.
@@ -124,7 +131,16 @@ step earned its place against a real row:
 
 A person whose city and state we hold but cannot resolve stops at **Unrouted** rather than
 falling through to a weaker signal. An unowned lead someone claims is a better failure than
-a confident lead in the wrong queue. Five of 52 companies sit there.
+a confident lead in the wrong queue.
+
+That rule has a cost, and it was being paid: three companies sat under Unrouted labelled *No
+location* while their own row said where they were — `West Jakarta, JK`, `Sugita, 14` and
+`Paris, IDF`. Two of them were real leads in nobody's queue. The fix is read off the **state
+code**, not the city, because the cities are ambiguous and the codes are not: Paris is also a
+town in Texas, but `IDF` is Île-de-France and nowhere else, and `JK` covers all five compass
+variants of Jakarta at once. Japan is the exception — its state arrives as a bare prefecture
+number, and a bare number means something different in every country RB2B reports from, so
+those ride on the city. **Two** companies remain Unrouted, both with genuinely no geography.
 
 Every card shows how it routed on hover, so an inferred territory is never mistaken for a
 known one.
@@ -297,14 +313,14 @@ From the running page, 10 August 2026.
 | | |
 |---|---|
 | Companies in the queue | 52 |
-| — of which never visited (own lane) | 10 |
+| — of which are test accounts (own lane) | 11 |
 | Named people at them | 387 |
 | — with an email address | 37 |
 | — verified | **6** |
 | Drafts written | 355 |
 | — passing the send gate | **5**, all at Durst |
 | — with no address on the draft | 320 |
-| Companies with nothing to route on | 5 |
+| Companies with nothing to route on | 2 |
 
 **Five of 355 drafts pass the send gate and all five are Durst's**, from 4 August — the only
 company processed while Apollo had credits. The layout is not the bottleneck; Apollo is, and
@@ -335,6 +351,9 @@ No framework. Every case is a row that exists in the database today.
 
 - **Territory** — the ten real locations, including `London, ON` → Canada and `Chennai, TN`
   → Asia; the precedence chain; that an unreadable place stops at Unrouted.
+- **The places that used to be unroutable** — `West Jakarta, JK` and `Sugita, 14` to Asia,
+  `Paris, IDF` to Europe, and that `Paris, TX` still resolves to the United States.
+- **Reserved TLDs** — `.example`, `.test` and `.invalid` are test data; `example.com` is not.
 - **The two company-level fallbacks** — that `hq_city` still routes a company-level payload
   (it is the visitor's city), that buildings sit *below* it, that a split portfolio goes to
   its larger half, and that a building with no `country` still resolves through its city.

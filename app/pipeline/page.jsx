@@ -22,7 +22,7 @@ const VIEWS = [
   ["research", "Research"],
 ];
 
-export default async function Inbound({ searchParams }) {
+export default async function Pipeline({ searchParams }) {
   const view = VIEWS.some(([k]) => k === searchParams?.view) ? searchParams.view : "company";
   const { companies, events, runsByCompany } = await inboundOverview();
   const pv = view === "person" ? await peopleOverview() : null;
@@ -35,10 +35,12 @@ export default async function Inbound({ searchParams }) {
 
   return (
     <>
-      <h1>Inbound</h1>
+      <h1>Inbound pipeline</h1>
       <p className="sub">
-        Website visitors identified by RB2B, researched into an account, a contact list and a
-        first email. Read-only: nothing here starts, stops or approves a run.
+        Whether each run worked, and what it cost. RB2B identifies a visitor, research builds
+        the account, stage 2 finds the people, stage 3 drafts the email — this is the trace of
+        those stages, stage by stage and node by node. Read-only: nothing here starts, stops
+        or approves a run. The leads themselves are at <a href="/inbound">/inbound</a>.
       </p>
 
       <div className="grid g4">

@@ -26,6 +26,14 @@ export const dynamic = "force-dynamic";
 
 const href = ({ rep, range, as }) => `/inbound?rep=${rep}&range=${range}&as=${as}`;
 
+/**
+ * The window, as a sentence. Slotting the option's own label into "seen in the
+ * last …" worked for the two middle options and produced "seen in the last all"
+ * and "seen in the last today" for the other two.
+ */
+const seenWhen = (range) =>
+  range === "all" ? "all time" : range === "1" ? "seen today" : `seen in the last ${range} days`;
+
 /** Where they are. How we worked it out is a tooltip, not something to read. */
 function Where({ lead }) {
   return (
@@ -174,7 +182,6 @@ export default async function Inbound({ searchParams }) {
   const lanes = CO_LANES.map((l) => ({ ...l, rows: byLane(rows, l.id) }));
 
   const chip = repById(rep);
-  const rangeLabel = (RANGES.find(([k]) => k === range)?.[1] ?? "").toLowerCase();
   const unrouted = companies.filter((l) => l.region === "UNKNOWN").length;
   const unvisited = companies.filter((l) => !l.visited).length;
   const named = companies.reduce((t, c) => t + c.contacts.length, 0);
@@ -209,7 +216,7 @@ export default async function Inbound({ searchParams }) {
              hrefFor={(k) => href({ rep, range, as: k })} />
         <span className="note">
           {num(rows.length)} compan{rows.length === 1 ? "y" : "ies"}
-          {rep !== "all" ? ` for ${chip.name}` : ""} · seen in the last {rangeLabel}
+          {rep !== "all" ? ` for ${chip.name}` : ""} · {seenWhen(range)}
         </span>
       </div>
 
@@ -242,8 +249,9 @@ export default async function Inbound({ searchParams }) {
 
       <p className="note" style={{ marginTop: 24 }}>
         {num(companies.length)} companies and the {num(named)} people found at them.{" "}
-        {num(unvisited)} were typed in by hand to test the pipeline and never visited — they
-        keep their own lane at the bottom rather than being counted as inbound.{" "}
+        {num(unvisited)} exist to test the pipeline — typed in by hand and never visited, or
+        sitting on a reserved domain that cannot resolve — and keep their own lane at the
+        bottom rather than being counted as inbound.{" "}
         {num(unrouted)} companies sit under Unrouted because nothing on the record says where
         they are. Ready and Needs a check come from the pipeline itself, not from this page.
       </p>

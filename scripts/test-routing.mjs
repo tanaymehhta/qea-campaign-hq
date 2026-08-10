@@ -63,6 +63,23 @@ assert.deepEqual(repsFor("CA").map((r) => r.id), ["justin-kim", "mark-dolan"], "
 assert.deepEqual(repsFor("EU").map((r) => r.id), ["unrouted"]);
 assert.deepEqual(repsFor("UNKNOWN").map((r) => r.id), ["unrouted"]);
 
+
+// Three real rows that used to stop at Unrouted with the label "No location",
+// while the row itself said plainly where they were. Two of them belong to a rep.
+assert.equal(at("West Jakarta", "JK").region, "ASIA", "JK is Jakarta, not a US state");
+assert.equal(at("Sugita", "14").region, "ASIA", "a bare prefecture number is unreadable; the city is not");
+assert.equal(at("Paris", "IDF").region, "EU", "IDF is Ile-de-France");
+assert.deepEqual(repsFor("ASIA").map((r) => r.id), ["gul-reyes"]);
+// Paris, Texas must not become Paris, France: the city is deliberately absent
+// from the table and the state code settles it.
+assert.equal(at("Paris", "TX").region, "US");
+
+// Reserved TLDs never resolve, so a company under one was typed in.
+const { RESERVED_TLD } = await import("../lib/inbound/routing.js");
+assert.ok(RESERVED_TLD.test("metroharbor.example"));
+assert.ok(RESERVED_TLD.test("foo.test") && RESERVED_TLD.test("a.invalid"));
+assert.ok(!RESERVED_TLD.test("barings.com") && !RESERVED_TLD.test("example.com"));
+
 // ── plain language ──────────────────────────────────────────────────────────
 const { pageTitle, bullets, verdict } = await import("../lib/inbound/words.js");
 
