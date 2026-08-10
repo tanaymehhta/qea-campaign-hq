@@ -253,3 +253,63 @@
 
 .lab-receipt { font-size: 12.5px; color: var(--ink-3); line-height: 1.55; margin-top: 10px; }
 .lab-receipt b { color: var(--ink-2); font-weight: 600; }
+
+/* ------------------------------------------------------- hand controls
+   Reorder a person, overrule a verdict, move a company between lanes.
+   Each one is a <form> posting to a server action, so none of this needs
+   client JavaScript — the copy button on a draft is still the only one. */
+
+/* The card became a wrapper the day it grew a button: a <form> cannot live
+   inside the <a>, so the anchor and the actions are siblings and the wrapper
+   carries the entry animation they used to share. */
+.lab-cardwrap {
+  display: flex; flex-direction: column;
+  animation: fadeUp .5s cubic-bezier(.22,.8,.3,1) both;
+}
+.lab-cardwrap > .lab-card { animation: none; }
+
+.lab-cardacts { display: flex; justify-content: flex-end; padding: 6px 4px 0; }
+
+/* On a person row the controls sit above the name, right-aligned, so they never
+   push the name off its own baseline. */
+.lab-perbar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  padding: 6px 0 0;
+}
+
+.lab-rank { display: inline-flex; gap: 3px; }
+.lab-rank form { display: inline; }
+.lab-rank button {
+  width: 24px; height: 24px; padding: 0; line-height: 1;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface-1); color: var(--ink-2);
+  font-size: 12px; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.lab-rank button:hover:not(:disabled) {
+  background: var(--wash); border-color: var(--axis); color: var(--ink-1);
+}
+/* Disabled rather than hidden: a control that disappears at the top of a list
+   reads as a rendering bug, not as "already first". */
+.lab-rank button:disabled { opacity: .35; cursor: default; }
+
+.lab-toggle { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+.lab-toggle form { display: inline; }
+.lab-toggle button {
+  padding: 3px 9px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-1);
+  font-size: 11.5px; font-weight: 560; color: var(--ink-2);
+  transition: background .15s, border-color .15s, color .15s;
+}
+.lab-toggle button:hover { border-color: var(--axis); background: var(--wash); color: var(--ink-1); }
+.lab-toggle button.on:hover { border-color: var(--good); color: var(--good); }
+.lab-toggle button.off:hover { border-color: var(--serious); color: var(--serious); }
+.lab-toggle button.plain { border-color: transparent; color: var(--ink-3); font-weight: 460; }
+
+/* A failed write says so where the click happened rather than silently doing
+   nothing — the actions redirect back with ?err= and this is where it lands. */
+.lab-err {
+  border: 1px solid var(--serious); border-radius: 10px;
+  background: var(--wash); color: var(--serious);
+  padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px;
+}

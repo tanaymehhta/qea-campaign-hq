@@ -4,6 +4,7 @@ import { loadCompany, pageOf, pathOf } from "../../../../lib/inbound/queue";
 import { REGIONS } from "../../../../lib/inbound/routing";
 import { verdict, bullets } from "../../../../lib/inbound/words";
 import { Research } from "../../research";
+import { RankButtons, ReadyToggle, RelevanceToggle } from "../../controls";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,11 @@ export const dynamic = "force-dynamic";
  * they own, what law bites them, who visited, and is there anyone here to write
  * to — so it gets its own page.
  */
-export default async function Company({ params }) {
+export default async function Company({ params, searchParams }) {
   const d = await loadCompany(params.id);
   const c = d.company;
   if (!c) return <><h1>Not found</h1><p className="sub">No company with that id.</p></>;
+  const err = searchParams?.err;
 
   const v = verdict(c);
   const draftFor = (p) =>
@@ -41,6 +43,8 @@ export default async function Company({ params }) {
           <b>{d.reps.map((r) => r.name).join(" and ")}</b>
         </p>
       </div>
+
+      {err ? <div className="lab-err">That didn&rsquo;t save — {err}</div> : null}
 
       <div className="range" style={{ marginBottom: 18 }}>
         <a href="/inbound">&larr; Queue</a>
@@ -72,6 +76,9 @@ export default async function Company({ params }) {
                     Typed {v.conflict}, but research ruled them out.
                   </span>
                 ) : null}
+                {/* Overrule it. Marking one relevant re-queues it for research,
+                    so this button costs money on the next run — the title says so. */}
+                <RelevanceToggle companyId={c.id} relevant={v.lane !== "irrelevant"} />
               </div></div>
               <div><div className="k">Vertical</div><div className="v">{c.vertical?.replace(/_/g, " ") ?? "—"}</div></div>
               <div><div className="k">Head office</div><div className="v">{hq || "—"}</div></div>
@@ -121,11 +128,20 @@ export default async function Company({ params }) {
                  person. The draft sits behind its own toggle beside it, so
                  reading a draft here and opening a person are two separate
                  actions rather than two clicks at the same thing. */
-              d.people.map((p) => {
+              d.people.map((p, pi) => {
                 const own = draftFor(p);
                 const shown = own ?? d.emails[0] ?? null;
                 return (
                   <div className="lab-per" key={p.id}>
+                    {/* Outside the anchor: a form nested in a link is invalid
+                        HTML, and the browser resolves it by dropping one of them. */}
+                    <div className="lab-perbar">
+                      <RankButtons personId={p.id} companyId={c.id}
+                                   first={pi === 0} last={pi === d.people.length - 1} />
+                      <ReadyToggle personId={p.id} companyId={c.id}
+                                   ready={p.status === "Ready"}
+                                   manualled={p.manual_sendable != null} />
+                    </div>
                     <a className="lab-perhead" href={`/inbound/person/${p.id}`}>
                       <span className="nm">
                         {p.full_name}

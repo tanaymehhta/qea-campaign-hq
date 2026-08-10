@@ -3,6 +3,7 @@ import { prettyWhen, num } from "../../lib/db";
 import { Seg, Reps } from "../../components/ui";
 import { ALL_REPS, REGIONS, repById } from "../../lib/inbound/routing";
 import { verdict } from "../../lib/inbound/words";
+import { RelevanceToggle } from "./controls";
 import {
   loadQueue, filterLeads, byLane, pageOf, pathOf, CO_LANES, RANGES,
 } from "../../lib/inbound/queue";
@@ -16,8 +17,13 @@ export const dynamic = "force-dynamic";
  * RB2B named, the colleagues research found around them, the buildings, the
  * laws, the drafts. Open a company and its people are inside.
  *
- * Territory decides whose queue a lead lands in. Nothing here writes; the whole
- * `inbound_*` schema is read-only to this app by design.
+ * Territory decides whose queue a lead lands in.
+ *
+ * This section reads `inbound_*` and writes to it in exactly three places, all
+ * of them a rep overruling the pipeline — see `actions.js`. Everything else is
+ * read-only, and the anon key still cannot UPDATE any inbound table directly:
+ * the three writes go through `security definer` functions that validate their
+ * own arguments.
  *
  * The pipeline's own view of itself — did each stage run, what did it cost, which
  * node failed — is a different question for a different reader, and lives at
@@ -83,11 +89,15 @@ function RepMark({ reps }) {
   );
 }
 
-/** A company: an account, with everything known about it one click away. */
+/** A company: an account, with everything known about it one click away.
+ *
+ *  The lane control sits outside the anchor rather than inside it: a <form>
+ *  nested in a link is invalid HTML, and browsers resolve it by dropping one of
+ *  the two — usually the one you wanted. */
 function CompanyCard({ lead, i }) {
   return (
-    <a className="lab-card co" href={`/inbound/company/${lead.id}`}
-       style={{ animationDelay: `${Math.min(i, 14) * 0.03}s` }}>
+    <div className="lab-cardwrap" style={{ animationDelay: `${Math.min(i, 14) * 0.03}s` }}>
+    <a className="lab-card co" href={`/inbound/company/${lead.id}`}>
       <div className="lab-top">
         <div className="lab-name">{lead.name}</div>
         <div className="lab-marks">
@@ -116,6 +126,10 @@ function CompanyCard({ lead, i }) {
         <RepMark reps={lead.reps} />
       </div>
     </a>
+    <div className="lab-cardacts">
+      <RelevanceToggle companyId={lead.id} relevant={lead.lane !== "irrelevant"} />
+    </div>
+    </div>
   );
 }
 
@@ -187,6 +201,9 @@ export default async function Inbound({ searchParams }) {
 
   return (
     <>
+      {searchParams?.err
+        ? <div className="lab-err">That didn&rsquo;t save — {searchParams.err}</div> : null}
+
       <div className="rise">
         <h1>Inbound queue</h1>
         <p className="sub">

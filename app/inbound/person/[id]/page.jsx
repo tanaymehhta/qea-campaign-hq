@@ -5,6 +5,7 @@ import { REGIONS } from "../../../../lib/inbound/routing";
 import { emailStatus } from "../../../../lib/inbound/words";
 import Draft from "../../draft";
 import { Research } from "../../research";
+import { ReadyToggle } from "../../controls";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,11 @@ export const dynamic = "force-dynamic";
  * full: a rep asking "why would they care" should never have to leave the name
  * they are looking at to find out.
  */
-export default async function Person({ params }) {
+export default async function Person({ params, searchParams }) {
   const d = await loadPerson(params.id);
   const p = d.person;
   if (!p) return <><h1>Not found</h1><p className="sub">No person with that id.</p></>;
+  const err = searchParams?.err;
 
   const draft = d.emails[0] ?? null;
   const blocked = draft?.validator_status === "blocked";
@@ -29,6 +31,8 @@ export default async function Person({ params }) {
 
   return (
     <>
+      {err ? <div className="lab-err">That didn&rsquo;t save — {err}</div> : null}
+
       <div className="rise">
         <h1>{p.full_name}</h1>
         <p className="sub">
@@ -65,6 +69,12 @@ export default async function Person({ params }) {
                   ? <span className="lab-b visited">Ready</span>
                   : <><span className="lab-b">Needs a check</span>
                       {p.note ? <span className="dim"> · {p.note}</span> : null}</>}
+                {/* Overrule it when the classifier is wrong about someone. The
+                    override is remembered separately from `sendable`, so stage 2
+                    re-running does not quietly undo it. */}
+                <ReadyToggle personId={p.id} companyId={p.company_id}
+                             ready={p.status === "Ready"}
+                             manualled={p.manual_sendable != null} />
               </div></div>
               <div><div className="k">Title</div><div className="v">{p.title ?? "not found"}</div></div>
               <div><div className="k">Email</div><div className="v">{p.email ?? "not found"}</div></div>
