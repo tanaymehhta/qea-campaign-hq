@@ -86,7 +86,7 @@ Only Notion Labs (0 people, 0 drafts) is a genuine throwaway.
 
 They are **excluded from the queue**. That is a deliberate call and it has a cost: those
 eleven hold **166 of the 355 drafts, including all five that pass the send gate**, so the
-queue shows no ready work at all until Apollo's credits reset. The alternative — a lane of
+queue shows no ready work at all until something makes an address verify. The alternative — a lane of
 their own — was built first and rejected, because a sales queue that lists accounts nobody
 can sell to is a queue a rep learns to skim past.
 
@@ -215,7 +215,7 @@ Two things follow from reading the view rather than the table:
   `push_instantly` is a deliberate permanent no-op, so a lane for it would be empty forever.
 - **The ordering of the notes is the backend's**, and it is deliberate there: *who they are*
   beats *which field is empty*, because "no email yet" is true of almost everyone until
-  Apollo resets and therefore says nothing.
+  addresses start verifying, and therefore says nothing.
 
 Verified before switching: the view's join drops nobody — 417 of 417 rows survive it.
 
@@ -325,11 +325,28 @@ From the running page, 10 August 2026.
 | — with no address on the draft | 320 |
 | Companies with nothing to route on | 2 |
 
-**Five of 355 drafts pass the send gate and all five are Durst's**, from 4 August — the only
-company processed while Apollo had credits. The layout is not the bottleneck; Apollo is, and
-its credits reset **22 August 2026**. Until then almost nothing can carry a verified address,
-so *Needs a check* will dominate. **After that date the ratio flips, and a page built around
-today's distribution will look wrong in twelve days.**
+**Five of 355 drafts pass the send gate and all five are Durst's**, from 4 August. The layout
+is not the bottleneck. What is, is less settled than it looks.
+
+The received account is "Apollo credits are exhausted until 22 August". Queried directly on
+10 August, Apollo says otherwise:
+
+| | |
+|---|---|
+| Current cycle | 22 Jul → **22 Aug 2026** — not yet reset |
+| Lead credits | 32,610 limit · 30,178 used · **2,432 remaining** |
+| Direct-dial credits | 32,500 of 32,500 used · 0 remaining |
+| Credits the pipeline spent on 10 Aug | **200** |
+| New verified addresses since 5 Aug | **0** |
+
+So credits are being spent, thousands remain, and not one address has been verified in five
+days. Today's validator blocks are dominated by *"no email address"* and *"found on web;
+Apollo has no record"*. That points at the people stage 2 finds simply **not being in
+Apollo**, rather than at a billing wall — in which case 22 August unblocks nothing.
+
+Stated as confidence: the credit figures and the zero are measured. The conclusion drawn from
+them is inference, and belongs to the backend to confirm against Apollo's per-call responses.
+Either way, **design for both ratios** — *Needs a check* dominates today and may not later.
 
 47 people show an obfuscated surname — `Matt Mo***a` — for the same reason. The first name is
 what the draft uses, so those rows are shown as they are rather than hidden.
@@ -387,8 +404,11 @@ The frontend is compensating for four gaps. Each is a change in the Inbound fold
 and is the join key; `person_email` is the one that is NULL, on 320 of them. The email
 fallback in `queue.js` survives only for rows written before the change.
 
-And the one that decides whether any of this is useful on day one: **Apollo credits, 22
-August.** Everything sendable waits on that date.
+And the one that decides whether any of this is useful on day one: **find out why no address
+verifies.** The assumption has been that Apollo credits gate it and that 22 August clears the
+gate. Apollo reports 2,432 lead credits still available and the pipeline spent 200 of them on
+10 August, with zero addresses verified since 5 August — so the gate may not be credits at
+all, and waiting would be waiting for nothing.
 
 ---
 
