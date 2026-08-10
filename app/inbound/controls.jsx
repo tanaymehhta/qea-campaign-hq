@@ -83,7 +83,7 @@ export function RelevanceToggle({ companyId, relevant }) {
                 title={relevant
                   ? "Drop this account out of the queue"
                   : "Put it back in the queue and research it on the next run"}>
-          {relevant ? "Not relevant" : "Mark relevant"}
+          {relevant ? "Move to not relevant" : "Mark relevant"}
         </button>
       </form>
     </span>

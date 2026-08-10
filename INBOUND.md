@@ -105,11 +105,11 @@ stage 1 writes a real country.
 
 | Region | Rep |
 |---|---|
-| United States | Mark Wasu |
+| United States | Mark Vasu |
 | Mexico | Justin Kim |
 | United Kingdom | Justin Kim |
 | Canada | Justin Kim **and** Mark Dolan — both queues, not split |
-| Asia · UAE | Gul Reyes |
+| Asia · UAE | Gulraiz Khalid |
 | Anywhere else, or unknown | Unrouted |
 
 **How a location is resolved,** best evidence first. The order is the whole trick and every

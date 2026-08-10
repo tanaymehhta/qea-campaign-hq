@@ -54,11 +54,11 @@ assert.equal(at("Nowhere", "ZZ").region, "UNKNOWN");
 assert.equal(at("", "").basis, "nothing to go on");
 
 // The division
-assert.deepEqual(repsFor("US").map((r) => r.id), ["mark-wasu"]);
+assert.deepEqual(repsFor("US").map((r) => r.id), ["mark-vasu"]);
 assert.deepEqual(repsFor("MX").map((r) => r.id), ["justin-kim"]);
 assert.deepEqual(repsFor("GB").map((r) => r.id), ["justin-kim"]);
-assert.deepEqual(repsFor("AE").map((r) => r.id), ["gul-reyes"]);
-assert.deepEqual(repsFor("ASIA").map((r) => r.id), ["gul-reyes"]);
+assert.deepEqual(repsFor("AE").map((r) => r.id), ["gulraiz-khalid"]);
+assert.deepEqual(repsFor("ASIA").map((r) => r.id), ["gulraiz-khalid"]);
 assert.deepEqual(repsFor("CA").map((r) => r.id), ["justin-kim", "mark-dolan"], "Canada is worked by both");
 assert.deepEqual(repsFor("EU").map((r) => r.id), ["unrouted"]);
 assert.deepEqual(repsFor("UNKNOWN").map((r) => r.id), ["unrouted"]);
@@ -69,7 +69,7 @@ assert.deepEqual(repsFor("UNKNOWN").map((r) => r.id), ["unrouted"]);
 assert.equal(at("West Jakarta", "JK").region, "ASIA", "JK is Jakarta, not a US state");
 assert.equal(at("Sugita", "14").region, "ASIA", "a bare prefecture number is unreadable; the city is not");
 assert.equal(at("Paris", "IDF").region, "EU", "IDF is Ile-de-France");
-assert.deepEqual(repsFor("ASIA").map((r) => r.id), ["gul-reyes"]);
+assert.deepEqual(repsFor("ASIA").map((r) => r.id), ["gulraiz-khalid"]);
 // Paris, Texas must not become Paris, France: the city is deliberately absent
 // from the table and the state code settles it.
 assert.equal(at("Paris", "TX").region, "US");
