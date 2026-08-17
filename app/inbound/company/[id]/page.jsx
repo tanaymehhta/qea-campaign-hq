@@ -82,6 +82,10 @@ function hint(d) {
 
 function Timeline({ dots, companyId }) {
   const broken = dots.filter((d) => d.state === "bad" && d.failures.length);
+  // Did its job, and something inside it still went wrong. Not a red box with a
+  // Restart under it — the stage produced what it was asked for, and re-running
+  // it would spend money to be told the same thing.
+  const flawed = dots.filter((d) => d.caveat && d.failures.length);
   return (
     <div className="i-tl">
       <ol>
@@ -103,6 +107,17 @@ function Timeline({ dots, companyId }) {
           </li>
         ))}
       </ol>
+
+      {flawed.length ? (
+        <div className="why">
+          {flawed.map((d) => (
+            <div className="i-note" key={`c${d.stage}`} style={{ display: "block", marginBottom: 10 }}>
+              <b>{d.label}:</b> {d.made} on file. The last run still hit a problem:{" "}
+              {d.caveat}.
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {broken.length ? (
         <div className="why">
