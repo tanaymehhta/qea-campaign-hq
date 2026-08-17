@@ -64,7 +64,11 @@ const Dash = () => (
  */
 function hint(d) {
   if (d.state === "todo") return "Has not run yet.";
-  if (d.state === "running") return `Started ${prettyWhen(d.when)} and still going.`;
+  if (d.state === "running") {
+    return d.waiting
+      ? `Asked for ${prettyWhen(d.when)}. GitHub is starting a machine — about twenty seconds.`
+      : `Started ${prettyWhen(d.when)} and still going.`;
+  }
   if (d.stage === 0) return `First seen on ${prettyWhen(d.when)}.`;
   const ran = `Ran ${prettyWhen(d.when)}`;
   if (d.state === "ok") return `${ran} — nothing inside it failed.`;
@@ -89,7 +93,9 @@ function Timeline({ dots, companyId }) {
             </span>
             <span className="lbl">{d.label}</span>
             <span className="when">
-              {d.state === "running" ? "running now…" : d.when ? prettyWhen(d.when) : "not yet"}
+              {d.state === "running"
+                ? (d.waiting ? "starting…" : "running now…")
+                : d.when ? prettyWhen(d.when) : "not yet"}
             </span>
             {d.attempts > 1
               ? <span className="tries">attempt {d.attempts} of {d.attempts}</span> : null}
