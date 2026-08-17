@@ -70,6 +70,24 @@ avatars. Never reuse them as decoration.
 `--warn` is amber and its ink (`--warn-ink`) is a darker amber, because amber text on a
 light surface fails contrast. Use `--warn` for a fill and `--warn-ink` for type.
 
+Every meaning colour has the same two companions, and the same rule applies to all of them:
+
+| Token | Role |
+|---|---|
+| `--good` / `--crit` / `--s1` | The fill. A dot, a bar, a filled button. |
+| `--good-soft` / `--crit-soft` / `--s1-soft` / `--warn-soft` | A ~12% wash of it over the page (22% in dark), for the background of a chip or a block that means something. |
+| `--good-ink` / `--crit-ink` / `--warn-ink` | The same colour deep enough to be **type**. |
+
+The soft tints and the ink twins are `color-mix()` of the tokens above them, so there is one
+hex per meaning and no second definition to drift. `--good-ink` and `--crit-ink` mix toward
+`--ink-1`, which is near-black on paper and white on the dark surface, so one declaration
+covers both themes; `--good-fill` — a green dark enough to carry white 12.5px type — needs
+its twin, because mixing toward a white `--ink-1` would lighten it.
+
+**Never put a raw `--good` or `--crit` on a light surface as text.** Both are around 3.4:1
+and 4.0:1 against `--page`, which passes for a 20px label and fails for everything smaller.
+That is what the `-ink` twins are for.
+
 ### Elevation and tint
 
 - `--lift`, `--lift-lg` — the only two shadows. `--lift` on hover, `--lift-lg` on a card
@@ -127,8 +145,18 @@ Rules that hold everywhere:
 
 ## Shape and motion
 
-Radii step with size: `8–9px` for controls, `12px` for a tile or a nested box, `14px` for a
-card or a hero tile, `16px` for the large rep chip. A pill is `6px`. A circle is a circle.
+Radii step with size, and the steps are tokens:
+
+| Token | Value | Where |
+|---|---|---|
+| `--r-sm` | `10px` | An inline control — a rank arrow, a small input |
+| `--r` | `14px` | A card, a tone block, a hero tile |
+| `--r-lg` | `18px` | A stat card, a textarea, a banded table |
+| `--r-xl` | `22px` | A content card with 20px of padding inside it |
+| `--r-pill` | `999px` | A chip, a segmented control, a button |
+
+Older components still hardcode `8–9px` for controls and `12px` for a nested box; migrate one
+onto the scale when you are in it anyway, not as a sweep. A circle is a circle.
 
 Five keyframes, and nothing else animates:
 

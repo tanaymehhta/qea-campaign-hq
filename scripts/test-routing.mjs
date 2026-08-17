@@ -101,9 +101,11 @@ assert.equal(lane(null, "not_icp"), "irrelevant",
 assert.equal(lane("owner_operator", "not_icp"), "irrelevant");
 assert.equal(verdict({ account_type: "owner_operator", research_status: "not_icp" }).conflict,
   "Owns buildings");
-// No verdict at all is its own answer, never a guess into either side.
-assert.equal(lane(null, "new"), "undecided");
-assert.equal(lane(null, null), "undecided");
+// Two lanes, not three: a company nobody has ruled out is a prospect. The old
+// "not researched yet" lane held 49 companies that had all been researched and
+// had all crashed, which is a fact about the run and not about the company.
+assert.equal(lane(null, "new"), "relevant");
+assert.equal(lane(null, null), "relevant");
 assert.equal(verdict({}).short, "Not researched yet");
 
 assert.equal(pageTitle("/"), "Home page");
@@ -124,4 +126,158 @@ assert.ok(b[0].includes("Franklin Distribution Center) are held"), `e.g. split i
 assert.ok(!bullets("Scale: $502B AUM [https://x.com/a] as of June 2026.")[0].startsWith("Scale"));
 assert.ok(!bullets("Scale: $502B AUM [https://x.com/a] as of June 2026.")[0].includes("http"));
 
-console.log("routing + words: all cases pass");
+// ── a failure is not a verdict ──────────────────────────────────────────────
+const { isApiError, errorReason } = await import("../lib/inbound/words.js");
+
+// 56 of the 95 companies carry this instead of a classification, verbatim.
+const CREDITS_402 = "LLM/search failed (Error code: 402 - {'error': {'message': "
+  + "'Insufficient credits. Add more using https://openrouter.ai/settings/credits', 'code': 402}})";
+const APOLLO_422 = `422 {"error":"You have insufficient credits! `
+  + `<a href='https://app.apollo.io/#/settings/plans/upgrade'>upgrade</a>"}`;
+
+assert.ok(isApiError(CREDITS_402), "Canaccord's reason is a provider failure, not prose");
+assert.ok(isApiError(APOLLO_422));
+assert.ok(!isApiError("Raad is an aerial-intelligence/drone-services platform selling "
+  + "facade & roof inspections."), "a real classification must not read as an error");
+assert.ok(!isApiError(""), "an empty reason is neither");
+assert.ok(!isApiError(null));
+
+assert.equal(errorReason(CREDITS_402), "we were out of OpenRouter credits");
+assert.equal(errorReason(APOLLO_422), "we were out of Apollo credits",
+  "Apollo says 'insufficient credits' before it names itself");
+assert.equal(errorReason("HTTP 429 rate limit exceeded"), "the provider rate-limited us");
+assert.equal(errorReason("read timed out"), "the step timed out");
+// An unrecognised failure falls to a sentence, never to undefined.
+assert.equal(errorReason("boom"), "the step failed — see details");
+assert.equal(errorReason(null), "the step failed — see details");
+
+// ScanSource Chile, Self Employed and BAMO: filed "not a fit" off a call that
+// returned 402. A verdict read from a crash is not a verdict, and all three
+// belong in the queue with a Research-failed chip.
+const scansource = { account_type: "not_icp", research_status: "not_icp",
+                     account_type_reason: CREDITS_402 };
+assert.equal(verdict(scansource).lane, "relevant",
+  "a not_icp whose reason is a 402 must not rule the company out");
+assert.equal(verdict(scansource).short, "Not decided");
+// A real rule-out still rules out — the exception is the failure, not not_icp.
+assert.equal(verdict({ account_type: "not_icp", research_status: "not_icp",
+  account_type_reason: "Notion Labs is a pure software/SaaS company with no buildings." }).lane,
+  "irrelevant");
+
+// The chip carries what the lane used to: 39 researched, 56 failed, 0 never run.
+const { researchChip } = await import("../lib/inbound/words.js");
+assert.equal(researchChip(scansource).state, "failed");
+assert.equal(researchChip({ account_type_reason: "Raad is an aerial-intelligence platform." }).state,
+  "done");
+assert.equal(researchChip({}).state, "none");
+assert.equal(researchChip({}).label, "Not researched");
+
+// ── the timeline ────────────────────────────────────────────────────────────
+const { timeline } = await import("../lib/inbound/queue.js");
+
+const state = (dots) => dots.map((d) => d.state).join(",");
+const SEEN = "2026-08-10T18:19:07Z";
+
+// Goodman Gold Challenge: three clean runs, nothing broke. Its stage 1 says
+// `needs_review`, which is a verdict about the company and not a failure.
+const clean = timeline(SEEN,
+  [{ id: "r3", stage_no: 3, status: "ok", started_at: "2026-08-07T15:38:54Z" },
+   { id: "r2", stage_no: 2, status: "ok", started_at: "2026-08-07T15:38:43Z" },
+   { id: "r1", stage_no: 1, status: "needs_review", started_at: "2026-08-07T15:34:40Z" }],
+  new Map());
+assert.equal(state(clean), "ok,ok,ok,ok", "a clean run is green; needs_review is not a failure");
+
+// Canaccord: the regression. The run's own status column never says error, and
+// three nodes inside it returned 402.
+const canaccord = timeline(SEEN,
+  [{ id: "c3", stage_no: 3, status: "ok", started_at: "2026-08-10T21:52:49Z" },
+   { id: "c2", stage_no: 2, status: "ok", started_at: "2026-08-10T21:52:29Z" },
+   { id: "c1", stage_no: 1, status: "needs_review", started_at: "2026-08-10T21:51:20Z" },
+   { id: "c0", stage_no: 1, status: "ok", started_at: "2026-08-10T19:22:14Z" }],
+  new Map([["c1", [
+    { node_name: "research_overview", status: "error", error: CREDITS_402 },
+    { node_name: "find_locations", status: "error", error: CREDITS_402 },
+    { node_name: "plan_research", status: "ok" },
+  ]]]));
+assert.equal(state(canaccord), "ok,bad,ok,ok", "an ok run holding a failed node is red");
+assert.equal(canaccord[1].reason, "we were out of OpenRouter credits");
+assert.equal(canaccord[1].failures.length, 2);
+assert.equal(canaccord[1].attempts, 2, "two stage-1 runs — attempt 2 of 2");
+
+// Barings' stage 2: every node reports ok and apollo_reveal carries its own 422
+// in output_summary.errors. That is the shape that read as 32 clean nodes.
+const baringsStage2 = timeline(SEEN,
+  [{ id: "b2", stage_no: 2, status: "ok", started_at: "2026-08-05T19:26:21Z" }],
+  new Map([["b2", [
+    { node_name: "apollo_sweep", status: "ok", output_summary: { errors: [], org_total: 1781 } },
+    { node_name: "apollo_reveal", status: "ok", output_summary: { errors: [APOLLO_422] } },
+  ]]]));
+assert.equal(baringsStage2[2].state, "bad", "a node reporting ok while carrying errors is red");
+assert.equal(baringsStage2[2].reason, "we were out of Apollo credits");
+
+// IBM Research: three clean runs, every node ok, and zero people and zero
+// drafts at the end of them. The page showed four green ticks over a panel
+// reading "No contacts found." Green has to mean something came out.
+const IBM_RUNS = [
+  { id: "m3", stage_no: 3, status: "ok", started_at: "2026-08-07T12:13:00Z" },
+  { id: "m2", stage_no: 2, status: "ok", started_at: "2026-08-07T12:13:00Z" },
+  { id: "m1", stage_no: 1, status: "ok", started_at: "2026-08-07T12:07:00Z" },
+];
+const ibm = timeline(SEEN, IBM_RUNS, new Map(), { 2: 0, 3: 0 });
+assert.equal(state(ibm), "ok,ok,none,none", "a clean stage that produced nothing is not a tick");
+assert.equal(ibm[2].label, "Nobody found", "the dot says what happened, not what it hoped for");
+assert.equal(ibm[3].label, "No emails written");
+assert.ok(ibm[2].when, "it still ran, and still says when");
+assert.equal(ibm[2].failures.length, 0, "empty is not broken — nothing goes in the failure fold");
+
+// One person found is a tick again, and stage 1 is never judged this way:
+// nothing counts its output, so it is not in `produced` at all.
+const partial = timeline(SEEN, IBM_RUNS, new Map(), { 2: 1, 3: 0 });
+assert.equal(state(partial), "ok,ok,ok,none");
+
+// A failure outranks emptiness. Canaccord's stage 1 broke, which is a different
+// sentence from "it found nobody" and must not be softened into one.
+assert.equal(timeline(SEEN,
+  [{ id: "c1", stage_no: 1, status: "ok", started_at: SEEN }],
+  new Map([["c1", [{ node_name: "research_overview", status: "error", error: CREDITS_402 }]]]),
+  { 1: 0 })[1].state, "bad");
+
+// Passing no counts at all leaves every clean stage green — the three arguments
+// the rest of this file calls `timeline` with still mean what they meant.
+assert.equal(state(timeline(SEEN, IBM_RUNS, new Map())), "ok,ok,ok,ok");
+
+// A stage with no run is grey, and says so rather than claiming a date.
+assert.equal(state(timeline(SEEN, [], new Map())), "ok,todo,todo,todo");
+assert.equal(timeline(null, [], new Map())[0].state, "todo", "no arrival date is not green");
+// 99 runs predate `stage_no` and are placed by graph name instead.
+assert.equal(state(timeline(SEEN,
+  [{ id: "g", graph_name: "research", stage_no: null, status: "ok", started_at: SEEN }],
+  new Map())), "ok,ok,todo,todo");
+// Stage order, never clock order: Canaccord's stage 3 ran before its stage 2.
+assert.deepEqual(canaccord.map((d) => d.stage), [0, 1, 2, 3]);
+
+// ── the vocabulary a rep reads ──────────────────────────────────────────────
+const { emailSource, roleWords } = await import("../lib/inbound/words.js");
+
+// All six sources, and the one row that says `apollo(corrected rb2b)`.
+assert.equal(emailSource("apollo"), "From Apollo");
+assert.equal(emailSource("apollo(corrected rb2b)"), "From Apollo");
+assert.equal(emailSource("stage1"), "From RB2B, when they visited");
+assert.equal(emailSource("web_public"), "Found on their website");
+assert.equal(emailSource("quarantined_off_domain"),
+  "Guessed — a personal address, not a company one");
+assert.equal(emailSource("quarantined_name_mismatch"),
+  "Guessed — the name doesn't match the address");
+assert.equal(emailSource("none"), "No address found");
+assert.equal(emailSource(null), null, "no source is a row the page leaves off");
+
+// `.replace(/_/g, " ")` alone gave "c suite" and "consultant leadership".
+assert.equal(roleWords("c_suite"), "C-suite");
+assert.equal(roleWords("svp"), "SVP");
+assert.equal(roleWords("vp"), "VP");
+assert.equal(roleWords("ic"), "IC");
+assert.equal(roleWords("consultant_leadership"), "Consultant leadership");
+assert.equal(roleWords("sustainability_energy"), "Sustainability energy");
+assert.equal(roleWords(null), null);
+
+console.log("routing + words + timeline: all cases pass");

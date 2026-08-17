@@ -3,71 +3,481 @@
    you can send, amber is one that needs a human, and that is the whole palette
    on top of what globals.css already defines. */
 
-/* ── lanes ───────────────────────────────────────────────────────────────── */
+/* ── the type scale ──────────────────────────────────────────────────────────
+   The whole of it for /inbound. Two weights — 400 and 600, nothing between —
+   five sizes, and one exception (the ready toggle at §5.1, which is a 20px
+   control). Anything not on this list is a size somebody invented in a hurry.
+   The system stack and tabular figures come from globals.css already. */
 
-/* A lane heading is the one place on this page that gets to be loud: it is the
-   sentence "these are prospects, those are not", and a rep should read it from
-   across the desk rather than hunt for it in 12px caps. */
-.lab-lane { margin: 34px 0 14px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.lab-lane h2 {
-  margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -.02em;
-  text-transform: none; color: var(--ink-1);
+.i-h1    { font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; margin: 0 0 6px; }
+.i-sub   { font-size: 14px; color: var(--ink-2); max-width: 78ch; line-height: 1.55; }
+.i-h2    { font-size: 12px; font-weight: 600; text-transform: uppercase;
+           letter-spacing: .1em; color: var(--ink-3); margin: 0; }
+.i-label { font-size: 11px; font-weight: 400; text-transform: uppercase;
+           letter-spacing: .06em; color: var(--ink-3); }
+.i-num   { font-size: 24px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05;
+           font-variant-numeric: tabular-nums; }
+.i-body  { font-size: 12.5px; line-height: 1.55; }
+.i-note  { font-size: 12px; color: var(--ink-3); }
+
+/* ── the frame ───────────────────────────────────────────────────────────────
+   One column, 1100px, and 32px of air between sections. The grid gap is what
+   sets the rhythm — no section carries its own bottom margin, so nothing can
+   drift out of step with the one below it. */
+
+.i-page { max-width: 1100px; margin: 0 auto; display: grid; gap: 32px; align-content: start; }
+/* A grid item is min-width:auto, so one wide table — /inbound/system's blocker
+   list, with a column of node names — sets the column's floor and drags the
+   whole page past the viewport instead of scrolling inside its own `.tw`. This
+   is that floor being lowered; `.i-two` already does the same one level down. */
+.i-page > * { min-width: 0; }
+.i-head { display: grid; gap: 10px; }
+
+/* Two columns on a detail page. The person page flips the ratio — see .i-two.wide —
+   because there the draft is the thing being read. */
+.i-two { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.i-two.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+.i-two > * { display: grid; gap: 20px; align-content: start; min-width: 0; }
+/* A grid item is min-width:auto by default, so one unbreakable string inside a
+   section — a long finding, a 60-word include_reason — sets the column's floor
+   and pushes it over the one beside it. This is the floor being lowered. */
+.i-two > * > * { min-width: 0; }
+.i-two .stick { position: sticky; top: 18px; }
+@media (max-width: 900px) {
+  .i-two, .i-two.wide { grid-template-columns: 1fr; }
+  .i-two .stick { position: static; }
 }
-.lab-lane .n {
-  font-size: 14px; font-weight: 650; color: var(--ink-2);
-  font-variant-numeric: tabular-nums; background: var(--wash-2);
-  border-radius: 7px; padding: 3px 9px;
+
+/* §7.1 — a section heading is a label and a rule, never a title inside a box. */
+.i-sec { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+.i-sec .line { flex: 1; height: 1px; background: var(--grid); }
+.i-sec .n { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* §4 — a card is one surface. Things inside it are separated by hairlines,
+   never by another card. --lift is for hover on something you can click. */
+.i-card { min-width: 0; background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: var(--r-xl); padding: 20px; }
+
+/* An inline tone block: a failure reason, a gate line, a deliberate refusal. */
+.i-tone { border-radius: var(--r); padding: 12px 14px; font-size: 13px; line-height: 1.55;
+          color: var(--ink-1); }
+.i-tone.bad { background: var(--crit-soft); }
+.i-tone.bad b { color: var(--crit-ink); font-weight: 600; }
+.i-tone.warn { background: var(--warn-soft); color: var(--warn-ink); }
+.i-tone.warn b { color: var(--warn-ink); font-weight: 600; }
+.i-tone.flat { background: var(--seg); color: var(--ink-2); }
+.i-tone + .i-tone { margin-top: 8px; }
+
+/* Evidence, and the things a model decided: a rule down the left rather than a
+   box, so a list of them reads as a list and not as a stack of cards. */
+.i-lbs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.i-lb { background: var(--page); border-radius: var(--r-sm); border-left: 2px solid var(--s1);
+        padding: 10px 14px; font-size: 13.5px; line-height: 1.55; color: var(--ink-1);
+        max-width: 74ch; }
+.i-lb.good { border-left-color: var(--good); }
+.i-lb .said { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+.i-lb .said a, .i-lb .src { text-decoration: underline; text-decoration-color: var(--grid);
+                            text-underline-offset: 3px; }
+.i-lb .said a:hover { text-decoration-color: currentColor; color: var(--ink-1); }
+.i-lb b { font-weight: 600; }
+/* The counts get the figure treatment — they are the reason to look twice. */
+.i-lbs.num .i-lb { font-variant-numeric: tabular-nums; font-weight: 600;
+                   border-left-color: var(--ink-1); }
+
+/* What the money bought. Closed it is one number; open it is the three pieces
+   of work, because "$0.73" with no breakdown is a number a rep can neither
+   check nor act on. */
+.i-cost > summary { cursor: pointer; list-style: none; font-variant-numeric: tabular-nums;
+                    text-decoration: underline; text-decoration-color: var(--axis);
+                    text-underline-offset: 3px; }
+.i-cost > summary::-webkit-details-marker { display: none; }
+.i-cost > summary:hover { text-decoration-color: currentColor; }
+.i-cost table { margin-top: 10px; border-collapse: collapse; width: 100%; text-align: left; }
+.i-cost td { padding: 7px 10px 7px 0; font-size: 12px; vertical-align: top; text-align: left;
+             border-bottom: 1px solid var(--grid); white-space: normal; }
+.i-cost td:nth-child(2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.i-cost td.dim { color: var(--ink-3); }
+.i-cost tr:last-child td { border-bottom: none; font-weight: 600; }
+
+/* §7.2 — the fact row. A record, read down; not a form, read across. */
+.i-facts > div { display: flex; align-items: baseline; justify-content: space-between;
+                 gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--grid); }
+.i-facts > div:last-child { border-bottom: none; }
+.i-facts .k { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.i-facts .v { font-size: 12.5px; color: var(--ink-1); text-align: right; min-width: 0;
+              font-variant-numeric: tabular-nums; }
+.i-facts .v .dim { color: var(--ink-3); }
+.i-facts .v a { text-decoration: underline; text-decoration-color: var(--grid);
+                text-underline-offset: 3px; }
+.i-facts .v a:hover { text-decoration-color: currentColor; }
+
+/* The same rule, for a list where the left side is the thing and the right side
+   is when it happened — a visit trail, a list of buildings. */
+.i-rows { list-style: none; margin: 0; padding: 0; }
+.i-rows > li { display: flex; align-items: baseline; justify-content: space-between;
+               gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--grid); }
+.i-rows > li:last-child { border-bottom: none; }
+.i-rows .p { font-size: 12.5px; color: var(--ink-1); min-width: 0; }
+.i-rows .p .dim { color: var(--ink-3); }
+.i-rows .t { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; text-align: right;
+             font-variant-numeric: tabular-nums; }
+
+/* ── §5 buttons — the five, and no others on these three pages ────────────── */
+
+/* 5.1 The state toggle. The label is the state and the line under it is the
+   instruction, which is the whole reason it can be this large: it answers
+   "can I write to this person" before anything else on the page is read. */
+.i-state {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  border: none; border-radius: var(--r-xl); padding: 18px 22px;
+  font-size: 20px; font-weight: 600; letter-spacing: -.02em; color: #fff;
+  transition: filter .15s, transform .08s;
+}
+.i-state:hover { filter: brightness(1.06); }
+.i-state:active { transform: scale(.99); }
+.i-state .hint { display: block; margin-top: 4px; font-size: 12.5px; font-weight: 400; }
+.i-state.on  { background: var(--good-fill); }
+.i-state.off { background: var(--crit); }
+
+/* The same control at row size, for a person inside the company page's list.
+   Soft fill and coloured ink rather than a filled block — a list of eight
+   filled blocks is a list nobody can read a name out of. */
+.i-pill { cursor: pointer; border: none; border-radius: var(--r-pill);
+          padding: 5px 12px; font-size: 12.5px; font-weight: 600;
+          transition: filter .15s, transform .08s; }
+.i-pill:active { transform: scale(.97); }
+.i-pill:hover { filter: brightness(.97); }
+.i-pill.on  { background: var(--good-soft); color: var(--good-ink); }
+.i-pill.off { background: var(--crit-soft); color: var(--crit-ink); }
+
+/* 5.2 Action — anything that changes the world. */
+.i-act { border: none; border-radius: var(--r-pill); cursor: pointer;
+         padding: 8px 16px; font-size: 13.5px; font-weight: 600;
+         background: var(--crit); color: #fff;
+         transition: filter .15s, transform .08s; }
+.i-act:hover  { filter: brightness(1.1); }
+.i-act:active { transform: scale(.97); }
+.i-act.small  { padding: 6px 12px; font-size: 12.5px; }
+.i-act.done   { background: var(--good-soft); color: var(--good-ink); }
+/* Restart has no backend. Disabled and saying so beats a button that lies. */
+.i-act:disabled { background: var(--seg); color: var(--ink-2); cursor: not-allowed; filter: none; }
+.i-act:disabled:active { transform: none; }
+
+/* 5.3 Quiet action — copy, open in mail. */
+.i-quiet { border: none; border-radius: var(--r-pill); cursor: pointer;
+           padding: 8px 16px; font-size: 12.5px; font-weight: 600;
+           background: var(--seg); color: var(--ink-1); text-decoration: none;
+           display: inline-flex; align-items: center; transition: background .15s; }
+.i-quiet:hover { background: var(--grid); }
+
+/* 5.4 Commit — the one dark button per screen. */
+.i-commit { border: none; border-radius: var(--r-pill); cursor: pointer;
+            padding: 8px 16px; font-size: 12.5px; font-weight: 600;
+            background: var(--ink-1); color: var(--page); transition: opacity .15s; }
+.i-commit:hover { opacity: .9; }
+.i-commit.done { background: var(--good-soft); color: var(--good-ink); }
+
+.i-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.i-acts .push { margin-left: auto; }
+
+/* A control and its undo, side by side. Not .i-links: that row underlines
+   everything inside it, which would strip the pill of its fill. */
+.i-inline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            justify-content: flex-end; }
+.i-inline form { display: contents; }
+.i-inline .undo { background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+                  font-size: 12px; color: var(--ink-2); text-decoration: underline;
+                  text-decoration-color: var(--grid); text-underline-offset: 3px;
+                  transition: color .15s, text-decoration-color .15s; }
+.i-inline .undo:hover { color: var(--ink-1); text-decoration-color: currentColor; }
+
+/* 5.5 Sideways links. No arrows: an arrow promises the next step in a
+   sequence, and every one of these is a move to the side. */
+.i-links { display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+           font-size: 13.5px; color: var(--ink-2); }
+.i-links form { display: contents; }
+.i-links a, .i-links button {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit;
+  text-decoration: underline; text-decoration-color: var(--grid); text-underline-offset: 4px;
+  transition: color .15s, text-decoration-color .15s;
+}
+.i-links a:hover, .i-links button:hover { color: var(--ink-1); text-decoration-color: currentColor; }
+.i-links .danger:hover { color: var(--crit-ink); }
+.i-links .sep { color: var(--grid); }
+
+/* ── §6 chips — colour, shape and word, never colour alone ───────────────── */
+
+.i-chip { display: inline-flex; align-items: center; gap: 6px;
+          border-radius: var(--r-pill); padding: 4px 10px;
+          font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.i-chip .mark { width: 8px; height: 8px; flex: 0 0 auto; }
+.i-chip.done   { background: var(--good-soft); color: var(--good-ink); }
+.i-chip.done .mark   { border-radius: 50%; background: var(--good); }
+.i-chip.failed { background: var(--crit-soft); color: var(--crit-ink); }
+.i-chip.failed .mark { border-radius: 2px; background: var(--crit); }  /* square: not a dot */
+/* --ink-3 on --seg is 3.2:1 — one of the three pairs §9 names. --ink-2 is 7:1
+   and reads as the same quiet grey at this size. */
+.i-chip.none   { background: var(--seg); color: var(--ink-2); font-weight: 400; }
+.i-chip.none .mark   { border-radius: 50%; border: 1px solid var(--ink-3); background: none; }
+
+/* A finding, a hook, a reason — a fact with no verdict attached to it. */
+.i-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.i-tags span { font-size: 12px; color: var(--ink-2); background: var(--seg);
+               border-radius: var(--r-pill); padding: 3px 10px; min-width: 0;
+               max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.i-tags.empty span { background: none; border: 1px dashed var(--grid); color: var(--ink-3); }
+
+/* ── §6 the timeline ─────────────────────────────────────────────────────── */
+
+/* The same shape rule as the chips: a tick in a circle ran, a cross in a
+   rounded square failed, a dashed ring has not happened. Greyscale, projection
+   and every dichromacy read it the same way. */
+.i-tl { background: var(--surface-1); border: 1px solid var(--border);
+        border-radius: var(--r-xl); padding: 24px; }
+.i-tl ol { list-style: none; margin: 0; padding: 0; position: relative;
+           display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.i-tl ol::before { content: ""; position: absolute; left: 12.5%; right: 12.5%; top: 13px;
+                   height: 2px; border-radius: 1px; background: var(--grid); }
+.i-tl li { position: relative; display: grid; justify-items: center; gap: 2px;
+           text-align: center; padding: 0 6px; }
+.i-glyph { position: relative; z-index: 1; width: 28px; height: 28px; display: grid;
+           place-items: center; border-radius: 50%; box-shadow: 0 0 0 4px var(--surface-1); }
+.i-glyph svg { width: 16px; height: 16px; }
+.i-glyph.good { background: var(--good-fill); color: #fff; }
+.i-glyph.bad  { background: var(--crit); color: #fff; border-radius: var(--r-sm); }
+.i-glyph.todo { background: var(--surface-1); border: 2px dashed var(--axis); }
+/* Ran and produced nothing: a solid ring holding a dash. Solid separates it
+   from todo's dashed ring, and the dash separates it from a tick without
+   spending a third colour on it. */
+.i-glyph.none { background: var(--surface-1); border: 2px solid var(--axis); color: var(--ink-3); }
+.i-tl .lbl { font-size: 12.5px; font-weight: 600; color: var(--ink-1); margin-top: 9px; }
+.i-tl li.bad  .lbl { color: var(--crit-ink); }
+.i-tl li.todo .lbl { color: var(--ink-3); font-weight: 400; }
+.i-tl li.none .lbl { color: var(--ink-2); }
+.i-tl .when  { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.i-tl .tries { font-size: 11px; color: var(--ink-3); }
+.i-tl .why { margin-top: 20px; max-width: 62ch; }
+
+/* Under 600px four labelled dots on one line is four truncated words, so the
+   line turns and runs down the side instead. */
+@media (max-width: 600px) {
+  .i-tl { padding: 18px; }
+  .i-tl ol { grid-template-columns: 1fr; }
+  .i-tl ol::before { display: none; }
+  .i-tl li { grid-template-columns: 28px minmax(0, 1fr); justify-items: start;
+             text-align: left; gap: 0 14px; padding: 0 0 18px; }
+  .i-tl li:last-child { padding-bottom: 0; }
+  .i-tl li:not(:last-child)::before { content: ""; position: absolute; left: 13px;
+             top: 30px; bottom: 4px; width: 2px; background: var(--grid); }
+  .i-tl li > .i-glyph { grid-row: 1 / span 3; }
+  .i-tl .lbl, .i-tl .when, .i-tl .tries { grid-column: 2; }
+  .i-tl .lbl { margin-top: 4px; }
 }
 
-/* ── the card ────────────────────────────────────────────────────────────── */
+/* ── §7.3 the stat card — number first ───────────────────────────────────── */
 
-.lab-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
-  gap: 12px; margin-bottom: 8px;
+.i-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.i-stats + .i-stats { margin-top: 10px; }
+@media (max-width: 980px) { .i-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .i-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* A column rather than a block, so `.i-foot` can pin itself to the bottom. */
+.i-stat { display: flex; flex-direction: column; text-align: left; text-decoration: none;
+          color: inherit;
+          border: 1px solid var(--grid); border-radius: var(--r-lg);
+          background: var(--surface-1); padding: 16px;
+          transition: border-color .15s, background .15s, transform .08s; }
+a.i-stat { cursor: pointer; }
+a.i-stat:hover  { border-color: var(--axis); }
+a.i-stat:active { transform: scale(.99); }
+.i-stat.on { border-color: var(--s1); background: var(--s1-soft); }
+.i-stat .num { display: block; }
+.i-stat .num.good { color: var(--good-ink); }
+.i-stat .num.bad  { color: var(--crit-ink); }
+.i-stat .i-label { display: block; margin-top: 7px; }
+.i-stat .i-note  { display: block; margin-top: 5px; line-height: 1.4; }
+/* The remainder, across a hairline: what the figure above is *not*. A column
+   with margin-top:auto on the last line, so the footers sit on one level across
+   the row however many lines the notes above them take. */
+.i-foot { display: block; margin-top: auto; padding-top: 10px; font-size: 11.5px;
+          line-height: 1.4; color: var(--ink-3); border-top: 1px solid var(--grid); }
+
+/* ── §7.5 the funnel, on /inbound/system ─────────────────────────────────── */
+
+/* Steps down one card, separated by hairlines like every other list in this
+   section — not seven cards, which would read as seven unrelated facts when the
+   whole point is that each one is a share of the step above it. */
+.i-steps { display: grid; gap: 0; }
+.i-step { padding: 16px 0; border-bottom: 1px solid var(--grid); }
+.i-step:first-child { padding-top: 0; }
+.i-step:last-child { border-bottom: none; padding-bottom: 0; }
+.i-step .head { display: flex; align-items: baseline; justify-content: space-between;
+                gap: 16px; margin-bottom: 9px; }
+.i-step .lbl { font-size: 13.5px; font-weight: 600; color: var(--ink-1); }
+.i-step .fig { font-size: 16px; font-weight: 600; white-space: nowrap;
+               font-variant-numeric: tabular-nums; }
+.i-step .fig.bad { color: var(--crit-ink); }
+.i-step .fig .of { font-size: 12.5px; font-weight: 400; color: var(--ink-3); }
+.i-step .i-note { display: block; margin-top: 8px; line-height: 1.5; max-width: 72ch; }
+.i-step .i-rows { margin-top: 8px; padding-left: 14px; border-left: 2px solid var(--grid); }
+.i-step .i-rows > li { padding: 5px 0; border-bottom: none; }
+
+/* The bar is the whole argument: seven numbers in a column read as seven facts,
+   and the same seven with a width read as a drop. min-width keeps a 0.2% step
+   visible as a sliver rather than vanishing into the track. */
+.i-bar { height: 8px; border-radius: var(--r-pill); background: var(--seg); overflow: hidden; }
+.i-bar i { display: block; height: 100%; min-width: 3px; border-radius: var(--r-pill);
+           background: var(--s1); }
+.i-bar i.bad { background: var(--crit); }
+
+/* ── the queue ───────────────────────────────────────────────────────────── */
+
+/* Pill trough, pill thumb — the same control as globals' .seg, on this page's
+   radius family. */
+.i-seg { display: inline-flex; background: var(--seg); border-radius: var(--r-pill);
+         padding: 3px; gap: 2px; flex-wrap: wrap; }
+.i-seg a { border-radius: var(--r-pill); padding: 6px 14px; font-size: 13px;
+           color: var(--ink-2); display: inline-flex; align-items: center;
+           transition: background .16s, color .16s; }
+.i-seg a:hover { color: var(--ink-1); }
+.i-seg a.on { background: var(--surface-1); color: var(--ink-1); font-weight: 600;
+              box-shadow: var(--seg-on); }
+.i-segrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* The controls and the way down the page are one band, so the 32px page rhythm
+   sits around the pair rather than between them. */
+.i-controls { display: grid; gap: 14px; }
+.i-jump b { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* A lane that lands hard against the top edge reads as the top of the page.
+   scroll-margin gives the heading somewhere to sit. */
+.i-page section[id] { scroll-margin-top: 20px; }
+
+.i-reps { display: flex; flex-wrap: wrap; gap: 8px; }
+.i-rep { display: inline-flex; align-items: center; gap: 10px; color: inherit;
+         border: 1px solid var(--border); border-radius: var(--r-pill);
+         background: var(--surface-1); padding: 5px 16px 5px 5px;
+         transition: border-color .16s, background .16s; }
+.i-rep:hover { border-color: var(--axis); }
+.i-rep.on { border-color: var(--s1); background: var(--s1-soft); }
+.i-rep i { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%; display: grid;
+           place-items: center; font-style: normal; font-size: 11px; font-weight: 600;
+           letter-spacing: .02em; color: var(--ink-1); }
+.i-rep .nm  { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+/* margin:0 is load-bearing. globals' `.sub` is the page-subtitle class and
+   carries `margin: 0 0 20px`; this selector only outranks it on the properties
+   it names, so without this the pill held 20px of dead space under the text and
+   the name sat 10px above the avatar it is meant to line up with. */
+.i-rep .sub { display: block; margin: 0; font-size: 12px; color: var(--ink-2);
+              line-height: 1.3; font-variant-numeric: tabular-nums; }
+
+.i-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+/* The wrapper is the card and the anchor is most of it. A <form> or a <button>
+   inside an <a> is invalid HTML and the browser resolves it by dropping one of
+   the two, so the failure block and the lane control are siblings of the link
+   rather than children of it. */
+.i-cowrap { display: flex; flex-direction: column; min-width: 0;
+            background: var(--surface-1); border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            transition: transform .18s cubic-bezier(.22,.8,.3,1), box-shadow .18s, border-color .18s;
+            animation: fadeUp .5s cubic-bezier(.22,.8,.3,1) both; }
+.i-cowrap:hover { transform: translateY(-2px); border-color: var(--axis); box-shadow: var(--lift); }
+/* Half-strength, because a card outlined in full --crit reads as an alarm and
+   these are only companies whose research crashed. */
+.i-cowrap.failed { border-color: color-mix(in srgb, var(--crit) 50%, transparent); }
+.i-co { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0;
+        padding: 18px; color: inherit; text-decoration: none; }
+.i-cofoot { display: grid; gap: 12px; padding: 0 18px 14px; }
+.i-cofoot .i-links { justify-content: flex-end; }
+.i-co .top { display: flex; align-items: flex-start; gap: 10px; }
+.i-co .nm { font-size: 18px; font-weight: 600; letter-spacing: -.01em; line-height: 1.25; }
+.i-co .top .i-chip { margin-left: auto; }
+.i-co .who { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.i-co .who b { color: var(--ink-1); font-weight: 600; }
+.i-co .who .dim { color: var(--ink-3); }
+/* Four labels and four values on one rule, so every card answers the same four
+   questions in the same four places. */
+.i-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+           margin-top: auto; padding-top: 12px; border-top: 1px solid var(--grid); }
+/* "Visited from" takes two lines and the other three take one. Pinning the
+   values to the bottom of the row keeps them on one baseline instead of
+   stepping down under the longer label. */
+.i-strip > div { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
+.i-strip .v { font-size: 12.5px; color: var(--ink-1); margin-top: 3px;
+              font-variant-numeric: tabular-nums;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.i-strip .v.dim { color: var(--ink-3); }
+.i-strip .rep { display: inline-flex; align-items: center; gap: 5px; }
+.i-strip .rep i { width: 16px; height: 16px; border-radius: 50%; display: inline-grid;
+                  place-items: center; font-style: normal; font-size: 8px; font-weight: 600;
+                  color: var(--ink-1); }
+
+.i-empty { border: 1px dashed var(--grid); border-radius: var(--r-lg); padding: 22px;
+           color: var(--ink-2); font-size: 13.5px; line-height: 1.6; background: var(--page); }
+.i-empty b { color: var(--ink-1); font-weight: 600; }
+.i-empty a { text-decoration: underline; text-decoration-color: var(--grid);
+             text-underline-offset: 3px; }
+
+/* Nobody found is a failure of the pipeline, not a quiet result, and it says so
+   in the one colour that means stop. */
+.i-nobody .head { font-size: 14px; font-weight: 600; color: var(--crit-ink); }
+.i-nobody .tail { font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-top: 6px; }
+.i-nobody .i-act { margin-top: 12px; }
+
+/* ── the person list on a company page ───────────────────────────────────── */
+
+.i-per { padding: 14px 0; border-bottom: 1px solid var(--grid); }
+.i-per:first-child { padding-top: 0; }
+.i-per:last-child { border-bottom: none; padding-bottom: 0; }
+.i-perhead { display: flex; align-items: flex-start; gap: 12px; }
+.i-perhead .who { flex: 1; min-width: 0; }
+.i-perhead .nm { font-size: 14px; font-weight: 600; color: var(--ink-1);
+                 text-decoration: underline; text-decoration-color: transparent;
+                 text-underline-offset: 4px; transition: text-decoration-color .15s; }
+.i-perhead a:hover .nm { text-decoration-color: currentColor; }
+.i-perhead .tt { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+.i-perhead .tt b { font-weight: 600; }
+.i-perhead .tt b.ok { color: var(--good-ink); }
+.i-perhead .tt b.no { color: var(--crit-ink); }
+.i-perside { display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+             flex: 0 0 auto; }
+.i-rank { display: inline-flex; gap: 4px; }
+.i-rank form { display: inline; }
+.i-rank button { width: 24px; height: 24px; padding: 0; line-height: 1; cursor: pointer;
+                 border: none; border-radius: var(--r-pill); background: var(--seg);
+                 color: var(--ink-2); font-size: 12px; transition: background .15s, color .15s; }
+.i-rank button:hover:not(:disabled) { background: var(--grid); color: var(--ink-1); }
+.i-rank button:disabled { opacity: .35; cursor: default; }
+
+/* A draft opens behind a word, not behind a chevron pointing at nothing. */
+.i-show > summary { list-style: none; cursor: pointer; font-size: 12.5px; color: var(--ink-2);
+                    padding: 8px 0 0; text-decoration: underline;
+                    text-decoration-color: var(--grid); text-underline-offset: 4px; }
+.i-show > summary::-webkit-details-marker { display: none; }
+.i-show > summary:hover { color: var(--ink-1); text-decoration-color: currentColor; }
+.i-show[open] > summary { color: var(--ink-1); }
+.i-show .body { animation: slideDown .22s cubic-bezier(.22,.8,.3,1) both; margin-top: 10px; }
+.i-quote { background: var(--page); border-radius: var(--r); padding: 12px 14px;
+           min-width: 0; overflow: hidden; }
+.i-quote .subj { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.i-quote pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0;
+               font: inherit; font-size: 12.5px; line-height: 1.55; color: var(--ink-2);
+               max-height: 300px; overflow: auto; }
+.i-quote .borrowed { font-size: 12px; color: var(--ink-3); line-height: 1.45; margin-bottom: 6px; }
+
+/* ── the draft, on the person page ───────────────────────────────────────── */
+
+.i-mail input, .i-mail textarea {
+  width: 100%; font: inherit; font-size: 13.5px; line-height: 1.55;
+  color: var(--ink-1); background: var(--page);
+  border: 1px solid var(--grid); border-radius: var(--r-lg); padding: 11px 14px;
+  transition: border-color .15s, box-shadow .15s; resize: vertical;
 }
-
-.lab-card {
-  display: flex; flex-direction: column; gap: 9px;
-  background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
-  padding: 15px 16px 13px; color: inherit; text-decoration: none;
-  animation: fadeUp .5s cubic-bezier(.22,.8,.3,1) both;
-  transition: transform .18s cubic-bezier(.22,.8,.3,1), box-shadow .18s, border-color .18s;
+.i-mail input { font-weight: 600; }
+.i-mail textarea { min-height: 300px; }
+.i-mail input:focus, .i-mail textarea:focus {
+  outline: none; border-color: var(--s1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s1) 16%, transparent);
 }
-.lab-card:hover { transform: translateY(-3px); border-color: var(--axis); box-shadow: var(--lift); }
-
-/* A company is not a person with fields missing, so it does not wear the
-   person card's dashed "incomplete" treatment — it is a different thing, and
-   the accent on the left says so without spending a colour. */
-.lab-card.co { border-left: 3px solid var(--axis); }
-
-.lab-top { display: flex; align-items: flex-start; gap: 8px; }
-.lab-name { font-size: 16.5px; font-weight: 640; letter-spacing: -.01em; line-height: 1.25; }
-.lab-marks { margin-left: auto; display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
-
-.lab-who { font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
-.lab-who a { color: inherit; }
-.lab-where { font-size: 12.5px; color: var(--ink-3); }
-.lab-where .basis { color: var(--ink-3); opacity: .8; }
-
-/* The visit line gets its own weight: it is the reason anyone is looking. */
-.lab-visit {
-  font-size: 13.5px; color: var(--ink-1); font-variant-numeric: tabular-nums;
-  display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline;
-}
-.lab-visit .page { color: var(--ink-2); }
-.lab-visit .when { color: var(--ink-3); }
-.lab-visit.none { color: var(--ink-3); }
-
-/* Present on every card, so the row of cards reads as one thing. */
-.lab-hooks { display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
-.lab-hooks span {
-  font-size: 12px; color: var(--ink-2); background: var(--wash);
-  border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px;
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.lab-hooks.empty span {
-  background: transparent; border-style: dashed; color: var(--ink-3);
-}
+.i-mail .i-label { display: block; margin: 0 0 6px; }
+.i-mail .field + .field { margin-top: 14px; }
 
 .lab-draft {
   border: 1px solid var(--border); border-left: 3px solid var(--good);
@@ -94,19 +504,6 @@
 }
 
 
-.lab-foot {
-  margin-top: auto; padding-top: 9px; border-top: 1px solid var(--grid);
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  font-size: 12.5px; color: var(--ink-3);
-}
-.lab-foot .mail { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; }
-.lab-foot .rep { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; }
-.lab-foot .rep i {
-  width: 18px; height: 18px; border-radius: 50%; display: inline-flex;
-  align-items: center; justify-content: center; font-size: 9px; font-weight: 700;
-  font-style: normal; letter-spacing: .02em; color: var(--ink-1);
-}
-
 /* ── badges ──────────────────────────────────────────────────────────────── */
 
 .lab-b {
@@ -114,11 +511,7 @@
   border-radius: 6px; padding: 2px 7px; border: 1px solid var(--border); color: var(--ink-2);
   white-space: nowrap;
 }
-.lab-b.visited { border-color: var(--good); color: var(--good); }
-.lab-b.anon { border-style: dashed; }
 .lab-b.ready { background: var(--good); border-color: var(--good); color: #fff; }
-.lab-b.blocked { background: var(--warn-soft); border-color: var(--warn); color: var(--warn-ink); }
-.lab-b.sent { border-color: var(--axis); color: var(--ink-3); }
 
 /* ── empty ───────────────────────────────────────────────────────────────── */
 
@@ -128,191 +521,8 @@
 }
 .lab-empty b { color: var(--ink-2); font-weight: 600; }
 
-/* ── dossier ─────────────────────────────────────────────────────────────── */
-
-.lab-two { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
-.lab-right { position: sticky; top: 18px; display: grid; gap: 12px; min-width: 0; }
-@media (max-width: 900px) {
-  .lab-two { grid-template-columns: 1fr; }
-  .lab-right { position: static; order: -1; }
-}
-
-.lab-sec { margin-bottom: 18px; }
-
-.lab-h4 {
-  font-size: 12px; letter-spacing: .07em; text-transform: uppercase;
-  color: var(--ink-3); margin: 16px 0 8px; font-weight: 600;
-}
-
-/* Prose inside a box: the summary, a reason, an empty note. */
-.lab-flat { font-size: 14px; line-height: 1.6; color: var(--ink-2); margin: 0 0 4px; max-width: 74ch; }
-.lab-flat b { color: var(--ink-1); font-weight: 600; }
-
-/* The long lists — every building, every law — open on demand rather than
-   turning a dossier into a report. Native disclosure, no state to manage. */
-.lab-more { margin-top: 14px; border-top: 1px solid var(--grid); }
-.lab-more > summary {
-  list-style: none; cursor: pointer; padding: 10px 0 2px;
-  font-size: 13px; font-weight: 620; color: var(--ink-2);
-  display: flex; align-items: center; gap: 6px;
-}
-.lab-more > summary::-webkit-details-marker { display: none; }
-.lab-more > summary:hover { color: var(--ink-1); }
-.lab-more .chev { color: var(--ink-3); transition: transform .18s cubic-bezier(.22,.8,.3,1); }
-.lab-more[open] > summary .chev { transform: rotate(90deg); }
-.lab-more-body { animation: slideDown .22s cubic-bezier(.22,.8,.3,1) both; padding-bottom: 4px; }
-
-.lab-trail { display: grid; gap: 0; list-style: none; margin: 0; padding: 0; }
-.lab-trail li {
-  display: flex; gap: 10px; align-items: baseline; padding: 7px 0;
-  border-bottom: 1px solid var(--grid); font-size: 13.5px;
-}
-.lab-trail li:last-child { border-bottom: none; }
-.lab-trail .page { flex: 1; color: var(--ink-1); }
-.lab-trail .when { color: var(--ink-3); font-variant-numeric: tabular-nums; }
-
-/* Research reads as a list of facts, never as a block of prose. One fact per
-   line, the model's own sentences underneath in a quieter voice. */
-.lab-bul { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 9px; }
-.lab-bul > li {
-  font-size: 14px; line-height: 1.55; color: var(--ink-1);
-  padding-left: 16px; position: relative; max-width: 74ch;
-}
-.lab-bul > li::before {
-  content: ""; position: absolute; left: 3px; top: .62em;
-  width: 5px; height: 5px; border-radius: 50%; background: var(--axis);
-}
-.lab-bul > li b { font-weight: 640; }
-.lab-bul .said {
-  font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-top: 3px;
-  border-left: 2px solid var(--grid); padding-left: 9px;
-}
-.lab-bul .src { font-size: 12px; margin-left: 2px; }
-
-.lab-quote {
-  font-size: 13.5px; color: var(--ink-2); line-height: 1.6; margin: 0 0 4px;
-  border-left: 2px solid var(--grid); padding-left: 10px;
-}
-
-.lab-box { min-width: 0; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 15px 16px; }
-.lab-box h3 {
-  font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--ink-3); margin: 0 0 10px; font-weight: 600;
-}
-
-.lab-mail textarea, .lab-mail input {
-  width: 100%; font: inherit; font-size: 13.5px; line-height: 1.55;
-  color: var(--ink-1); background: var(--page);
-  border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px;
-  resize: vertical;
-}
-.lab-mail input { font-weight: 620; margin-bottom: 8px; }
-.lab-mail textarea { min-height: 260px; }
-.lab-mail textarea:focus, .lab-mail input:focus { outline: none; border-color: var(--axis); }
-
-.lab-acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.lab-acts button, .lab-acts a {
-  height: 34px; padding: 0 14px; border-radius: 9px; font: inherit; font-size: 13.5px;
-  font-weight: 600; border: 1px solid var(--border); background: var(--surface-1);
-  color: var(--ink-1); cursor: pointer; display: inline-flex; align-items: center;
-  text-decoration: none; transition: transform .16s, background .16s, border-color .16s;
-}
-.lab-acts button:hover, .lab-acts a:hover { background: var(--wash-2); border-color: var(--axis); transform: translateY(-1px); }
-.lab-acts button.go { background: var(--ink-1); border-color: var(--ink-1); color: var(--page); }
-.lab-acts button.go:hover { background: var(--ink-1); opacity: .9; }
-.lab-acts button.done { background: var(--good); border-color: var(--good); color: #fff; }
-
-
-/* One person on a company page. The whole header block is the link, so opening
-   someone is one click — the draft toggle underneath is a separate action. */
-.lab-per { border-bottom: 1px solid var(--grid); padding-bottom: 4px; }
-.lab-per:last-of-type { border-bottom: none; }
-.lab-perhead {
-  display: flex; align-items: center; gap: 10px; padding: 11px 10px 11px 0;
-  text-decoration: none; color: inherit; border-radius: 9px;
-  transition: background .16s, padding-left .16s;
-}
-.lab-perhead:hover { background: var(--wash); padding-left: 8px; }
-.lab-per .nm { flex: 1; color: var(--ink-1); font-weight: 620; font-size: 14px; }
-.lab-per .tt { display: block; font-size: 12.5px; font-weight: 400; color: var(--ink-3); margin-top: 2px; }
-.lab-per .tt b { font-weight: 600; }
-.lab-per .tt b.ok { color: var(--good); }
-.lab-per .tt b.no { color: var(--warn-ink); }
-.lab-per .go { color: var(--ink-3); font-size: 14px; }
-.lab-perhead:hover .go { color: var(--ink-1); }
-.lab-per .lab-more { margin-top: 0; border-top: none; }
-.lab-per .lab-more > summary { padding: 2px 0 8px; font-size: 12.5px; color: var(--ink-3); }
-
-/* The counts, given their own weight — they are the reason to look twice. */
-.lab-bul.num > li { font-variant-numeric: tabular-nums; font-weight: 600; }
-.lab-bul.num > li::before { background: var(--ink-1); }
-.lab-per .lab-draft { margin-bottom: 10px; }
-.lab-draft .borrowed {
-  font-size: 12px; color: var(--warn-ink); margin-bottom: 6px; line-height: 1.45;
-}
-
 .lab-receipt { font-size: 12.5px; color: var(--ink-3); line-height: 1.55; margin-top: 10px; }
 .lab-receipt b { color: var(--ink-2); font-weight: 600; }
-
-/* ------------------------------------------------------- hand controls
-   Reorder a person, overrule a verdict, move a company between lanes.
-   Each one is a <form> posting to a server action, so none of this needs
-   client JavaScript — the copy button on a draft is still the only one. */
-
-/* The card became a wrapper the day it grew a button: a <form> cannot live
-   inside the <a>, so the anchor and the actions are siblings and the wrapper
-   carries the entry animation they used to share. */
-.lab-cardwrap {
-  display: flex; flex-direction: column;
-  animation: fadeUp .5s cubic-bezier(.22,.8,.3,1) both;
-}
-.lab-cardwrap > .lab-card { animation: none; }
-
-.lab-cardacts { display: flex; justify-content: flex-end; padding: 6px 4px 0; }
-
-/* On a person row the controls sit above the name, right-aligned, so they never
-   push the name off its own baseline. */
-.lab-perbar {
-  display: flex; align-items: center; justify-content: flex-end; gap: 6px;
-  padding: 6px 0 0;
-}
-
-.lab-rank { display: inline-flex; gap: 3px; }
-.lab-rank form { display: inline; }
-.lab-rank button {
-  width: 24px; height: 24px; padding: 0; line-height: 1;
-  border: 1px solid var(--border); border-radius: 7px;
-  background: var(--surface-1); color: var(--ink-2);
-  font-size: 12px; cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s;
-}
-.lab-rank button:hover:not(:disabled) {
-  background: var(--wash); border-color: var(--axis); color: var(--ink-1);
-}
-/* Disabled rather than hidden: a control that disappears at the top of a list
-   reads as a rendering bug, not as "already first". */
-.lab-rank button:disabled { opacity: .35; cursor: default; }
-
-.lab-toggle { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
-.lab-toggle form { display: inline; }
-.lab-toggle button {
-  padding: 3px 9px; border-radius: 7px; cursor: pointer;
-  border: 1px solid var(--border); background: var(--surface-1);
-  font-size: 11.5px; font-weight: 560; color: var(--ink-2);
-  transition: background .15s, border-color .15s, color .15s;
-}
-.lab-toggle button:hover { border-color: var(--axis); background: var(--wash); color: var(--ink-1); }
-.lab-toggle button.on:hover { border-color: var(--good); color: var(--good); }
-.lab-toggle button.off:hover { border-color: var(--serious); color: var(--serious); }
-.lab-toggle button.plain { border-color: transparent; color: var(--ink-3); font-weight: 460; }
-
-/* A failed write says so where the click happened rather than silently doing
-   nothing — the actions redirect back with ?err= and this is where it lands. */
-.lab-err {
-  border: 1px solid var(--serious); border-radius: 10px;
-  background: var(--wash); color: var(--serious);
-  padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px;
-}
 
 /* ---- the drafts list ----------------------------------------------------
    One <details> per draft. Native disclosure rather than state, for the same

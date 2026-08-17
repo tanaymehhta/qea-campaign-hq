@@ -1,5 +1,5 @@
 import { num } from "../../lib/db";
-import { accountType, bullets, tidy } from "../../lib/inbound/words";
+import { accountType, bullets, tidy, isApiError } from "../../lib/inbound/words";
 
 /**
  * The research, inline and in bullets.
@@ -8,6 +8,10 @@ import { accountType, bullets, tidy } from "../../lib/inbound/words";
  * reads that with a phone in their hand, so nothing here is a paragraph: the
  * facts that carry the pitch are their own lines, and the prose the model wrote
  * is split at its sentence ends and stacked underneath.
+ *
+ * Each fact is a line with a rule down its left rather than a dot beside it.
+ * A dot is punctuation; a rule is a card, and these are the things a rep quotes
+ * on a call — they should look like something you can pick up.
  *
  * The same block renders on a person and on a company, because it answers the
  * same question in both places: why would this account care.
@@ -25,12 +29,25 @@ function placesOf(buildings) {
   return ` — ${top.join(", ")}${seen.size > 3 ? ` and ${seen.size - 3} more` : ""}`;
 }
 
+/** A group of findings, one rule per finding. */
+function Lines({ items, className = "" }) {
+  return (
+    <ul className={`i-lbs${className ? ` ${className}` : ""}`}>
+      {items.map((t, i) => <li className="i-lb" key={i}>{t}</li>)}
+    </ul>
+  );
+}
+
 export function Research({ company, buildings = [], hits = [], signals = [],
                            people = [], visits = [], drafts = [] }) {
   if (!company) return null;
 
   const type = accountType(company.account_type);
-  const back = bullets(company.summary, 10);
+  // `summary` catches the same 402 that `account_type_reason` does — the run
+  // writes the failure into both. Bulleting a stack trace under "Background"
+  // is the same mistake as bulleting it under "why it decided that"; the
+  // company page says plainly that research failed, and this stays quiet.
+  const back = isApiError(company.summary) ? [] : bullets(company.summary, 10);
   const scale = bullets(company.portfolio_scale, 3);
 
   // The counts the pipeline already holds. They were only ever implied — a
@@ -82,119 +99,137 @@ export function Research({ company, buildings = [], hits = [], signals = [],
     facts.push(`Publishes a sustainability report — most recent ${company.sustainability_report_year}`);
   }
 
+  const head = (
+    <div className="i-sec">
+      {/* "Research — Acme" on a person's page reads as research about that
+          person. Every row in this block is keyed on company_id — the
+          buildings, the compliance hits, the intent signals — and is
+          byte-identical for everyone at the same company. */}
+      <h2 className="i-h2">About the company</h2>
+      <span className="line" />
+    </div>
+  );
+
   if (!facts.length && !back.length && !signals.length && !tallies.length) {
     return (
-      <div className="lab-box lab-sec">
-        <h3>Research — {company.name}</h3>
-        <p className="lab-flat">
-          Nothing researched yet. Status is <b>{(company.research_status ?? "unknown").replace(/_/g, " ")}</b>.
-        </p>
-      </div>
+      <section>
+        {head}
+        <div className="i-card">
+          <p className="i-body" style={{ margin: 0, color: "var(--ink-2)" }}>
+            Nothing researched yet. Status is{" "}
+            <b>{(company.research_status ?? "unknown").replace(/_/g, " ")}</b>.
+          </p>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="lab-box lab-sec">
-      <h3>Research — {company.name}</h3>
+    <section>
+      {head}
+      <div className="i-card" style={{ display: "grid", gap: 18 }}>
+        {tallies.length ? <Lines items={tallies} className="num" /> : null}
+        {facts.length ? <Lines items={facts} /> : null}
 
-      {tallies.length ? (
-        <ul className="lab-bul num">{tallies.map((t, i) => <li key={i}>{t}</li>)}</ul>
-      ) : null}
-
-      {facts.length ? <ul className="lab-bul">{facts.map((f, i) => <li key={i}>{f}</li>)}</ul> : null}
-
-      {signals.length ? (
-        <>
-          <h4 className="lab-h4">What they have said publicly</h4>
-          <ul className="lab-bul">
-            {signals.slice(0, 4).map((s) => (
-              <li key={s.id}>
-                <b>{tidy(s.claim_or_target ?? s.signal_type)}</b>
-                {s.target_year ? ` by ${s.target_year}` : ""}
-                {s.quote ? <div className="said">&ldquo;{tidy(s.quote).slice(0, 180)}&rdquo;</div> : null}
-                {s.source_url ? (
-                  <a className="src" href={s.source_url} target="_blank" rel="noreferrer">source</a>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      {back.length ? (
-        <>
-          <h4 className="lab-h4">Background</h4>
-          <ul className="lab-bul">{back.slice(0, 4).map((b, i) => <li key={i}>{b}</li>)}</ul>
-          {back.length > 4 ? (
-            <details className="lab-more">
-              <summary>{back.length - 4} more<span className="chev">&rsaquo;</span></summary>
-              <div className="lab-more-body">
-                <ul className="lab-bul">{back.slice(4).map((b, i) => <li key={i}>{b}</li>)}</ul>
-              </div>
-            </details>
-          ) : null}
-        </>
-      ) : null}
-
-      {hits.length ? (
-        <details className="lab-more">
-          <summary>Which laws, and what each one asks for — {num(hits.length)}<span className="chev">&rsaquo;</span></summary>
-          <div className="lab-more-body">
-            <ul className="lab-bul">
-              {[...biting, ...unknown, ...reporting].map((h) => (
-                <li key={h.id}>
-                  <b>{h.rule_name}</b>
-                  {h.jurisdiction ? <span className="dim"> · {h.jurisdiction}</span> : null}
-                  {/* Whether it bites, said before what it asks for — it is the
-                      difference between a deadline and a bill. */}
-                  <span className={h.rule?.has_teeth ? "lab-b" : "lab-b dim"}>
-                    {h.rule?.has_teeth ? "has penalties"
-                      : h.rule ? "reporting only" : "penalties not checked"}
-                  </span>
-                  {h.rule?.must_do ? <div className="said">They must {h.rule.must_do}.</div> : null}
-                  {h.summary ? <div className="said">{tidy(h.summary)}</div> : null}
-                  {(h.source_urls ?? []).slice(0, 1).map((u, i) => (
-                    <a className="src" key={i} href={u} target="_blank" rel="noreferrer">source</a>
-                  ))}
+        {signals.length ? (
+          <div>
+            <div className="i-label" style={{ marginBottom: 8 }}>What they have said publicly</div>
+            <ul className="i-lbs">
+              {signals.slice(0, 4).map((s) => (
+                <li className="i-lb" key={s.id}>
+                  <b>{tidy(s.claim_or_target ?? s.signal_type)}</b>
+                  {s.target_year ? ` by ${s.target_year}` : ""}
+                  {s.quote ? <div className="said">&ldquo;{tidy(s.quote).slice(0, 180)}&rdquo;</div> : null}
+                  {s.source_url ? (
+                    <div className="said">
+                      <a className="src" href={s.source_url} target="_blank" rel="noreferrer">source</a>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
           </div>
-        </details>
-      ) : null}
+        ) : null}
 
-      {buildings.length ? (
-        <details className="lab-more">
-          <summary>Every building — {num(buildings.length)}<span className="chev">&rsaquo;</span></summary>
-          <div className="lab-more-body">
-            <ul className="lab-trail">
-              {buildings.map((b) => (
-                <li key={b.id}>
-                  <span className="page">
-                    {b.name || b.address || "unnamed"}
-                    {b.address && b.name ? <span className="dim"> · {b.address}</span> : null}
-                  </span>
-                  <span className="when">
-                    {[b.city, b.state].filter(Boolean).join(", ")}
-                    {b.size_hint ? ` · ${b.size_hint}` : ""}
-                    {b.year_built ? ` · ${b.year_built}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
+        {back.length ? (
+          <div>
+            <div className="i-label" style={{ marginBottom: 8 }}>Background</div>
+            <Lines items={back.slice(0, 4)} />
+            {back.length > 4 ? (
+              <details className="i-show">
+                <summary>{back.length - 4} more</summary>
+                <div className="body"><Lines items={back.slice(4)} /></div>
+              </details>
+            ) : null}
           </div>
-        </details>
-      ) : null}
+        ) : null}
 
-      {company.sustainability_report_url ? (
-        <p className="lab-receipt">
-          <b>Their sustainability report:</b>{" "}
-          <a href={company.sustainability_report_url} target="_blank" rel="noreferrer">
-            {company.sustainability_program_name || "read it"}
-            {company.sustainability_report_year ? ` (${company.sustainability_report_year})` : ""}
-          </a>
-        </p>
-      ) : null}
-    </div>
+        {hits.length ? (
+          <details className="i-show">
+            <summary>Which laws, and what each one asks for — {num(hits.length)}</summary>
+            <div className="body">
+              <ul className="i-lbs">
+                {[...biting, ...unknown, ...reporting].map((h) => (
+                  <li className="i-lb" key={h.id}>
+                    <b>{h.rule_name}</b>
+                    {h.jurisdiction ? <span className="said" style={{ display: "inline", marginLeft: 6 }}>{h.jurisdiction}</span> : null}
+                    {/* Whether it bites, said before what it asks for — it is the
+                        difference between a deadline and a bill. The square mark
+                        is the one that costs money. */}
+                    {" "}
+                    <span className={h.rule?.has_teeth ? "i-chip failed" : "i-chip none"}>
+                      <span className="mark" />
+                      {h.rule?.has_teeth ? "has penalties"
+                        : h.rule ? "reporting only" : "penalties not checked"}
+                    </span>
+                    {h.rule?.must_do ? <div className="said">They must {h.rule.must_do}.</div> : null}
+                    {h.summary ? <div className="said">{tidy(h.summary)}</div> : null}
+                    {(h.source_urls ?? []).slice(0, 1).map((u, i) => (
+                      <div className="said" key={i}>
+                        <a className="src" href={u} target="_blank" rel="noreferrer">source</a>
+                      </div>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        ) : null}
+
+        {buildings.length ? (
+          <details className="i-show">
+            <summary>Every building — {num(buildings.length)}</summary>
+            <div className="body">
+              <ul className="i-rows">
+                {buildings.map((b) => (
+                  <li key={b.id}>
+                    <span className="p">
+                      {b.name || b.address || "unnamed"}
+                      {b.address && b.name ? <span className="dim"> · {b.address}</span> : null}
+                    </span>
+                    <span className="t">
+                      {[b.city, b.state].filter(Boolean).join(", ")}
+                      {b.size_hint ? ` · ${b.size_hint}` : ""}
+                      {b.year_built ? ` · ${b.year_built}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        ) : null}
+
+        {company.sustainability_report_url ? (
+          <div className="i-links">
+            <span className="i-note">Their sustainability report</span>
+            <span className="sep">·</span>
+            <a href={company.sustainability_report_url} target="_blank" rel="noreferrer">
+              {company.sustainability_program_name || "read it"}
+              {company.sustainability_report_year ? ` (${company.sustainability_report_year})` : ""}
+            </a>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }

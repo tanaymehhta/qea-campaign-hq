@@ -21,6 +21,26 @@
      surface: no two are confusable, in normal vision or under any of the three
      dichromacies. Do not add a fifth — the tail wears --cat-n. */
   --cat-1:#b5124f; --cat-2:#2a78d6; --cat-3:#eb6834; --cat-4:#12a05e; --cat-n:#898781;
+  /* Soft tints. Each meaning colour paired with a wash of itself over the page,
+     so the wash can be a background while the strong colour carries the text.
+     --warn-soft already exists above and stays as it is; --warn is never text. */
+  --good-soft:color-mix(in srgb,var(--good) 12%,var(--page));
+  --crit-soft:color-mix(in srgb,var(--crit) 12%,var(--page));
+  --s1-soft:color-mix(in srgb,var(--s1) 12%,var(--page));
+  /* One radius family, stepped by size. Same values the components already
+     hardcode — 10px for a control, 14px for a card — plus the two larger steps
+     the inbound pages want. No theme twin: a radius is not a colour. */
+  --r:14px; --r-sm:10px; --r-lg:18px; --r-xl:22px; --r-pill:999px;
+  /* The ink twin of a meaning colour, for the same reason --warn-ink exists:
+     --good and --crit are fills, and both fail 4.5:1 as text on their own soft
+     wash. Mixed toward --ink-1 they resolve per theme without a twin — --ink-1
+     is near-black in light and white in dark, so the same declaration deepens
+     the colour on paper and lifts it on the dark surface. */
+  --good-ink:color-mix(in srgb,var(--good) 70%,var(--ink-1));
+  --crit-ink:color-mix(in srgb,var(--crit) 78%,var(--ink-1));
+  /* A green dark enough to carry white 12.5px type. --good itself is 3.4:1
+     against white — fine for a 20px label, not for the line under it. */
+  --good-fill:color-mix(in srgb,var(--good) 78%,var(--ink-1));
 }
 [data-theme="dark"]{
   color-scheme:dark;
@@ -36,6 +56,14 @@
   /* Dark is stepped, not flipped: only the orange moves, because #eb6834 sits a
      hair above the dark lightness band. Re-validated all-pairs on #1a1a19. */
   --cat-3:#e86530;
+  /* A 12% wash vanishes on #0d0d0d; 22% reads as a tint without reading as a fill. */
+  --good-soft:color-mix(in srgb,var(--good) 22%,var(--page));
+  --crit-soft:color-mix(in srgb,var(--crit) 22%,var(--page));
+  --s1-soft:color-mix(in srgb,var(--s1) 22%,var(--page));
+  /* --good-ink and --crit-ink follow --ink-1 and need no twin. --good-fill
+     does: mixing toward a white --ink-1 would lighten it, so dark mixes
+     toward the page instead and lands on the same deep green. */
+  --good-fill:color-mix(in srgb,var(--good) 78%,var(--page));
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -52,6 +80,14 @@
   /* Dark is stepped, not flipped: only the orange moves, because #eb6834 sits a
      hair above the dark lightness band. Re-validated all-pairs on #1a1a19. */
   --cat-3:#e86530;
+  /* A 12% wash vanishes on #0d0d0d; 22% reads as a tint without reading as a fill. */
+  --good-soft:color-mix(in srgb,var(--good) 22%,var(--page));
+  --crit-soft:color-mix(in srgb,var(--crit) 22%,var(--page));
+  --s1-soft:color-mix(in srgb,var(--s1) 22%,var(--page));
+  /* --good-ink and --crit-ink follow --ink-1 and need no twin. --good-fill
+     does: mixing toward a white --ink-1 would lighten it, so dark mixes
+     toward the page instead and lands on the same deep green. */
+  --good-fill:color-mix(in srgb,var(--good) 78%,var(--page));
   }
 }
 

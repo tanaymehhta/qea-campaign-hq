@@ -75,7 +75,7 @@ export function Reps({ reps, current, hrefFor, big, subtitleFor }) {
 }
 
 /** A number. Give it an href and it becomes the way into the people behind it. */
-export function Tile({ label, value, raw, note, tone, hero, plus, href }) {
+export function Tile({ label, value, raw, note, tone, hero, plus, href, on }) {
   const inner = (
     <>
       <div className="lbl">{label}</div>
@@ -84,7 +84,7 @@ export function Tile({ label, value, raw, note, tone, hero, plus, href }) {
       {href ? <div className="drill">see who &rarr;</div> : null}
     </>
   );
-  const cls = `tile${hero ? " hero" : ""}${plus ? " plus" : ""}`;
+  const cls = `tile${hero ? " hero" : ""}${plus ? " plus" : ""}${on ? " on" : ""}`;
   return href ? <a className={cls} href={href}>{inner}</a> : <div className={cls}>{inner}</div>;
 }
 

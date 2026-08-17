@@ -33,20 +33,30 @@ export default function Draft({ subject, body, to }) {
   const mailto = `mailto:${encodeURIComponent(to ?? "")}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(text)}`;
 
   return (
-    <div className="lab-mail">
-      <input value={subj} onChange={(e) => setSubj(e.target.value)} aria-label="Subject" />
-      <textarea value={text} onChange={(e) => setText(e.target.value)} aria-label="Email body" />
-      <div className="lab-acts">
-        <button className="go" onClick={copy} type="button">
+    <div className="i-mail">
+      <div className="field">
+        <span className="i-label">Subject</span>
+        <input value={subj} onChange={(e) => setSubj(e.target.value)} aria-label="Subject" />
+      </div>
+      <div className="field">
+        <span className="i-label">Body</span>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} aria-label="Email body" />
+      </div>
+      {/* Two quiet actions and one dark one. Copying is what a rep does twenty
+          times a day and it should not look like a decision; marking sent is
+          the decision, so it is the single dark button on the screen. */}
+      <div className="i-acts">
+        <button className="i-quiet" onClick={copy} type="button">
           {copied ? "Copied" : "Copy email"}
         </button>
-        {to ? <a href={mailto}>Open in mail</a> : null}
-        <button type="button" className={sent ? "done" : ""} onClick={() => setSent(!sent)}>
+        {to ? <a className="i-quiet" href={mailto}>Open in mail</a> : null}
+        <button type="button" className={`i-commit push${sent ? " done" : ""}`}
+                onClick={() => setSent(!sent)}>
           {sent ? "Marked sent" : "Mark as sent"}
         </button>
       </div>
       {sent ? (
-        <div className="lab-receipt">
+        <div className="i-note" style={{ marginTop: 10 }}>
           Prototype only — <b>not saved</b>. The real version stamps the date on the email row
           and moves this lead into Sent · waiting.
         </div>
