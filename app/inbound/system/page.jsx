@@ -37,12 +37,17 @@ function Sec({ title, right }) {
  * bar as the share it represents. The bar is the point — four numbers in a
  * column read as four facts, and the same four with a width read as a drop.
  */
-function Step({ label, value, of, note, tone, children }) {
-  const pct = of ? Math.max(1, Math.round((value / of) * 100)) : 100;
+function Step({ label, value, of, note, tone, to, children }) {
+  // A sliver for a small share, and nothing at all for none of it: the bar's
+  // 3px minimum drew "0 of 92" as a visible mark, which is the one number a bar
+  // must not overstate.
+  const pct = of ? (value ? Math.max(1, Math.round((value / of) * 100)) : 0) : 100;
   return (
     <div className="i-step">
       <div className="head">
-        <span className="lbl">{label}</span>
+        {/* The label is the way in where there is one. A count of companies is
+            not actionable; the companies are. */}
+        <span className="lbl">{to ? <a href={to}>{label}</a> : label}</span>
         <span className={`fig${tone ? ` ${tone}` : ""}`}>
           {num(value)}
           {of ? <span className="of"> of {num(of)} · {share(value, of)}</span> : null}
@@ -141,8 +146,41 @@ export default async function System() {
                 note={`Across ${num(companies.withDrafts)} of ${num(companies.inQueue)} companies.`} />
           <Step label="Drafts that pass the send gate" value={sendable} of={stats.drafts}
                 tone="bad"
-                note="The validator's own verdict. Nothing has ever been sent — push is a permanent no-op." />
+                note="The validator's own verdict. Passing means a person can send it — the pipeline has no send step of its own." />
         </div>
+      </section>
+
+      {/* The funnel says how much fell out at each step. This says which
+          companies, and what would move them — one row each, and a company
+          appears in exactly one of them. */}
+      <section>
+        <Sec title="Where each company stopped" right={`${num(companies.inQueue)} companies`} />
+        <div className="i-card i-steps">
+          {d.dropoff.map((b) => (
+            <Step key={b.id} label={b.label} value={b.n} of={companies.inQueue} note={b.fix}
+                  to={`/inbound?rep=all&range=all&as=table&show=${b.id}`}>
+              {/* The one bucket a button cannot help. Said here rather than left
+                  to be worked out, because the row above it reads like three
+                  more re-runs and this one is not one. */}
+              {b.id === "at-gate" && b.n ? (
+                <div className="i-tone flat" style={{ marginTop: 10 }}>
+                  <b>Nothing to re-run here.</b> The validator will not sign a mail for an owner
+                  the company record does not name, and it refuses owner-operator copy sent to a
+                  consultancy on purpose. Both are answers, not failures: paying to write these
+                  again buys the same refusal.{" "}
+                  <a href="/inbound/drafts">Every draft</a> lists the validator&rsquo;s own reasons,
+                  commonest first.
+                </div>
+              ) : null}
+            </Step>
+          ))}
+        </div>
+        <p className="i-note" style={{ lineHeight: 1.6, maxWidth: "78ch", marginTop: 12 }}>
+          Each company is filed under the <b>first</b> thing it is missing, never under everything
+          it lacks — so the rows add to the {num(companies.inQueue)} in the queue and can be
+          checked against it. The share is of that same total. Press a row to read the companies
+          in it, all reps and all time, which is the scope this page counts.
+        </p>
       </section>
 
       {/* The stage table. This is the answer to "is research actually done on

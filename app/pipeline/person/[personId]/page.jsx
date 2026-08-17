@@ -137,7 +137,6 @@ export default async function InboundPerson({ params }) {
             <span className={`pill ${e.validator_status === "sent" ? "ok" : "bad"}`}>
               {e.validator_status === "sent" ? "passes validation" : "blocked"}
             </span>
-            {e.pushed_at ? <> · pushed {prettyWhen(e.pushed_at)}</> : null}
           </div>
           {e.validator_status === "blocked" && e.validator_reasons?.length ? (
             <div className="ib-err">{e.validator_reasons.join("; ")}</div>

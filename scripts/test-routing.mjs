@@ -280,4 +280,40 @@ assert.equal(roleWords("consultant_leadership"), "Consultant leadership");
 assert.equal(roleWords("sustainability_energy"), "Sustainability energy");
 assert.equal(roleWords(null), null);
 
-console.log("routing + words + timeline: all cases pass");
+// ── where each company stopped ──────────────────────────────────────────────
+const { DROPOFF, stoppedAt, VIEWS } = await import("../lib/inbound/queue.js");
+
+// A company that got all the way through, with one thing knocked out per case.
+const co = (over) =>
+  ({ chip: { state: "done" }, contacts: [{}], draftCount: 1, passing: 1, ...over });
+
+assert.equal(stoppedAt(co()), "through");
+assert.equal(stoppedAt(co({ chip: { state: "failed" } })), "at-research");
+assert.equal(stoppedAt(co({ chip: { state: "none" } })), "at-research");
+assert.equal(stoppedAt(co({ contacts: [] })), "at-people");
+assert.equal(stoppedAt(co({ draftCount: 0 })), "at-drafts");
+assert.equal(stoppedAt(co({ passing: 0 })), "at-gate");
+// First missing, not last: a company whose research crashed is stuck at
+// research, whatever an earlier successful run left behind further down.
+assert.equal(
+  stoppedAt(co({ chip: { state: "failed" }, contacts: [], draftCount: 0, passing: 0 })),
+  "at-research", "the earliest gap is the one that stopped it");
+
+// The property the section is built on: one bucket each, so the column adds up
+// to the queue total and a reader can check the page against itself.
+const sample = [co(), co({ passing: 0 }), co({ draftCount: 0 }), co({ contacts: [] }),
+                co({ chip: { state: "none" } }), co({ chip: { state: "failed" } })];
+assert.equal(
+  DROPOFF.reduce((t, b) => t + sample.filter((l) => stoppedAt(l) === b.id).length, 0),
+  sample.length, "every company in exactly one bucket");
+
+// The bar's count and the list its link opens are the same predicate, so they
+// cannot disagree about which companies are in a bucket.
+for (const b of DROPOFF) {
+  assert.deepEqual(
+    sample.filter(VIEWS[b.id].of),
+    sample.filter((l) => stoppedAt(l) === b.id),
+    `${b.id}: the bar and the list it opens hold the same companies`);
+}
+
+console.log("routing + words + timeline + drop-off: all cases pass");

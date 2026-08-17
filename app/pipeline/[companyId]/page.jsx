@@ -366,9 +366,10 @@ export default async function InboundCompany({ params, searchParams }) {
       <Stage stage={STAGES[2]} run={r3} nodes={d.nodesByRun.get(r3?.id) ?? []}>
         <Out items={[
           ["Rendered", num(d.emails.length)],
+          // "Would send" rather than "Sent": stage 3 has no send step, so this is
+          // what a person could put in a mailbox, not what left one.
           ["Would send", num(sent.length)],
           ["Blocked", num(blocked.length)],
-          ["Pushed", num(d.emails.filter((e) => e.instantly_lead_id).length)],
         ]} />
         {d.emails.length ? (
           <div style={{ marginTop: 12 }}>

@@ -113,8 +113,8 @@ export default async function Drafts({ searchParams }) {
           sent, which is nearly all of them. A blocked draft keeps its words on purpose: when
           {" "}{num(rows.length - passing)} of {num(rows.length)} do not ship, the reason has to
           sit next to the sentence it stopped. The editable copy with the clipboard button is on
-          each person&rsquo;s own page. Nothing here has ever been sent —{" "}
-          <code>push_instantly</code> is a deliberate no-op.
+          each person&rsquo;s own page. Nothing here sends: stage 3 has no send step, so a
+          passed draft is one to copy and send by hand.
         </p>
       </div>
 

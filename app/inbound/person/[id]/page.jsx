@@ -301,11 +301,12 @@ export default async function Person({ params, searchParams }) {
               <p className="i-body" style={{ margin: 0, color: "var(--ink-2)" }}>
                 {/* Not "outreach status is not_started" — that column reads
                     `not_started` on all 2,446 people and says nothing. What is
-                    true is that nothing has ever been sent from here at all. */}
-                {draft?.pushed_at
-                  ? <>Pushed {prettyWhen(draft.pushed_at)} · {draft.send_status ?? "unknown"}</>
-                  : <>Nothing has been sent to {p.first_name || "them"}. Sending is not wired up
-                      yet, so every draft here is one to copy and send by hand.</>}
+                    true is that nothing has ever been sent from here at all.
+                    There is no "pushed" branch: the pipeline has no send step,
+                    so `pushed_at` cannot be set and a branch reading it would be
+                    a line of code that can never run. */}
+                Nothing has been sent to {p.first_name || "them"}. The pipeline does not send,
+                so every draft here is one to copy and send by hand.
               </p>
             </div>
           </Section>
