@@ -158,7 +158,7 @@ export function RelevanceToggle({ companyId, relevant }) {
  * lib/auth.js) and pass the actor into `p_actor`, which is null today because
  * there is no session to name.
  */
-export function RestartButton({ companyId, stage = 1, small, caveat }) {
+export function RestartButton({ companyId, stage = 1, small, caveat, wasCredit }) {
   // What this press will actually run, named in the title. "Restart" on a stuck
   // draft must not read as paying to research the company a second time.
   const rest = ["research", "people", "the draft"].slice(stage - 1);
@@ -166,17 +166,28 @@ export function RestartButton({ companyId, stage = 1, small, caveat }) {
     ? `${rest.slice(0, -1).join(", ")} and then ${rest[rest.length - 1]}`
     : rest[0];
 
+  // When the last attempt died on an empty account, no read here can tell
+  // whether it has been topped up since — a balance is not in this database.
+  // So the button stops guessing and hands the judgement to the person who
+  // would have done the topping up.
   return (
     <form action={restartCompany} style={{ display: "inline-block" }}>
       <input type="hidden" name="id" value={companyId ?? ""} />
       <input type="hidden" name="stage" value={stage} />
+      <input type="hidden" name="force" value={wasCredit ? "yes" : ""} />
       <button type="submit" className={`i-act${small ? " small" : ""}`}
               disabled={!companyId}
               title={companyId
                 ? `Runs ${does}. Starts in a second or two; most companies finish inside two minutes.`
                 : "No company on this row to restart"}>
-        Restart
+        {wasCredit ? "Restart anyway" : "Restart"}
       </button>
+      {wasCredit ? (
+        <div className="hint" style={{ marginTop: 8 }}>
+          It ran out of credit last time. If you have topped the account up this
+          will work; if not, it fails the same way and costs the search spend.
+        </div>
+      ) : null}
       {/* Where a re-run cannot fix what the reader is looking at. Sixty drafts
           across nine companies are held only by an empty `assigned_to`, and
           re-running writes the same mail for the same refusal. */}

@@ -3,7 +3,7 @@ import { prettyWhen, num } from "../../../../lib/db";
 import { loadCompany, pageOf, pathOf, costs, whyNobody } from "../../../../lib/inbound/queue";
 import { money } from "../../../../lib/pipeline";
 import { REGIONS } from "../../../../lib/inbound/routing";
-import { verdict, bullets, cap, isApiError, errorReason, researchChip } from "../../../../lib/inbound/words";
+import { verdict, bullets, cap, isApiError, isCreditError, errorReason, researchChip } from "../../../../lib/inbound/words";
 import { Research } from "../../research";
 import { RankButtons, ReadyToggle, RelevanceToggle, RestartButton } from "../../controls";
 
@@ -99,7 +99,8 @@ function Timeline({ dots, companyId }) {
             <div className="i-tone bad" key={d.stage}>
               <b>{d.label} failed.</b> {cap(d.reason)}.
               <div style={{ marginTop: 10 }}>
-                <RestartButton companyId={companyId} stage={d.stage} small />
+                <RestartButton companyId={companyId} stage={d.stage} small
+                  wasCredit={isCreditError(d.reason)} />
               </div>
             </div>
           ))}
@@ -267,6 +268,7 @@ export default async function Company({ params, searchParams }) {
                   company was classified, so nothing was decided about them.
                   <div style={{ marginTop: 10 }}>
                     <RestartButton companyId={c.id} stage={1} small
+                      wasCredit={isCreditError(c.account_type_reason)}
                       caveat={d.emails.length && !c.assigned_to
                         ? `The ${d.emails.length} draft${d.emails.length === 1 ? "" : "s"} here stay blocked either way — nobody is on file as this account's owner, and the validator will not sign a mail for an owner the record does not name.`
                         : null} />

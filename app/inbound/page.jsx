@@ -3,7 +3,7 @@ import "./inbound.css";
 import { prettyWhen, num } from "../../lib/db";
 import { money } from "../../lib/pipeline";
 import { ALL_REPS, REGIONS, repById } from "../../lib/inbound/routing";
-import { cap, errorReason } from "../../lib/inbound/words";
+import { cap, errorReason, isCreditError } from "../../lib/inbound/words";
 import { RelevanceToggle, RestartButton } from "./controls";
 import {
   loadQueue, filterLeads, byLane, pageOf, pathOf, CO_LANES, RANGES, VIEWS, tally, share,
@@ -176,7 +176,7 @@ function CompanyCard({ lead, i }) {
         {failed ? (
           <div className="i-tone bad">
             <b>Research failed.</b> {cap(why)}.
-            <div style={{ marginTop: 10 }}><RestartButton companyId={lead.id} stage={1} small /></div>
+            <div style={{ marginTop: 10 }}><RestartButton companyId={lead.id} stage={1} small wasCredit={isCreditError(why)} /></div>
           </div>
         ) : null}
         <div className="i-links">

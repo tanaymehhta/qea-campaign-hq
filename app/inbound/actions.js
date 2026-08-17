@@ -119,6 +119,10 @@ export async function restartCompany(formData) {
     p_company: id,
     p_stage: stage,
     p_actor: null, // no session to name yet; the column is waiting for sign-in
+    // Set only where the page has already told the reader the account was
+    // empty. It waives the credit refusal and nothing else — a run in flight
+    // still refuses, because that one is not a judgement call.
+    p_force: formData.get("force") === "yes",
   });
   // A refusal is not a failure. Every exception the function raises is a rule
   // it applied on purpose — already running, pressed a minute ago, out of
