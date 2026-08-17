@@ -54,6 +54,7 @@ as $$
 declare
   v_name    text;
   v_last    inbound_graph_runs%rowtype;
+  v_credit  text;
   v_pending timestamptz;
   v_id      uuid;
 begin
@@ -91,16 +92,36 @@ begin
   -- Out of credit is an answer, not a failure: re-running spends money to be
   -- told no identically. Only the last 24 hours — the 402s from an account that
   -- has since been topped up are exactly the rows this button exists to rescue.
+  --
+  -- The test is on the LATEST RUN OF ANY STAGE, and it reads node events, not
+  -- `inbound_graph_runs.error`. A research run whose LLM nodes all 402 records
+  -- status `needs_review` with error NULL — the failure only exists on the
+  -- nodes. Checking the run column alone let a press through on 17 August that
+  -- spent $0.70 on search and learnt nothing.
   select * into v_last from inbound_graph_runs
    where company_id = p_company
    order by started_at desc limit 1;
-  if v_last.error is not null
-     and v_last.started_at > now() - interval '24 hours'
-     and (v_last.error ilike '%insufficient credit%' or v_last.error ilike '%402%')
-  then
-    raise exception '% last failed on %, which is out of credit — top it up first',
-      v_name,
-      case when v_last.error ilike '%apollo%' then 'Apollo' else 'OpenRouter' end;
+
+  if v_last.id is not null and v_last.started_at > now() - interval '24 hours' then
+    select n.error into v_credit
+      from inbound_graph_node_events n
+      join inbound_graph_runs r on r.id = n.run_id
+     where r.company_id = p_company
+       and r.started_at >= v_last.started_at - interval '5 minutes'
+       and (n.error ilike '%insufficient credit%' or n.error ilike '%402%')
+     limit 1;
+
+    if v_credit is null and v_last.error is not null
+       and (v_last.error ilike '%insufficient credit%' or v_last.error ilike '%402%')
+    then
+      v_credit := v_last.error;
+    end if;
+
+    if v_credit is not null then
+      raise exception 'the last run of % failed on %, which is out of credit — top it up, then press this again',
+        v_name,
+        case when v_credit ilike '%apollo%' then 'Apollo' else 'OpenRouter' end;
+    end if;
   end if;
 
   insert into inbound_rerun_requests (company_id, stage, requested_by)

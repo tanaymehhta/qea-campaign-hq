@@ -27,22 +27,34 @@ import { db } from "../../lib/db";
  * is the pipeline doing its job.
  */
 
-/** Back where the click came from, so a button never navigates the reader away. */
-function back(err, queued) {
+/** What a previous click left in the URL, and what this one must not join. */
+const SAID = ["err", "nope", "queued"];
+
+/**
+ * Back where the click came from, so a button never navigates the reader away.
+ *
+ * The referer carries the last outcome in its query string, so appending to it
+ * stacks them: five presses of a refused Restart read "already queued 00:09
+ * agoalready queued 00:10 ago…" as one run-on sentence. Each message replaces
+ * the last rather than joining it.
+ *
+ * `extra` is a raw fragment rather than a flag because the outcomes are three
+ * different sentences: a write that failed, an action refused on purpose, and a
+ * restart that was accepted and has nothing to show for itself yet.
+ */
+function back(err, extra) {
   const ref = headers().get("referer");
   let path = "/inbound";
   try {
     if (ref) {
       const u = new URL(ref);
+      SAID.forEach((k) => u.searchParams.delete(k));
       path = `${u.pathname}${u.search}`;
     }
   } catch {
     /* a referer we cannot parse is not worth failing the write over */
   }
-  // A restart is the one write here with nothing to show for itself on return:
-  // the run starts on someone else's machine and the page it lands on looks
-  // exactly as it did. `queued` is how the page says so.
-  const q = err ? `err=${encodeURIComponent(err)}` : queued ? "queued=1" : "";
+  const q = err ? `err=${encodeURIComponent(err)}` : extra ?? "";
   if (!q) redirect(path);
   const sep = path.includes("?") ? "&" : "?";
   redirect(`${path}${sep}${q}`);
@@ -108,7 +120,11 @@ export async function restartCompany(formData) {
     p_stage: stage,
     p_actor: null, // no session to name yet; the column is waiting for sign-in
   });
-  if (error) back(error.message);
+  // A refusal is not a failure. Every exception the function raises is a rule
+  // it applied on purpose — already running, pressed a minute ago, out of
+  // credit — so it must not land under "That didn't save", which tells a rep
+  // to press again.
+  if (error) back(null, `nope=${encodeURIComponent(error.message)}`);
 
   const abandon = async (why) => {
     await db.rpc("inbound_mark_rerun", { p_request: request, p_state: "abandoned" });
@@ -142,7 +158,7 @@ export async function restartCompany(formData) {
 
   await db.rpc("inbound_mark_rerun", { p_request: request, p_state: "dispatched" });
   refresh(id, null);
-  back(null, true);
+  back(null, "queued=1");
 }
 
 export async function setCompanyRelevant(formData) {

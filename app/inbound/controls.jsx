@@ -158,7 +158,7 @@ export function RelevanceToggle({ companyId, relevant }) {
  * lib/auth.js) and pass the actor into `p_actor`, which is null today because
  * there is no session to name.
  */
-export function RestartButton({ companyId, stage = 1, small }) {
+export function RestartButton({ companyId, stage = 1, small, caveat }) {
   // What this press will actually run, named in the title. "Restart" on a stuck
   // draft must not read as paying to research the company a second time.
   const rest = ["research", "people", "the draft"].slice(stage - 1);
@@ -177,6 +177,10 @@ export function RestartButton({ companyId, stage = 1, small }) {
                 : "No company on this row to restart"}>
         Restart
       </button>
+      {/* Where a re-run cannot fix what the reader is looking at. Sixty drafts
+          across nine companies are held only by an empty `assigned_to`, and
+          re-running writes the same mail for the same refusal. */}
+      {caveat ? <div className="hint" style={{ marginTop: 8 }}>{caveat}</div> : null}
     </form>
   );
 }

@@ -179,7 +179,9 @@ export default async function Company({ params, searchParams }) {
       </header>
 
       {err ? <div className="i-tone bad">That didn&rsquo;t save — {err}</div> : null}
-      {searchParams?.queued && !err
+      {searchParams?.nope
+        ? <div className="i-tone bad">Not started — {searchParams.nope}.</div> : null}
+      {searchParams?.queued
         ? <div className="i-tone">Restart asked for. It starts within a second or two;
             most companies are through research in under two minutes. Reload to see it.</div> : null}
 
@@ -264,7 +266,10 @@ export default async function Company({ params, searchParams }) {
                   <b>Research failed.</b> {cap(errorReason(c.account_type_reason))} when this
                   company was classified, so nothing was decided about them.
                   <div style={{ marginTop: 10 }}>
-                    <RestartButton companyId={c.id} stage={1} small />
+                    <RestartButton companyId={c.id} stage={1} small
+                      caveat={d.emails.length && !c.assigned_to
+                        ? `The ${d.emails.length} draft${d.emails.length === 1 ? "" : "s"} here stay blocked either way — nobody is on file as this account's owner, and the validator will not sign a mail for an owner the record does not name.`
+                        : null} />
                   </div>
                 </div>
               ) : c.account_type_reason ? (
