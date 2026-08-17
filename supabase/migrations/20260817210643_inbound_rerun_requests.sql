@@ -8,6 +8,11 @@
 -- inbound_graph_runs, because a run can finish `ok` having produced nothing —
 -- a stage 2 whose reveals were all refused by the Apollo daily cap records ok
 -- with no error. Reporting from this table would report that as success.
+--
+-- NOTE: `inbound_request_rerun` below is the first version. It was replaced
+-- twice the same evening — see 20260817212239, which holds the live definition.
+-- Both refusals it makes here were wrong in the same way, and the later file
+-- says why.
 
 create table if not exists inbound_rerun_requests (
   id            uuid primary key default gen_random_uuid(),
@@ -30,18 +35,10 @@ create index if not exists inbound_rerun_requests_company_idx
 alter table inbound_rerun_requests enable row level security;
 
 -- Same shape as the other 35: readable, never writable except through the
--- security definer function below.
+-- security definer functions.
 drop policy if exists "public read" on inbound_rerun_requests;
 create policy "public read" on inbound_rerun_requests for select using (true);
 
-/**
- * Ask for a company to be run again, from `p_stage` through to the end.
- *
- * Every refusal is an exception rather than a return code, matching
- * inbound_set_company_relevant: the server action already surfaces
- * error.message to the rep, and a refusal nobody can read is a button that
- * looks broken.
- */
 create or replace function inbound_request_rerun(
   p_company uuid,
   p_stage   int,
@@ -54,7 +51,6 @@ as $$
 declare
   v_name    text;
   v_last    inbound_graph_runs%rowtype;
-  v_credit  text;
   v_pending timestamptz;
   v_id      uuid;
 begin
@@ -65,8 +61,6 @@ begin
   select name into v_name from inbound_companies where id = p_company;
   if v_name is null then raise exception 'no such company'; end if;
 
-  -- Already working. The pipeline is not re-entrant per company: a second
-  -- runner would re-research an account mid-research and both would write.
   if exists (
     select 1 from inbound_graph_runs
      where company_id = p_company and status = 'running'
@@ -75,9 +69,6 @@ begin
     raise exception '% is running right now — wait for it to finish', v_name;
   end if;
 
-  -- Pressed a moment ago. Ten minutes is longer than the median run (research
-  -- finishes inside two minutes) and short enough that a genuinely stuck
-  -- request can be retried within the same conversation.
   select requested_at into v_pending
     from inbound_rerun_requests
    where company_id = p_company
@@ -89,39 +80,16 @@ begin
       to_char(now() - v_pending, 'MI:SS');
   end if;
 
-  -- Out of credit is an answer, not a failure: re-running spends money to be
-  -- told no identically. Only the last 24 hours — the 402s from an account that
-  -- has since been topped up are exactly the rows this button exists to rescue.
-  --
-  -- The test is on the LATEST RUN OF ANY STAGE, and it reads node events, not
-  -- `inbound_graph_runs.error`. A research run whose LLM nodes all 402 records
-  -- status `needs_review` with error NULL — the failure only exists on the
-  -- nodes. Checking the run column alone let a press through on 17 August that
-  -- spent $0.70 on search and learnt nothing.
   select * into v_last from inbound_graph_runs
    where company_id = p_company
    order by started_at desc limit 1;
-
-  if v_last.id is not null and v_last.started_at > now() - interval '24 hours' then
-    select n.error into v_credit
-      from inbound_graph_node_events n
-      join inbound_graph_runs r on r.id = n.run_id
-     where r.company_id = p_company
-       and r.started_at >= v_last.started_at - interval '5 minutes'
-       and (n.error ilike '%insufficient credit%' or n.error ilike '%402%')
-     limit 1;
-
-    if v_credit is null and v_last.error is not null
-       and (v_last.error ilike '%insufficient credit%' or v_last.error ilike '%402%')
-    then
-      v_credit := v_last.error;
-    end if;
-
-    if v_credit is not null then
-      raise exception 'the last run of % failed on %, which is out of credit — top it up, then press this again',
-        v_name,
-        case when v_credit ilike '%apollo%' then 'Apollo' else 'OpenRouter' end;
-    end if;
+  if v_last.error is not null
+     and v_last.started_at > now() - interval '24 hours'
+     and (v_last.error ilike '%insufficient credit%' or v_last.error ilike '%402%')
+  then
+    raise exception '% last failed on %, which is out of credit — top it up first',
+      v_name,
+      case when v_last.error ilike '%apollo%' then 'Apollo' else 'OpenRouter' end;
   end if;
 
   insert into inbound_rerun_requests (company_id, stage, requested_by)
@@ -135,8 +103,8 @@ end $$;
  * Record what became of the request.
  *
  * 'abandoned' is what a failed dispatch writes, and it is why the ten-minute
- * guard above ignores that state: GitHub refusing the POST must not lock the
- * company out of being retried immediately.
+ * guard ignores that state: GitHub refusing the POST must not lock the company
+ * out of being retried immediately.
  */
 create or replace function inbound_mark_rerun(
   p_request uuid,
