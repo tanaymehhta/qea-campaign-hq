@@ -284,6 +284,109 @@ Visible after the change: 35 campaigns, 1,898 people, 2,826 activities, 88 repli
 
 ---
 
+## Inbound — where every company stopped — 17 August 2026
+
+Two repos: this one and `qea-inbound`. `INBOUND_RERUN_PLAN.md` is the work order.
+
+### What shipped
+
+- **The drop-off section on `/inbound/system`.** Every company filed under the *first*
+  outcome it is missing, so the five rows add to the queue total and a reader can check the
+  page against itself. `DROPOFF` and `stoppedAt` in `lib/inbound/queue.js` are the only
+  derivation, spread into `VIEWS` under the same ids — so a bar, its count, and the list its
+  link opens cannot disagree. Counted off `loadQueue`'s array in memory, not a fifth query.
+- **Sending is deleted, not deferred.** `push_instantly` sat between `persist` and
+  `finalize` in stage 3 behind an `INSTANTLY_ENABLED` flag and never sent one of 639 drafts.
+  The node is gone, so "it cannot send" is a property of the graph rather than a flag's
+  default. The dashboard's copy, the dead `pushed_at` branch on a person's page and the
+  always-zero "Pushed" tile on `/pipeline` went with it. The `already_emailed` guard in
+  `run_pipeline.py` stays — it still reads `pushed_at`/`send_status`, and it is what would
+  stop a re-run mailing somebody twice on the day sending exists.
+- **`inbound-pipeline.yml` takes a `company_id`.** Passed to `--company-id`, which
+  `run_pipeline.py` already accepted; it wins over `name`, and both are empty on the
+  3-hourly schedule, which is still the `--all-new` branch. A name substring is how you
+  re-run the wrong company.
+- **`v_inbound_stranded` sees companies nothing ever judged.** It was missing 46, all
+  `research_status = 'needs_review'`: the old `WHERE` admitted one only if it had produced
+  nothing, and all 46 have people *and* drafts. Their `account_type_reason` holds an
+  OpenRouter error where a classification should be, and stage 2 and stage 3 ran anyway —
+  so **337 drafts across 66 companies were written for accounts nobody had judged to be a
+  fit.** "Did output come out" and "was this company ever judged" are two questions and the
+  view now asks both. Its error test mirrors `isApiError()` in `lib/inbound/words.js` on
+  purpose. 33 rows became 79 that a re-run would touch. The definition had lived only in the
+  database since 10 August; it is now `agent/supabase/views/v_inbound_stranded.sql`.
+
+### What was run, and what it cost
+
+OpenRouter and Apollo were both topped up during the session. Apollo held 1,236 lead
+credits with the cycle ending 22 August.
+
+- **Stage 2 on 11 companies** — the two whose people search genuinely died on Apollo credit
+  plus the nine that had never run it. Found **9 people at 6 companies**; Roofr four, the
+  rest one each. **17 lead credits** by Apollo's own counter, and $1.26 of search.
+- **Stage 3 on 7 companies** — 9 drafts, **$0**, 1.6s each.
+- The pipeline's own governor, not the balance, is the constraint: `APOLLO_DAILY_CREDIT_CAP`
+  defaults to 150/day and had been hitting it almost every day. It gates only
+  `/people/match` and `/people/bulk_match`; search records are counted after the fact by
+  `record_apollo()` and are not gated at all. 216 records were booked internally against
+  those 17 billed credits, so the two counts measure different things.
+
+### Where the queue stands
+
+94 companies: **67** stuck at research, **11** researched with nobody found, **1** with
+people and no draft, **15** with drafts none of which pass the validator, **0** all the way
+through. **5 of 707 drafts** pass the send gate.
+
+Of the 67 at research, the automation reaches almost none of them: the schedule runs
+`--all-new`, which is `research_status = 'new'` — one of the 67. That is what the widened
+stranded view fixes, and why a per-company re-run is the only route back for most of the
+queue rather than a convenience.
+
+### Decided, so it need not be re-argued
+
+- `inbound_rerun_requests` **does** get built, with an `inbound_request_rerun`
+  security-definer function shaped like `inbound_set_person_ready`. A button that cannot say
+  "already queued four minutes ago" invites eleven presses.
+- The button **refuses** on a credit error and names the empty account, rather than warning
+  and firing anyway — **windowed to the last 24 hours**, which matters more than it sounds:
+  an unwindowed check would refuse exactly the companies the widened stranded view just
+  exposed, since what they hold is a 402 from an account that has since been topped up.
+- Per `FRONTEND_HANDOFF.md` §4.5 the re-run may not need GitHub at all:
+  `update inbound_companies set research_status = 'new'` and the next scheduled run collects
+  it. Slower and stage-1-only; no PAT. The dispatch route is still the only way to re-run a
+  single later stage.
+
+### Still open
+
+1. **The 46 need a paid re-run.** Visible now, but nothing has re-run them. Stage 1 is the
+   expensive stage, so this wants a budget and a ceiling — the Apollo pass above is the
+   pattern. `--stranded` without `--dry-run` now runs 79 companies.
+2. **60 drafts across 9 companies are blocked only by `assigned_to` being empty.** A name
+   from `SENDERS` unblocks each. Routing answers 7 of the 9; General Motors (23 drafts, the
+   largest single block) and Consero Global are Unrouted, and Mccain Foods and Global Affairs
+   Canada route to two reps at once. Filling it from the routing table would delete the one
+   check that a human owns an account before their name and postal address go on a mail, so
+   it is a decision, not a chore. `validator_status` is stored per draft, so each company
+   needs stage 3 re-run afterwards — $0.
+3. **Three runs reported `ok` over nothing** in one evening: a stage 2 whose reveals were all
+   refused by the daily cap and recorded no error, and a stage 3 that wrote 0 drafts for a
+   company with 35 people. Anything that reports state from a run's `status` will report
+   those as successes.
+4. **The restart button** — built in a parallel session, committed at `8348794`:
+   `supabase/migrations/20260817210000_inbound_rerun_requests.sql`,
+   the server action in `app/inbound/actions.js`, and `RestartButton` in
+   `app/inbound/controls.jsx` no longer disabled. This work did not touch either file. The
+   per-company `concurrency.group` that plan proposed was **dropped**: the Apollo 150/day
+   ledger is safe only because `concurrency: inbound-pipeline` guarantees one runner at a
+   time, and `_ledger()` reads its base once per process, so concurrent runners would each
+   have spent the full daily cap.
+5. **Apollo finds one person at BCG.** Lane Bryant and BCG each returned a single raw
+   candidate. That is org resolution or the sweep, not billing.
+
+Commits: `bee6482` here; `9ea1220` and `3df715f` in `qea-inbound`.
+
+---
+
 ## What changed
 
 ### 1. The dashboard opens on All time
