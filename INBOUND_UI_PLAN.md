@@ -1,6 +1,6 @@
 # Inbound UI rebuild — execution plan
 
-**Route:** `/inbound` · **Written:** 17 August 2026 · **Status:** not started
+**Route:** `/inbound` · **Written:** 17 August 2026 · **Status:** shipped `b14d6fa`
 
 This is a work order for whoever picks this up next. Read it end to end before touching a
 file. `INBOUND.md` describes what is on the page today and why; this describes what is wrong

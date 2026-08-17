@@ -28,7 +28,7 @@ import { db } from "../../lib/db";
  */
 
 /** Back where the click came from, so a button never navigates the reader away. */
-function back(err) {
+function back(err, queued) {
   const ref = headers().get("referer");
   let path = "/inbound";
   try {
@@ -39,9 +39,13 @@ function back(err) {
   } catch {
     /* a referer we cannot parse is not worth failing the write over */
   }
-  if (!err) redirect(path);
+  // A restart is the one write here with nothing to show for itself on return:
+  // the run starts on someone else's machine and the page it lands on looks
+  // exactly as it did. `queued` is how the page says so.
+  const q = err ? `err=${encodeURIComponent(err)}` : queued ? "queued=1" : "";
+  if (!q) redirect(path);
   const sep = path.includes("?") ? "&" : "?";
-  redirect(`${path}${sep}err=${encodeURIComponent(err)}`);
+  redirect(`${path}${sep}${q}`);
 }
 
 /**
@@ -72,6 +76,73 @@ export async function setPersonReady(formData) {
   const { error } = await db.rpc("inbound_set_person_ready", { p_person: id, p_ready: ready });
   refresh(formData.get("company"), id);
   back(error?.message);
+}
+
+/**
+ * Ask GitHub to run one company again, from `stage` through to the draft.
+ *
+ * The dashboard cannot run the pipeline — it is Python on a GitHub runner, not
+ * anything Vercel hosts. So this rings a doorbell: `workflow_dispatch` on the
+ * same workflow the 3-hourly schedule uses, with the company id the workflow
+ * already accepts. Nothing here knows how research works, which is the point.
+ *
+ * Two steps, in this order and not the reverse. The request row is written
+ * first, because it is what refuses a second press while the first is still in
+ * flight; if the dispatch then fails, the row is marked abandoned so a refusal
+ * cannot outlive the failure that caused it.
+ *
+ * `ref` is master. qea-inbound's default branch is master, not main — the plan
+ * of record says main, and that call 422s.
+ */
+const WORKFLOW =
+  "https://api.github.com/repos/tanaymehhta/qea-inbound/actions/workflows/inbound-pipeline.yml/dispatches";
+
+export async function restartCompany(formData) {
+  const id = formData.get("id");
+  const stage = Number(formData.get("stage")) || 1;
+
+  // Every refusal — running right now, pressed a minute ago, out of credit —
+  // is raised in here, so the rules live in one place a hostile POST also hits.
+  const { data: request, error } = await db.rpc("inbound_request_rerun", {
+    p_company: id,
+    p_stage: stage,
+    p_actor: null, // no session to name yet; the column is waiting for sign-in
+  });
+  if (error) back(error.message);
+
+  const abandon = async (why) => {
+    await db.rpc("inbound_mark_rerun", { p_request: request, p_state: "abandoned" });
+    back(why);
+  };
+
+  const token = process.env.GITHUB_DISPATCH_TOKEN;
+  if (!token) await abandon("this deployment has no GitHub token, so nothing was started");
+
+  const res = await fetch(WORKFLOW, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ref: "master",
+      inputs: { company_id: id, from_stage: String(stage) },
+    }),
+  });
+
+  // 204 on success, and no body — GitHub does not tell you which run it made,
+  // so github_run_id stays null until something reads it back. The evidence a
+  // rep actually needs is the new inbound_graph_runs row, not this id.
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 140);
+    await abandon(`GitHub refused it (${res.status}) ${detail}`);
+  }
+
+  await db.rpc("inbound_mark_rerun", { p_request: request, p_state: "dispatched" });
+  refresh(id, null);
+  back(null, true);
 }
 
 export async function setCompanyRelevant(formData) {

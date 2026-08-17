@@ -1,4 +1,4 @@
-import { movePerson, setPersonReady, setCompanyRelevant } from "./actions";
+import { movePerson, setPersonReady, setCompanyRelevant, restartCompany } from "./actions";
 
 /**
  * The hand controls: reorder a person, overrule a verdict, move a company.
@@ -142,18 +142,41 @@ export function RelevanceToggle({ companyId, relevant }) {
 /**
  * Run the pipeline over this company again.
  *
- * Rendered disabled, and the title says exactly what is missing rather than
- * "coming soon". The three writes this section can make all go through
- * `security definer` functions, and there is no `inbound_request_rerun` among
- * them — a button that queued nothing but said "Restarting" would be the worst
- * thing on the page, because the whole point of this view is that a rep can
- * trust what it says happened.
+ * Restarting runs from `stage` through to the written draft — never a single
+ * step, because a stage whose input was never produced has nothing to read.
+ *
+ * For most of the queue this is not a convenience. The 3-hourly schedule only
+ * picks up `research_status='new'`, which is one company; `--stranded` covers
+ * another 41. The rest sit at `needs_review` after a classifier 402 and nothing
+ * in the automation ever revisits them, so for them the button is the only
+ * route back.
+ *
+ * The refusals — already running, pressed a minute ago, out of credit — live in
+ * `inbound_request_rerun`, not here, so a hostile POST meets the same rules.
+ *
+ * TODO: when sign-in lands, render this only for admins (requireAdmin() from
+ * lib/auth.js) and pass the actor into `p_actor`, which is null today because
+ * there is no session to name.
  */
-export function RestartButton({ small }) {
+export function RestartButton({ companyId, stage = 1, small }) {
+  // What this press will actually run, named in the title. "Restart" on a stuck
+  // draft must not read as paying to research the company a second time.
+  const rest = ["research", "people", "the draft"].slice(stage - 1);
+  const does = rest.length > 1
+    ? `${rest.slice(0, -1).join(", ")} and then ${rest[rest.length - 1]}`
+    : rest[0];
+
   return (
-    <button type="button" disabled className={`i-act${small ? " small" : ""}`}
-            title="Not wired up: the backend has no inbound_request_rerun function to call yet">
-      Restart
-    </button>
+    <form action={restartCompany} style={{ display: "inline-block" }}>
+      <input type="hidden" name="id" value={companyId ?? ""} />
+      <input type="hidden" name="stage" value={stage} />
+      <button type="submit" className={`i-act${small ? " small" : ""}`}
+              disabled={!companyId}
+              title={companyId
+                ? `Runs ${does}. Starts in a second or two; most companies finish inside two minutes.`
+                : "No company on this row to restart"}>
+        Restart
+      </button>
+    </form>
   );
 }

@@ -1,7 +1,7 @@
 # Inbound, restyled — a work order
 
 **Scope:** `/inbound`, `/inbound/company/[id]`, `/inbound/person/[id]` · **Written:** 17 August 2026
-· **Status:** not started
+· **Status:** shipped `b14d6fa`
 
 This is a **look** brief, not a behaviour brief. What each page says and computes was settled in
 `INBOUND_UI_PLAN.md` and is already built; `INBOUND.md` records why. Nothing here changes a

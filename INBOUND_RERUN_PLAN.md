@@ -1,6 +1,8 @@
 # Where each company stopped, and a button that restarts it
 
-**Written:** 17 August 2026 · **Status:** not started · **Repos:** this one, and `qea-inbound`
+**Written:** 17 August 2026 · **Status:** Part A shipped `bee6482`; Part B shipped 17 August,
+except the per-company concurrency change, which was dropped — see the note under step 4 ·
+**Repos:** this one, and `qea-inbound`
 
 Two pieces of work. Part A is this repo alone and depends on nothing. Part B spans both
 repos and should not be started until OpenRouter and Apollo have credit in them, for the
@@ -126,12 +128,24 @@ request row and POSTs to:
 
 ```
 POST /repos/tanaymehhta/qea-inbound/actions/workflows/inbound-pipeline.yml/dispatches
-{ "ref": "main", "inputs": { "company_id": "...", "from_stage": "1" } }
+{ "ref": "master", "inputs": { "company_id": "...", "from_stage": "1" } }
 ```
 
 Same call everywhere; only the stage number differs. Stuck at research → 1. Stuck at the
 email node → 3. That is the whole reason this works for a stuck draft as well as stuck
 research.
+
+### What was dropped, and why
+
+The obvious speed-up — giving each company its own `concurrency.group` so a click never
+waits behind the 3-hourly batch — **must not be made.** `DAILY_CREDIT_CAP` in
+`agent/src/tools/apollo.py` says so in its own comment: the 150/day ledger reads its base
+from `inbound_daily_metrics` once per process, so it is only a cap because
+`concurrency: inbound-pipeline` guarantees one process at a time. Two runners would each
+spend the full 150. Splitting the group needs an atomic reservation in Postgres first.
+
+The wait it would have saved, measured on 17 August: dispatch to work starting is 17
+seconds, and batch runs that day took 21s, 24s, 25s, 30s, 5m32s and 6m26s.
 
 ### Two things to be honest about in the UI
 

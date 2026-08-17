@@ -73,7 +73,7 @@ function hint(d) {
     : `${ran} — ${d.reason}.`;
 }
 
-function Timeline({ dots }) {
+function Timeline({ dots, companyId }) {
   const broken = dots.filter((d) => d.state === "bad" && d.failures.length);
   return (
     <div className="i-tl">
@@ -98,7 +98,9 @@ function Timeline({ dots }) {
           {broken.map((d) => (
             <div className="i-tone bad" key={d.stage}>
               <b>{d.label} failed.</b> {cap(d.reason)}.
-              <div style={{ marginTop: 10 }}><RestartButton small /></div>
+              <div style={{ marginTop: 10 }}>
+                <RestartButton companyId={companyId} stage={d.stage} small />
+              </div>
             </div>
           ))}
           <details className="i-show">
@@ -177,8 +179,11 @@ export default async function Company({ params, searchParams }) {
       </header>
 
       {err ? <div className="i-tone bad">That didn&rsquo;t save — {err}</div> : null}
+      {searchParams?.queued && !err
+        ? <div className="i-tone">Restart asked for. It starts within a second or two;
+            most companies are through research in under two minutes. Reload to see it.</div> : null}
 
-      <Timeline dots={d.dots} />
+      <Timeline dots={d.dots} companyId={c.id} />
 
       {conflict ? (
         <div className="i-tone warn">
@@ -258,7 +263,9 @@ export default async function Company({ params, searchParams }) {
                 <div className="i-tone bad" style={{ marginTop: 16 }}>
                   <b>Research failed.</b> {cap(errorReason(c.account_type_reason))} when this
                   company was classified, so nothing was decided about them.
-                  <div style={{ marginTop: 10 }}><RestartButton small /></div>
+                  <div style={{ marginTop: 10 }}>
+                    <RestartButton companyId={c.id} stage={1} small />
+                  </div>
                 </div>
               ) : c.account_type_reason ? (
                 <div style={{ marginTop: 18 }}>
@@ -394,7 +401,7 @@ export default async function Company({ params, searchParams }) {
                     {d.dots[2].when ? `Searched ${prettyWhen(d.dots[2].when)}. ` : ""}
                     {nobody.tail}
                   </div>
-                  <RestartButton />
+                  <RestartButton companyId={c.id} stage={2} />
                 </div>
               )}
             </div>

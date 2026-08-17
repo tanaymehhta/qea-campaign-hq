@@ -176,7 +176,7 @@ function CompanyCard({ lead, i }) {
         {failed ? (
           <div className="i-tone bad">
             <b>Research failed.</b> {cap(why)}.
-            <div style={{ marginTop: 10 }}><RestartButton small /></div>
+            <div style={{ marginTop: 10 }}><RestartButton companyId={lead.id} stage={1} small /></div>
           </div>
         ) : null}
         <div className="i-links">
@@ -267,6 +267,12 @@ export default async function Inbound({ searchParams }) {
     <div className="i-page">
       {searchParams?.err
         ? <div className="i-tone bad">That didn&rsquo;t save — {searchParams.err}</div> : null}
+      {/* A restart is the one action here with nothing to show on return: the
+          work happens on a GitHub runner and this page looks identical. Say so
+          rather than let the click read as having done nothing. */}
+      {searchParams?.queued && !searchParams?.err
+        ? <div className="i-tone">Restart asked for. It starts within a second or two;
+            most companies are through research in under two minutes. Reload to see it.</div> : null}
 
       <header className="i-head rise">
         <h1 className="i-h1">Inbound queue</h1>
