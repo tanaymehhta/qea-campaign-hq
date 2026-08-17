@@ -250,6 +250,33 @@
    from todo's dashed ring, and the dash separates it from a tick without
    spending a third colour on it. */
 .i-glyph.none { background: var(--surface-1); border: 2px solid var(--axis); color: var(--ink-3); }
+/* Running: a ring that turns, and a halo that breathes under it. Motion is the
+   only honest way to say "not finished" — every static treatment on this row is
+   already spoken for by a finished state, and a spinner that stops is a bug a
+   reader can see. */
+.i-glyph.running { background: var(--surface-1); border: 2px solid var(--axis); color: var(--ink-2); }
+.i-glyph.running::before {
+  content: ""; position: absolute; inset: -2px; border-radius: 50%;
+  border: 2px solid transparent; border-top-color: var(--ink-1);
+  animation: i-spin 0.9s linear infinite;
+}
+.i-glyph.running::after {
+  content: ""; position: absolute; inset: -7px; border-radius: 50%;
+  border: 2px solid var(--axis); animation: i-halo 1.8s ease-out infinite;
+}
+@keyframes i-spin { to { transform: rotate(360deg); } }
+@keyframes i-halo {
+  0%   { opacity: 0.55; transform: scale(0.88); }
+  100% { opacity: 0;    transform: scale(1.18); }
+}
+.i-tl li.running .lbl { color: var(--ink-1); }
+.i-tl li.running .when { color: var(--ink-2); font-weight: 600; }
+/* Respect a reader who has asked the OS for less motion: keep the state legible
+   without animating it. */
+@media (prefers-reduced-motion: reduce) {
+  .i-glyph.running::before { animation: none; border-top-color: var(--ink-2); }
+  .i-glyph.running::after  { animation: none; opacity: 0.4; }
+}
 .i-tl .lbl { font-size: 12.5px; font-weight: 600; color: var(--ink-1); margin-top: 9px; }
 .i-tl li.bad  .lbl { color: var(--crit-ink); }
 .i-tl li.todo .lbl { color: var(--ink-3); font-weight: 400; }

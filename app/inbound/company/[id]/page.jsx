@@ -6,6 +6,7 @@ import { REGIONS } from "../../../../lib/inbound/routing";
 import { verdict, bullets, cap, isApiError, isCreditError, errorReason, researchChip } from "../../../../lib/inbound/words";
 import { Research } from "../../research";
 import { RankButtons, ReadyToggle, RelevanceToggle, RestartButton } from "../../controls";
+import { Live } from "../../live";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,7 @@ const Dash = () => (
  */
 function hint(d) {
   if (d.state === "todo") return "Has not run yet.";
+  if (d.state === "running") return `Started ${prettyWhen(d.when)} and still going.`;
   if (d.stage === 0) return `First seen on ${prettyWhen(d.when)}.`;
   const ran = `Ran ${prettyWhen(d.when)}`;
   if (d.state === "ok") return `${ran} — nothing inside it failed.`;
@@ -86,7 +88,9 @@ function Timeline({ dots, companyId }) {
                 : d.state === "none" ? <Dash /> : null}
             </span>
             <span className="lbl">{d.label}</span>
-            <span className="when">{d.when ? prettyWhen(d.when) : "not yet"}</span>
+            <span className="when">
+              {d.state === "running" ? "running now…" : d.when ? prettyWhen(d.when) : "not yet"}
+            </span>
             {d.attempts > 1
               ? <span className="tries">attempt {d.attempts} of {d.attempts}</span> : null}
           </li>
@@ -152,8 +156,13 @@ export default async function Company({ params, searchParams }) {
   // company is registered. Both are true and a rep should see both.
   const conflict = hq && d.geo.place && !hq.toLowerCase().includes(d.geo.place.split(",")[0].toLowerCase());
 
+  // Something is in flight, so the page will be wrong in a moment unless it
+  // asks again. Nothing pushes from the runner; this is the whole live story.
+  const running = d.dots.some((x) => x.state === "running");
+
   return (
     <div className="i-page">
+      {running ? <Live /> : null}
       <header className="i-head rise">
         <h1 className="i-h1">{c.name}</h1>
         <p className="i-sub">
