@@ -316,7 +316,9 @@ export default async function Overview({ searchParams }) {
                 (x) => x.group_id === g.id || groupOf.get(x.campaign_id) === g.id
               ).length;
               const pr = scopedProposals.filter((x) => groupOf.get(x.campaign_id) === g.id).length;
-              const status = g.status ?? "unknown";
+              // Derived, never typed. `g.status` is the intent someone recorded
+              // once; `actual_status` is what the campaigns inside are doing.
+              const status = g.actual_status ?? "unknown";
               // Null, not 0, for any group holding an Instantly campaign. The
               // dated bounce figure is a mailbox total and 13 of 23 mailboxes
               // serve several campaigns, so there is no honest way down to this

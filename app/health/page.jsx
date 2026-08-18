@@ -1,4 +1,4 @@
-import { db, num, pct, today, dailyRange, prettyWhen } from "../../lib/db";
+import { db, num, pct, today, dailyRange, prettyWhen, prettyDate } from "../../lib/db";
 import { Num, Pill, Chev } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -242,28 +242,33 @@ export default async function Health() {
         )}
       </div>
 
-      <h2>Group status</h2>
+      <h2>Group status — what was typed against what is happening</h2>
       <p className="sub" style={{ marginTop: -8 }}>
-        A group's status is a hand-set label, never revisited once campaigns underneath it
-        actually start sending. This is where a group left labelled &ldquo;planned&rdquo; or
-        &ldquo;abandoned&rdquo; while it&rsquo;s really running would show up — like Canada
-        &mdash; Justin&rsquo;s list did.
+        A group's status is typed once at creation and no code has ever updated it, so it
+        records <em>intent</em> and is allowed to age. It cannot answer whether anything
+        inside is still running &mdash; that is derived on every read, and needs
+        <em> both</em> a campaign the vendor still calls running <em>and</em> a send in the
+        last fortnight. Either signal alone is wrong somewhere today: a vendor&rsquo;s
+        running flag goes stale, and a recent send does not mean another is coming. This
+        fires in <strong>both</strong> directions, which the old check never did.
       </p>
       <div className="card tw">
         {!groupDrift?.length ? (
-          <p className="empty" style={{ padding: 0 }}>Clean — no group is labelled planned/abandoned while actually sending.</p>
+          <p className="empty" style={{ padding: 0 }}>Clean — every group's label matches what it is doing.</p>
         ) : (
           <table>
-            <thead><tr><th style={{ textAlign: "left" }}>Group</th><th>Labelled</th>
-              <th>Running campaigns</th><th>Lifetime sent</th><th>First sent</th></tr></thead>
+            <thead><tr><th style={{ textAlign: "left" }}>Group</th><th>Typed</th><th>Actually</th>
+              <th>Running</th><th>Last sent</th>
+              <th style={{ textAlign: "left" }}>What it means</th></tr></thead>
             <tbody>
               {groupDrift.map((g) => (
                 <tr key={g.id}>
                   <td className="name" style={{ textAlign: "left" }}><a href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
                   <td className="bad">{g.stored_status}</td>
+                  <td><span className={`pill p-${g.actual_status}`}>{g.actual_status}</span></td>
                   <td>{g.running_count} / {g.campaign_count}</td>
-                  <Num v={g.sent} />
-                  <td className="dim">{g.first_sent_on ?? "—"}</td>
+                  <td className="dim">{g.last_sent_on ? prettyDate(g.last_sent_on) : "never"}</td>
+                  <td className="dim" style={{ textAlign: "left" }}>{g.detail}</td>
                 </tr>
               ))}
             </tbody>

@@ -66,7 +66,9 @@ export default async function Campaigns({ searchParams }) {
           .filter(([, n]) => n);
         const rate = pct(g.bounced, g.sent);
         const rr = pct(g.replied, g.leads);
-        const status = (g.status ?? "unknown").replace(/_/g, " ");
+        // Derived from what the campaigns inside are actually doing, not from
+        // the word typed at group creation. See v_group_summary.actual_status.
+        const status = (g.actual_status ?? "unknown").replace(/_/g, " ");
         const drill = (metric) => listHref({ metric, range: "all", group: g.slug });
 
         return (
@@ -81,7 +83,7 @@ export default async function Campaigns({ searchParams }) {
                 <div className="title">
                   <div className="row">
                     <a className="nm" href={`/campaigns/${g.slug}`}>{g.display_name}</a>
-                    <span className={`pill p-${g.status ?? "unknown"}`}>{status}</span>
+                    <span className={`pill p-${g.actual_status ?? "unknown"}`}>{status}</span>
                   </div>
                   <div className="byline">
                     {[
