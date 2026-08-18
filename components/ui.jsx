@@ -196,8 +196,16 @@ export function tally(rows, field) {
   return [...m.entries()].map(([label, value]) => ({ label, value }));
 }
 
-/** Bounce rate coloured against the runbook: <2% fine, 2–5% watch, >5% stop. */
+/**
+ * Bounce rate coloured against the runbook: <2% fine, 2–5% watch, >5% stop.
+ *
+ * `bounced` null means the number is not known at this grain, which is not the
+ * same as a clean 0% — that conflation is the whole of what went wrong. Checked
+ * before `pct`, which would read null as a part of zero and print a reassuring
+ * 0.0%.
+ */
 export function BounceCell({ bounced, base }) {
+  if (bounced == null) return <td className="zero" title="not known at this grain">—</td>;
   const p = pct(bounced, base);
   if (p === null) return <td className="zero">—</td>;
   const cls = p > 5 ? "bad" : p >= 2 ? "mid" : "";
@@ -208,8 +216,14 @@ export function Num({ v, zeroDim = true }) {
   return <td className={zeroDim && !v ? "zero" : ""}>{num(v)}</td>;
 }
 
-/** A table number that opens the list of people behind it. Zero stays inert. */
+/**
+ * A table number that opens the list of people behind it. Zero stays inert.
+ *
+ * Null is not zero: it prints an em dash and opens nothing, because there is no
+ * list of people behind a number we do not have. `num()` would render it "0".
+ */
 export function DrillCell({ v, href }) {
+  if (v == null) return <td className="zero" title="not known at this grain">—</td>;
   if (!v) return <td className="zero">{num(v)}</td>;
   return <td><a className="drilled" href={href}>{num(v)}</a></td>;
 }

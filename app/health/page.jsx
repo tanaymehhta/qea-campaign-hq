@@ -5,13 +5,14 @@ export const dynamic = "force-dynamic";
 
 export default async function Health() {
   const t = today();
-  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }] = await Promise.all([
+  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }] = await Promise.all([
     db.from("email_accounts").select("*").order("email"),
     db.from("sync_runs").select("*").order("started_at", { ascending: false }).limit(12),
     db.from("v_campaign_summary").select("*"),
     dailyRange(t, t),
     db.from("v_metric_drift").select("*").order("metric_date", { ascending: false }),
     db.from("v_group_status_drift").select("*"),
+    db.from("v_reconciliation").select("*").order("difference", { ascending: false }),
   ]);
 
   const sentToday = new Map();
@@ -138,11 +139,51 @@ export default async function Health() {
         </table>
       </div>
 
-      <h2>Data integrity</h2>
+      <h2>Data integrity — do the pages agree with each other</h2>
       <p className="sub" style={{ marginTop: -8 }}>
-        lemlist's tile counts (daily_metrics) are derived from the named-people table
-        (activities) on every sync, so the two can no longer drift apart silently.
-        This is the canary if that ever stops being true.
+        Two copies of every number live in this database: a per-day one behind the Overview
+        and the chart, and a lifetime one behind /campaigns. Nothing keeps them in step, so
+        this compares them &mdash; every campaign, every metric, both tools. A row here
+        means two pages will print different numbers for the same word, which is exactly
+        what went unnoticed for a month while the homepage read a 0% bounce rate.
+      </p>
+      <div className="card tw">
+        {!recon?.length ? (
+          <p className="empty" style={{ padding: 0 }}>
+            Clean &mdash; the Overview and /campaigns agree on every metric, on every campaign.
+          </p>
+        ) : (
+          <table>
+            <thead><tr><th style={{ textAlign: "left" }}>Campaign</th><th>Tool</th><th>Metric</th>
+              <th>Daily / lifetime</th><th>Off by</th><th>Severity</th></tr></thead>
+            <tbody>
+              {recon.map((r) => (
+                <tr key={`${r.campaign_id ?? "all"}-${r.metric}`}>
+                  <td className="name" style={{ textAlign: "left" }}>
+                    {r.campaign_id ? <a href={`/c/${r.campaign_id}`}>{r.name}</a> : r.name}
+                  </td>
+                  <td className="dim">{r.source}</td>
+                  <td className="dim">{r.metric}</td>
+                  <td className="bad">{num(r.daily_total)} / {num(r.lifetime_total)}</td>
+                  <td className="bad">{r.difference > 0 ? "+" : ""}{num(r.difference)}</td>
+                  <td className={r.severity === "high" ? "bad" : r.severity === "medium" ? "mid" : "dim"}>
+                    {r.severity}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h2>lemlist rebuild</h2>
+      <p className="sub" style={{ marginTop: -8 }}>
+        A narrower check, kept because the one above cannot see what it sees. lemlist's
+        per-day counts are rebuilt from the named-people table on every sync; if that
+        rebuild broke, the lifetime totals would break with it in the same direction and
+        the comparison above would stay green. This reads the event stream instead.
+        It covers lemlist only &mdash; Instantly writes no bounce activity at all, so
+        there is nothing on that side to compare against.
       </p>
       <div className="card tw">
         {!drift?.length ? (

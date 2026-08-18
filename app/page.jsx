@@ -67,6 +67,46 @@ export default async function Overview({ searchParams }) {
   );
   const scopedProposals = (proposals ?? []).filter((p) => inScope(p.campaign_id));
 
+  // ------------------------------------------------------------------ bounce
+  //
+  // Instantly bounce is dated but not campaign-shaped. It arrives from
+  // v_daily_facts as overlay rows carrying no campaign_id, which the loop above
+  // has already skipped, so it is added here and only to totals wide enough to
+  // hold it. The source, email_account_daily, is keyed on the mailbox, and 13 of
+  // 23 Instantly mailboxes send for more than one campaign.
+  //
+  // A null on an overlay row means that date's mailbox pull has not landed — it
+  // runs on the 03:00 nightly, not the 30-minute sync, so today is always null.
+  // The total is therefore a floor with a date on it, and the tile says the date
+  // out loud. That is the difference between this and the 77 it replaces: 77 was
+  // also a floor, and nothing on screen admitted it.
+  const overlay = rows.filter((r) => !r.campaign_id);
+  const counted = overlay.filter((r) => r.bounced != null);
+  const instantlyBounce = counted.reduce((a, r) => a + r.bounced, 0);
+  const bounceThrough = counted.length
+    ? counted.reduce((a, r) => (a > r.metric_date ? a : r.metric_date), "")
+    : null;
+  const bounceIsPartial = counted.length < overlay.length;
+
+  // Which scopes can hold a real bounce number:
+  //   no Instantly in scope   — lemlist writes it per campaign-day, nothing missing
+  //   every campaign in scope — the overlay is exactly the whole-company figure
+  //   one rep's groups        — a share of a company-wide number is not a thing
+  const scopeHasInstantly = (campaigns ?? []).some((c) => c.source === "instantly" && inScope(c.id));
+  const overallBounced =
+    !scopeHasInstantly ? overall.bounced
+    : rep !== "all" ? null
+    : counted.length ? overall.bounced + instantlyBounce
+    : null;
+
+  // Same question per group. Grouping is derived from the campaign name, so a
+  // group is not permanently one vendor — this is asked of the data, not assumed.
+  const groupsWithInstantly = new Set(
+    (campaigns ?? [])
+      .filter((c) => c.source === "instantly" && groupOf.get(c.id))
+      .map((c) => groupOf.get(c.id))
+  );
+
   // The chart follows the range picker exactly: Today / a picked day = one
   // bar, 7/30/90 = that many days, All time = from the first day with data.
   const SPAN = { 7: 7, 30: 30, 90: 90 };
@@ -188,11 +228,24 @@ export default async function Overview({ searchParams }) {
         <Tile
           hero
           label="Emails bounced"
-          value={num(overall.bounced)}
-          raw={overall.bounced}
-          tone={pct(overall.bounced, overall.sent) > 5 ? "bad" : undefined}
-          note={overall.sent ? `${pct(overall.bounced, overall.sent)}% of sent · stop above 5%` : "—"}
-          href={drill("bounced")}
+          value={overallBounced == null ? "—" : num(overallBounced)}
+          raw={overallBounced ?? undefined}
+          tone={
+            overallBounced == null ? "muted"
+            : pct(overallBounced, overall.sent) > 5 ? "bad"
+            : undefined
+          }
+          note={
+            overallBounced == null
+              ? rep !== "all"
+                ? "Instantly bounce is counted company-wide, not per rep"
+                : "Not counted for this window yet — mailbox figures land on the 03:00 run"
+              : !overall.sent ? "—"
+              : bounceIsPartial
+                ? `${pct(overallBounced, overall.sent)}% of sent · Instantly counted to ${prettyDate(bounceThrough)}`
+                : `${pct(overallBounced, overall.sent)}% of sent · stop above 5%`
+          }
+          href={overallBounced == null ? undefined : drill("bounced")}
         />
       </div>
 
@@ -264,14 +317,19 @@ export default async function Overview({ searchParams }) {
               ).length;
               const pr = scopedProposals.filter((x) => groupOf.get(x.campaign_id) === g.id).length;
               const status = g.status ?? "unknown";
+              // Null, not 0, for any group holding an Instantly campaign. The
+              // dated bounce figure is a mailbox total and 13 of 23 mailboxes
+              // serve several campaigns, so there is no honest way down to this
+              // row. /campaigns carries the lifetime number, labelled as such.
+              const gBounced = groupsWithInstantly.has(g.id) ? null : m.bounced;
               return (
                 <tr key={g.id}>
                   <td className="name"><a className="drilled" href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
                   <td><span className={`pill p-${status}`}>{status.replace(/_/g, " ")}</span></td>
                   <DrillCell v={m.sent} href={drill("sent", { group: g.slug })} />
                   <DrillCell v={m.new_leads_contacted} href={drill("contacted", { group: g.slug })} />
-                  <DrillCell v={m.bounced} href={drill("bounced", { group: g.slug })} />
-                  <BounceCell bounced={m.bounced} base={m.sent} />
+                  <DrillCell v={gBounced} href={drill("bounced", { group: g.slug })} />
+                  <BounceCell bounced={gBounced} base={m.sent} />
                   <DrillCell v={m.opened} href={drill("opened", { group: g.slug })} />
                   <DrillCell v={m.replied} href={drill("replied", { group: g.slug })} />
                   <DrillCell v={mt} href={drill("meetings", { group: g.slug })} />
@@ -283,8 +341,8 @@ export default async function Overview({ searchParams }) {
               <td>Total</td><td />
               <td>{num(overall.sent)}</td>
               <td>{num(overall.new_leads_contacted)}</td>
-              <td>{num(overall.bounced)}</td>
-              <td>{overall.sent ? `${pct(overall.bounced, overall.sent)}%` : "—"}</td>
+              <td>{overallBounced == null ? "—" : num(overallBounced)}</td>
+              <td>{overallBounced != null && overall.sent ? `${pct(overallBounced, overall.sent)}%` : "—"}</td>
               <td>{num(overall.opened)}</td>
               <td>{num(overall.replied)}</td>
               <td>{num(meetingCount)}</td>
