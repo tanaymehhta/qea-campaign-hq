@@ -256,6 +256,45 @@ assert.equal(state(timeline(SEEN,
 // Stage order, never clock order: Canaccord's stage 3 ran before its stage 2.
 assert.deepEqual(canaccord.map((d) => d.stage), [0, 1, 2, 3]);
 
+// ── is this company running ─────────────────────────────────────────────────
+// One boolean, read by five Restart buttons, two pages and the dock. The two
+// cases that matter are the twenty-second gap where only the request row
+// exists, and the press whose run never appeared.
+const { busyOf } = await import("../lib/inbound/queue.js");
+const ago = (mins) => new Date(Date.now() - mins * 60000).toISOString();
+const press = (mins, stage = 1) =>
+  ({ stage, state: "dispatched", requested_at: ago(mins) });
+
+assert.equal(busyOf([], null), null, "nothing pressed, nothing running");
+assert.equal(busyOf([{ id: "r", stage_no: 2, status: "ok", started_at: ago(30) }], null), null);
+
+// A live run, whatever the request row says.
+assert.equal(
+  busyOf([{ id: "r", stage_no: 2, status: "running", started_at: ago(1) }], null).phase,
+  "running");
+assert.equal(
+  busyOf([{ id: "r", stage_no: 2, status: "running", started_at: ago(1) }], null).stage, 2);
+// Placed by graph name where stage_no is null, same as the timeline.
+assert.equal(
+  busyOf([{ id: "r", graph_name: "research", stage_no: null, status: "running" }], null).stage, 1);
+
+// The gap: GitHub is booting and this database holds no run at all. Without
+// this the page a rep is staring at right after pressing looks exactly like the
+// page that did nothing.
+assert.equal(busyOf([], press(0.2)).phase, "starting");
+assert.equal(busyOf([], press(0.2, 2)).stage, 2);
+
+// The runner has written something since the press, so the run reports on
+// itself now — two sources for one fact is how a page contradicts itself.
+assert.equal(
+  busyOf([{ id: "r", stage_no: 1, status: "ok", started_at: ago(1) }], press(3)), null,
+  "a request whose run has already come and gone is spent");
+
+// A dispatch that succeeded and then died leaves the row behind for good;
+// nothing marks a request finished. Ten minutes is the bound.
+assert.equal(busyOf([], press(9)).phase, "starting");
+assert.equal(busyOf([], press(11)), null, "a press with no run after ten minutes is not running");
+
 // ── the vocabulary a rep reads ──────────────────────────────────────────────
 const { emailSource, roleWords } = await import("../lib/inbound/words.js");
 
@@ -316,4 +355,4 @@ for (const b of DROPOFF) {
     `${b.id}: the bar and the list it opens hold the same companies`);
 }
 
-console.log("routing + words + timeline + drop-off: all cases pass");
+console.log("routing + words + timeline + busy + drop-off: all cases pass");

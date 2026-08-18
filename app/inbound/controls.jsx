@@ -154,17 +154,40 @@ export function RelevanceToggle({ companyId, relevant }) {
  * The refusals — already running, pressed a minute ago, out of credit — live in
  * `inbound_request_rerun`, not here, so a hostile POST meets the same rules.
  *
+ * While one is in flight this renders a line instead of a button, and the
+ * caller collapses whatever red box it was sitting in. Not a disabled button: a
+ * greyed-out control still reads as the thing you want, broken. And the guard
+ * is here rather than at the five places that render one — the timeline's three
+ * broken dots, the failed-research panel and the empty people panel are all the
+ * same run, so they cannot be allowed five opinions about whether it is going.
+ *
  * TODO: when sign-in lands, render this only for admins (requireAdmin() from
  * lib/auth.js) and pass the actor into `p_actor`, which is null today because
  * there is no session to name.
  */
-export function RestartButton({ companyId, stage = 1, small, caveat, wasCredit }) {
+export function RestartButton({ companyId, stage = 1, small, caveat, wasCredit, busy }) {
   // What this press will actually run, named in the title. "Restart" on a stuck
-  // draft must not read as paying to research the company a second time.
-  const rest = ["research", "people", "the draft"].slice(stage - 1);
+  // draft must not read as paying to research the company a second time. While
+  // something is running it is that run's stage that matters, not this button's
+  // — a live restart from stage 1 is doing all three whichever box you read it
+  // from.
+  const rest = ["research", "people", "the draft"].slice((busy?.stage ?? stage) - 1);
   const does = rest.length > 1
     ? `${rest.slice(0, -1).join(", ")} and then ${rest[rest.length - 1]}`
     : rest[0];
+
+  if (busy) {
+    return (
+      <div className="i-running">
+        Restarting — {does}.{" "}
+        <span className="dim">
+          {busy.phase === "starting"
+            ? "GitHub is starting a machine — about twenty seconds."
+            : "Running now."}
+        </span>
+      </div>
+    );
+  }
 
   // When the last attempt died on an empty account, no read here can tell
   // whether it has been topped up since — a balance is not in this database.

@@ -3,8 +3,10 @@ import "./inbound.css";
 import { prettyWhen, num } from "../../lib/db";
 import { money } from "../../lib/pipeline";
 import { ALL_REPS, REGIONS, repById } from "../../lib/inbound/routing";
-import { cap, errorReason, isCreditError } from "../../lib/inbound/words";
+import { cap, errorReason, isCreditError, RUNNING_CHIP } from "../../lib/inbound/words";
 import { RelevanceToggle, RestartButton } from "./controls";
+import { Live } from "./live";
+import { Running } from "./running";
 import {
   loadQueue, filterLeads, byLane, pageOf, pathOf, CO_LANES, RANGES, VIEWS, tally, share,
 } from "../../lib/inbound/queue";
@@ -117,10 +119,17 @@ function Hooks({ hooks }) {
  *  rather than a floating strip, because moving a company out of the queue is a
  *  sideways move like every other link on these pages. */
 function CompanyCard({ lead, i }) {
-  const failed = lead.chip.state === "failed";
+  // A card mid-restart is not a failed card. The red block explains the run
+  // being replaced right now, so it collapses with the button inside it — the
+  // same mistake the timeline already stopped making, which is showing a stale
+  // reading beside a live one as though they were a sequence. The line that
+  // takes its place sits in the same slot at the foot, so the card does not
+  // rearrange itself around the reader.
+  const failed = lead.chip.state === "failed" && !lead.busy;
+  const chip = lead.busy ? RUNNING_CHIP : lead.chip;
   const why = failed ? errorReason(lead.company?.account_type_reason) : null;
   return (
-    <div className={`i-cowrap${failed ? " failed" : ""}`}
+    <div className={`i-cowrap${failed ? " failed" : ""}${lead.busy ? " busy" : ""}`}
          style={{ animationDelay: `${Math.min(i, 14) * 0.03}s` }}>
       <a className="i-co" href={`/inbound/company/${lead.id}`}>
         <div className="top">
@@ -128,8 +137,8 @@ function CompanyCard({ lead, i }) {
           {/* What happened to research, on every card. This is what the deleted
               "Not researched yet" lane was trying to say and said wrongly: those
               companies were researched, and the research crashed. */}
-          <span className={`i-chip ${lead.chip.state}`} title={lead.chip.long}>
-            <span className="mark" />{lead.chip.label}
+          <span className={`i-chip ${chip.state}`} title={chip.long}>
+            <span className="mark" />{chip.label}
           </span>
         </div>
 
@@ -173,6 +182,7 @@ function CompanyCard({ lead, i }) {
       </a>
 
       <div className="i-cofoot">
+        {lead.busy ? <RestartButton companyId={lead.id} busy={lead.busy} /> : null}
         {failed ? (
           <div className="i-tone bad">
             <b>Research failed.</b> {cap(why)}.
@@ -263,20 +273,26 @@ export default async function Inbound({ searchParams }) {
   const here = { rep, range, as, show };
   const pickers = [{ id: "all", name: "All reps", initials: "ALL", tint: "var(--tint-n)" }, ...ALL_REPS];
 
+  // Everything in flight, not just what this filter shows. A run the window
+  // hides is still the run yours is queued behind — the workflow's concurrency
+  // group is section-wide — so hiding it would leave that wait unexplained.
+  const busy = companies.filter((l) => l.busy);
+
   return (
     <div className="i-page">
+      {/* This page was a photograph: it never asked the database a second time,
+          so a restart pressed here could not have changed it however long you
+          stared. The interval exists for as long as the work does. */}
+      {busy.length ? <Live /> : null}
       {searchParams?.err
         ? <div className="i-tone bad">That didn&rsquo;t save — {searchParams.err}</div> : null}
       {/* Refused on purpose, which is not the same as broken. "That didn't
           save" tells a rep to press again; this tells them why not to. */}
       {searchParams?.nope
         ? <div className="i-tone bad">Not started — {searchParams.nope}.</div> : null}
-      {/* A restart is the one action here with nothing to show on return: the
-          work happens on a GitHub runner and this page looks identical. Say so
-          rather than let the click read as having done nothing. */}
-      {searchParams?.queued
-        ? <div className="i-tone">Restart asked for. It starts within a second or two;
-            most companies are through research in under two minutes. Reload to see it.</div> : null}
+      {/* The banner that used to stand here said "Restart asked for … Reload to
+          see it". The dock says it better and the page reloads itself now, so
+          both halves of that sentence were retired rather than reworded. */}
 
       <header className="i-head rise">
         <h1 className="i-h1">Inbound queue</h1>
@@ -452,6 +468,8 @@ export default async function Inbound({ searchParams }) {
         <span className="sep">·</span>
         <a href="/inbound/drafts">Every draft it has written</a>
       </div>
+
+      <Running rows={busy} />
     </div>
   );
 }

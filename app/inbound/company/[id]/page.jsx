@@ -3,10 +3,11 @@ import { prettyWhen, num } from "../../../../lib/db";
 import { loadCompany, pageOf, pathOf, costs, whyNobody } from "../../../../lib/inbound/queue";
 import { money } from "../../../../lib/pipeline";
 import { REGIONS } from "../../../../lib/inbound/routing";
-import { verdict, bullets, cap, isApiError, isCreditError, errorReason, researchChip } from "../../../../lib/inbound/words";
+import { verdict, bullets, cap, isApiError, isCreditError, errorReason, researchChip, RUNNING_CHIP } from "../../../../lib/inbound/words";
 import { Research } from "../../research";
 import { RankButtons, ReadyToggle, RelevanceToggle, RestartButton } from "../../controls";
 import { Live } from "../../live";
+import { Running } from "../../running";
 
 export const dynamic = "force-dynamic";
 
@@ -80,8 +81,10 @@ function hint(d) {
     : `${ran} — ${d.reason}.`;
 }
 
-function Timeline({ dots, companyId }) {
-  const broken = dots.filter((d) => d.state === "bad" && d.failures.length);
+function Timeline({ dots, companyId, busy }) {
+  // Nothing is broken while it is being re-run: every one of these boxes
+  // describes the run this restart is replacing.
+  const broken = busy ? [] : dots.filter((d) => d.state === "bad" && d.failures.length);
   // Did its job, and something inside it still went wrong. Not a red box with a
   // Restart under it — the stage produced what it was asked for, and re-running
   // it would spend money to be told the same thing.
@@ -126,7 +129,7 @@ function Timeline({ dots, companyId }) {
               <b>{d.label} failed.</b> {cap(d.reason)}.
               <div style={{ marginTop: 10 }}>
                 <RestartButton companyId={companyId} stage={d.stage} small
-                  wasCredit={isCreditError(d.reason)} />
+                  wasCredit={isCreditError(d.reason)} busy={busy} />
               </div>
             </div>
           ))}
@@ -164,7 +167,9 @@ export default async function Company({ params, searchParams }) {
   const err = searchParams?.err;
 
   const v = verdict(c);
-  const chip = researchChip(c);
+  // Last time's verdict is not the current answer while the classifier is
+  // running on it again.
+  const chip = d.busy ? RUNNING_CHIP : researchChip(c);
   const spend = costs(d.runs);
   // Why there is nobody, in the terms of what actually ran — not "yet".
   const nobody = whyNobody(d.dots[2], d.nodesByRun.get(d.dots[2].run?.id) ?? [],
@@ -180,11 +185,12 @@ export default async function Company({ params, searchParams }) {
 
   // Something is in flight, so the page will be wrong in a moment unless it
   // asks again. Nothing pushes from the runner; this is the whole live story.
-  const running = d.dots.some((x) => x.state === "running");
+  // `d.busy` rather than a second reading of the dots: the queue reads the same
+  // helper, and two derivations of one fact eventually disagree.
 
   return (
     <div className="i-page">
-      {running ? <Live /> : null}
+      {d.busy ? <Live /> : null}
       <header className="i-head rise">
         <h1 className="i-h1">{c.name}</h1>
         <p className="i-sub">
@@ -213,11 +219,10 @@ export default async function Company({ params, searchParams }) {
       {err ? <div className="i-tone bad">That didn&rsquo;t save — {err}</div> : null}
       {searchParams?.nope
         ? <div className="i-tone bad">Not started — {searchParams.nope}.</div> : null}
-      {searchParams?.queued
-        ? <div className="i-tone">Restart asked for. It starts within a second or two;
-            most companies are through research in under two minutes. Reload to see it.</div> : null}
+      {/* "Reload to see it" retired with the banner: the page reloads itself,
+          and the dock in the corner says what is running. */}
 
-      <Timeline dots={d.dots} companyId={c.id} />
+      <Timeline dots={d.dots} companyId={c.id} busy={d.busy} />
 
       {conflict ? (
         <div className="i-tone warn">
@@ -293,19 +298,19 @@ export default async function Company({ params, searchParams }) {
                   reasoning at all. 56 of the 95 companies carry a raw 402 in this
                   column, and bulleting a stack trace under the words "why it
                   decided that" is the single worst line on the old page. */}
-              {isApiError(c.account_type_reason) ? (
+              {isApiError(c.account_type_reason) ? (d.busy ? null : (
                 <div className="i-tone bad" style={{ marginTop: 16 }}>
                   <b>Research failed.</b> {cap(errorReason(c.account_type_reason))} when this
                   company was classified, so nothing was decided about them.
                   <div style={{ marginTop: 10 }}>
-                    <RestartButton companyId={c.id} stage={1} small
+                    <RestartButton companyId={c.id} stage={1} small busy={d.busy}
                       wasCredit={isCreditError(c.account_type_reason)}
                       caveat={d.emails.length && !c.assigned_to
                         ? `The ${d.emails.length} draft${d.emails.length === 1 ? "" : "s"} here stay blocked either way — nobody is on file as this account's owner, and the validator will not sign a mail for an owner the record does not name.`
                         : null} />
                   </div>
                 </div>
-              ) : c.account_type_reason ? (
+              )) : c.account_type_reason ? (
                 <div style={{ marginTop: 18 }}>
                   <div className="i-label" style={{ marginBottom: 8 }}>
                     What kind of company they are
@@ -439,13 +444,15 @@ export default async function Company({ params, searchParams }) {
                     {d.dots[2].when ? `Searched ${prettyWhen(d.dots[2].when)}. ` : ""}
                     {nobody.tail}
                   </div>
-                  <RestartButton companyId={c.id} stage={2} />
+                  <RestartButton companyId={c.id} stage={2} busy={d.busy} />
                 </div>
               )}
             </div>
           </Section>
         </div>
       </div>
+
+      <Running rows={[{ id: c.id, name: c.name, busy: d.busy }]} linked={false} />
     </div>
   );
 }

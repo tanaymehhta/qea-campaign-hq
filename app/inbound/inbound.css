@@ -215,6 +215,14 @@
 .i-chip.done .mark   { border-radius: 50%; background: var(--good); }
 .i-chip.failed { background: var(--crit-soft); color: var(--crit-ink); }
 .i-chip.failed .mark { border-radius: 2px; background: var(--crit); }  /* square: not a dot */
+/* Running. The mark is the one chip dot that moves, and it is the only pulse on
+   a card — the dock carries the animation for the page. */
+.i-chip.live   { background: color-mix(in srgb, var(--cat-1) 12%, var(--page));
+                 color: color-mix(in srgb, var(--cat-1) 78%, var(--ink-1)); }
+.i-chip.live .mark { border-radius: 50%; background: var(--cat-1);
+                     animation: i-pulse 1.4s ease-in-out infinite; }
+@keyframes i-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .i-chip.live .mark { animation: none; } }
 /* --ink-3 on --seg is 3.2:1 — one of the three pairs §9 names. --ink-2 is 7:1
    and reads as the same quiet grey at this size. */
 .i-chip.none   { background: var(--seg); color: var(--ink-2); font-weight: 400; }
@@ -607,3 +615,58 @@ a.i-stat:active { transform: scale(.99); }
   cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
 }
 .lab-reasons table { margin-top: 10px; }
+
+/* ── what is running ────────────────────────────────────────────────────────
+   One dock, one mark, one per page. The rings on the timeline dots are a
+   different sign doing a different job — they say which stage is live — so
+   they stay; this says the system is working, and nothing else in the section
+   is allowed to say it twice. */
+
+/* A card mid-restart. The border tracks the run rather than the last failure,
+   which is what the red outline was reporting until the box under it went. */
+.i-cowrap.busy { border-color: color-mix(in srgb, var(--cat-1) 45%, transparent); }
+
+/* The line a Restart button turns into. Flat, not a disabled control: a greyed
+   button still reads as the thing you want, broken. */
+.i-running { font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             background: var(--wash); border: 1px solid var(--border);
+             border-radius: var(--r-sm); padding: 9px 12px; }
+.i-running .dim { color: var(--ink-3); }
+
+/* Right, not left: Next's dev error indicator lives in the bottom-left
+   corner and sits on top of anything parked there. */
+.i-dock { position: fixed; right: 20px; bottom: 20px; z-index: 40;
+          display: flex; align-items: center; gap: 12px; max-width: min(360px, calc(100vw - 40px));
+          padding: 11px 16px 11px 12px;
+          background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: var(--r-xl); box-shadow: var(--lift-lg);
+          animation: fadeUp .35s cubic-bezier(.22,.8,.3,1) both; }
+/* The file is a white square with no alpha and this app has a dark theme, so
+   the disc is cut out rather than laid down. 44% clears the mark's own margin
+   and nothing in the animation reaches past it. */
+.i-dockicon { width: 34px; height: 34px; flex: none; display: block;
+               background: url(/qea-mark.png) center/contain no-repeat; }
+.i-dockmark { width: 100%; height: 100%; display: block; border-radius: 50%;
+              clip-path: circle(44%); background: none; }
+.i-dockbody { min-width: 0; }
+.i-dock .head { font-size: 11px; font-weight: 600; text-transform: uppercase;
+                letter-spacing: .08em; color: var(--ink-3); }
+.i-dock .row { margin-top: 3px; font-size: 13px; line-height: 1.35; min-width: 0; }
+.i-dock .row a, .i-dock .row .nm { color: var(--ink-1); font-weight: 600;
+                                   text-decoration: none; }
+.i-dock .row a:hover { text-decoration: underline; }
+.i-dock .what { display: block; font-size: 12px; color: var(--ink-2);
+                font-variant-numeric: tabular-nums; }
+
+@media (max-width: 560px) {
+  /* Full width along the foot on a phone: a floating card at 360px is most of
+     the screen and covers whatever you were reading. */
+  .i-dock { left: 12px; right: 12px; bottom: 12px; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The mark stops moving and the dock still says what is happening, in words
+     it was already saying. */
+  .i-dock { animation: none; }
+  /* The loop goes and the still behind it stands in. */
+  .i-dockmark { display: none; }
+}
