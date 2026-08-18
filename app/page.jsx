@@ -158,6 +158,27 @@ export default async function Overview({ searchParams }) {
       <div className="grid g4">
         <Tile
           hero
+          label="Active campaigns"
+          value={num(running)}
+          raw={running}
+          note={`${running} of ${num(scopedCampaigns.length)} in this view`}
+          href="/campaigns"
+        />
+        <Tile
+          hero
+          label="People reached"
+          value={num(overall.new_leads_contacted)}
+          raw={overall.new_leads_contacted}
+          tone={overall.sent > 50 && overall.new_leads_contacted === 0 ? "bad" : undefined}
+          note={
+            overall.sent > 50 && overall.new_leads_contacted === 0
+              ? "All sends are follow-ups — no new people entered"
+              : "First touches, not follow-ups"
+          }
+          href={drill("contacted")}
+        />
+        <Tile
+          hero
           label="Emails sent"
           value={num(overall.sent)}
           raw={overall.sent}
@@ -166,77 +187,23 @@ export default async function Overview({ searchParams }) {
         />
         <Tile
           hero
-          label="Leads contacted"
-          value={num(overall.new_leads_contacted)}
-          raw={overall.new_leads_contacted}
-          tone={overall.sent > 50 && overall.new_leads_contacted === 0 ? "bad" : undefined}
-          note={
-            overall.sent > 50 && overall.new_leads_contacted === 0
-              ? "All sends are follow-ups — no new leads entered"
-              : "First touches, not follow-ups"
-          }
-          href={drill("contacted")}
-        />
-        <Tile
-          hero
-          label="Emails replied"
-          value={num(overall.replied)}
-          raw={overall.replied}
-          tone={overall.replied ? undefined : "muted"}
-          note={`${num(overall.replies_automatic)} out-of-office, counted separately`}
-          href={drill("replied")}
-        />
-        <Tile
-          hero
-          label="Meetings booked"
-          value={num(meetingCount)}
-          raw={meetingCount}
-          tone={meetingCount ? undefined : "muted"}
-          note="The primary KPI · logged by hand"
-          href={drill("meetings")}
-        />
-      </div>
-
-      <div className="grid g6" style={{ marginBottom: 34 }}>
-        <Tile
-          label="LinkedIn sent"
-          value={num(overall.linkedin_sent)}
-          raw={overall.linkedin_sent}
-          tone={overall.linkedin_sent ? undefined : "muted"}
-          note="Connection requests — profile views not counted"
-          href={drill("linkedin_sent")}
-        />
-        <Tile
-          label="LinkedIn accepted"
-          value={num(overall.linkedin_accepted)}
-          raw={overall.linkedin_accepted}
-          tone={overall.linkedin_accepted ? undefined : "muted"}
-          note={overall.linkedin_sent ? `${pct(overall.linkedin_accepted, overall.linkedin_sent)}% of requests` : "lemlist multichannel only"}
-          href={drill("linkedin_accepted")}
-        />
-        <Tile
-          label="Bounced"
+          label="Emails bounced"
           value={num(overall.bounced)}
           raw={overall.bounced}
           tone={pct(overall.bounced, overall.sent) > 5 ? "bad" : undefined}
           note={overall.sent ? `${pct(overall.bounced, overall.sent)}% of sent · stop above 5%` : "—"}
           href={drill("bounced")}
         />
+      </div>
+
+      <div className="grid g3" style={{ marginBottom: 34 }}>
         <Tile
-          label="Opened"
+          label="Emails opened"
           value={num(overall.opened)}
           raw={overall.opened}
           tone={overall.opened ? undefined : "muted"}
           note={overall.opened ? `${pct(overall.opened, overall.sent)}% of sent` : "Two-thirds of campaigns run tracking off"}
           href={drill("opened")}
-        />
-        <Tile
-          label="Proposals sent"
-          value={num(proposalCount)}
-          raw={proposalCount}
-          tone={proposalCount ? undefined : "muted"}
-          note="Logged by hand — no tool records this"
-          href={drill("proposals")}
         />
         <Tile
           label="Calls logged"
@@ -245,6 +212,14 @@ export default async function Overview({ searchParams }) {
           tone={callCount ? undefined : "muted"}
           note="Hand-logged, not scoped to a rep"
           href="/calls"
+        />
+        <Tile
+          label="Meetings booked"
+          value={num(meetingCount)}
+          raw={meetingCount}
+          tone={meetingCount ? undefined : "muted"}
+          note="The primary KPI · logged by hand"
+          href={drill("meetings")}
         />
       </div>
 
@@ -265,17 +240,20 @@ export default async function Overview({ searchParams }) {
       <div className="card tw banded">
         <table>
           <thead>
-            {/* Three bands over the eleven columns: how much went out, how much
-                of it landed, what came back. colSpans must total 11. */}
+            {/* Three bands over the ten columns: how much went out, how much
+                of it landed, what came back. colSpans must total 10. */}
             <tr className="band">
               <th colSpan={2} />
               <th colSpan={2}>Volume</th>
               <th colSpan={2}>Deliverability</th>
-              <th colSpan={5}>Engagement &amp; outcomes</th>
+              <th colSpan={4}>Engagement &amp; outcomes</th>
             </tr>
             <tr>
-              <th>Campaign</th><th>Status</th><th>Sent</th><th>New leads</th><th>Bounced</th>
-              <th>Bounce %</th><th>Opened</th><th>Replies</th><th>LI acc.</th><th>Meetings</th><th>Proposals</th>
+              <th>Campaign</th><th>Status</th><th>Sent</th>
+              <th title="First time we emailed this person — not a follow-up">First touches</th>
+              <th>Bounced</th>
+              <th>Bounce %</th><th>Opened</th><th>Replies</th>
+              <th>Meetings</th><th>Proposals</th>
             </tr>
           </thead>
           <tbody>
@@ -296,7 +274,6 @@ export default async function Overview({ searchParams }) {
                   <BounceCell bounced={m.bounced} base={m.sent} />
                   <DrillCell v={m.opened} href={drill("opened", { group: g.slug })} />
                   <DrillCell v={m.replied} href={drill("replied", { group: g.slug })} />
-                  <DrillCell v={m.linkedin_accepted} href={drill("linkedin_accepted", { group: g.slug })} />
                   <DrillCell v={mt} href={drill("meetings", { group: g.slug })} />
                   <DrillCell v={pr} href={drill("proposals", { group: g.slug })} />
                 </tr>
@@ -310,7 +287,6 @@ export default async function Overview({ searchParams }) {
               <td>{overall.sent ? `${pct(overall.bounced, overall.sent)}%` : "—"}</td>
               <td>{num(overall.opened)}</td>
               <td>{num(overall.replied)}</td>
-              <td>{num(overall.linkedin_accepted)}</td>
               <td>{num(meetingCount)}</td>
               <td>{num(proposalCount)}</td>
             </tr>
