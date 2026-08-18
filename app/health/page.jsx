@@ -1,11 +1,13 @@
-import { db, num, pct, today, dailyRange, prettyWhen, prettyDate } from "../../lib/db";
+import { db, num, pct, today, dailyRange, prettyWhen, prettyDate, repList } from "../../lib/db";
+import { setGroupOwner } from "./actions";
 import { Num, Pill, Chev } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function Health() {
+export default async function Health({ searchParams }) {
   const t = today();
-  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }, { data: broken }] = await Promise.all([
+  const err = searchParams?.err;
+  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }, { data: broken }, { data: ownerless }, { reps }] = await Promise.all([
     db.from("email_accounts").select("*").order("email"),
     db.from("sync_runs").select("*").order("started_at", { ascending: false }).limit(12),
     db.from("v_campaign_summary").select("*"),
@@ -14,6 +16,8 @@ export default async function Health() {
     db.from("v_group_status_drift").select("*"),
     db.from("v_reconciliation").select("*").order("difference", { ascending: false }),
     db.from("v_invariants").select("*").order("rule"),
+    db.from("v_groups_without_an_owner").select("*").order("display_name"),
+    repList(),
   ]);
 
   const sentToday = new Map();
@@ -139,6 +143,58 @@ export default async function Health() {
           </tbody>
         </table>
       </div>
+
+      {err ? (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <p className="empty bad" style={{ padding: 0 }}>{err}</p>
+        </div>
+      ) : null}
+
+      <h2>Groups with nobody's name on them</h2>
+      <p className="sub" style={{ marginTop: -8 }}>
+        Owner is the one blank field on a campaign group that costs a feature rather than a
+        label. A group without one is skipped by the rep layer entirely &mdash; no avatar, no
+        rep filter on the Overview, no entry in the calls roster &mdash; and nothing about the
+        group looks broken, which is how it goes unnoticed. Until now the only fix was editing
+        the database by hand.
+      </p>
+      <div className="card tw">
+        {!ownerless?.length ? (
+          <p className="empty" style={{ padding: 0 }}>Clean &mdash; every group has an owner.</p>
+        ) : (
+          <table>
+            <thead><tr><th style={{ textAlign: "left" }}>Group</th><th>Status</th>
+              <th>Campaigns</th><th>Sent</th>
+              <th style={{ textAlign: "left" }}>Give it an owner</th></tr></thead>
+            <tbody>
+              {ownerless.map((g) => (
+                <tr key={g.id}>
+                  <td className="name" style={{ textAlign: "left" }}>
+                    <a href={`/campaigns/${g.slug}`}>{g.display_name}</a>
+                  </td>
+                  <td><span className={`pill p-${g.actual_status}`}>{g.actual_status}</span></td>
+                  <td>{g.campaign_count}</td>
+                  <Num v={g.sent} />
+                  <td style={{ textAlign: "left" }}>
+                    {/* The existing reps come from who already owns a group — there
+                        is no rep table — so the list is a suggestion, not a
+                        constraint. A brand new name has to be typeable or the
+                        first group a person owns could never be assigned. */}
+                    <form action={setGroupOwner} className="gapform">
+                      <input type="hidden" name="group" value={g.id} />
+                      <input name="owner" list="known-reps" placeholder="Owner's name" required />
+                      <button className="choice on">Save</button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <datalist id="known-reps">
+        {reps.map((r) => <option key={r.id} value={r.name} />)}
+      </datalist>
 
       <h2>Data integrity — do the pages agree with each other</h2>
       <p className="sub" style={{ marginTop: -8 }}>

@@ -1296,3 +1296,101 @@ They sum. PLAN.md says that was previously impossible.
   `booked_meeting` is last in the array and the pill reads the newest row. Bashkim's call
   is the evidence. **Not fixed** — it is a calls-workspace bug, not a meetings one, and it
   is not in PLAN.
+
+---
+
+## Step 12 · Phase 5's last bullet — an owner can be set from the screen
+
+Migration `20260818201502`. A group with a null `owner` is skipped by `repList()`, so it
+gets no rep avatar, no rep filter on the Overview and no entry in the `/calls` roster. It
+is the one blank field on `campaign_groups` that costs a **feature** rather than a label,
+and nothing about the group looks broken — which is how `ungrouped` has sat that way since
+it was auto-created. The only fix was editing the database by hand.
+
+- **`v_groups_without_an_owner`** — what `/health` lists.
+- **`set_group_owner(uuid, text)`** — security definer, validates its own arguments,
+  touches exactly one column of one row. Same pattern as `classify_reply` and
+  `record_meeting_detail`; a rejected write comes back as the database's own sentence in a
+  banner rather than a crash screen.
+- **`app/health/actions.js`** — the server action, revalidating every page that draws a rep
+  avatar or filter.
+
+**It deliberately does not restrict the owner to an existing rep.** There is no rep table —
+reps are *derived* from who owns a group — so requiring an existing owner would make the
+first owner of any new name unaddable. The form offers the known names in a `datalist` (4
+today) and accepts a new one.
+
+**Four cases, in a rolled-back transaction:**
+
+| input | result |
+|---|---|
+| `'   '` | rejected — *an owner name is required* |
+| 90 characters | rejected — *that name is too long — keep it under 80 characters* |
+| a group id that does not exist | rejected — *no campaign group with id 000…* |
+| `'  Justin  '` | accepted, stored as `'Justin'`, ownerless groups → **0** |
+
+Rolled back, so **`ungrouped` still has no owner** — who owns it is a decision for a person,
+not something to invent while testing.
+
+The block renders on `/health` listing `Ungrouped`, with its derived status and a form.
+
+---
+
+## Step 13 · Phase 4's other half — written, verified, **not deployed**
+
+The thirteen discarded write errors. `supabase/functions/sync/index.ts` is changed and
+committed. **It is not live.** Read this before assuming the sync behaves as described.
+
+### What the change does
+
+Rather than wrap thirteen call sites and hope the fourteenth remembers, the check sits
+underneath all of them. PostgREST speaks HTTP, so a failed write is a non-2xx response to a
+non-GET request — a custom `fetch` on the Supabase client records those. **It covers every
+existing write and every one anybody adds later, without touching a single call site.** It
+records rather than throws: one rejected row should not abandon a sync, it should make the
+run say `partial` and name what failed.
+
+It also fixes the three silent derivations. `regroup()`, `refresh_lemlist_totals()` and
+`refresh_lemlist_people()` recorded their failures in `detail` and left `status` at `'ok'`
+— a run where every lemlist derivation failed reported success. They now mark it `partial`.
+
+### Why it is not deployed
+
+The project is **not linked to the Supabase CLI** and there is no `SUPABASE_ACCESS_TOKEN`
+anywhere in the environment. The only deployment path available to me was retyping all
+**28,721 bytes** of the function into a tool call. A single wrong character in a 28KB
+payload breaks the sync that runs every thirty minutes, and the MCP tooling exposes no
+version rollback — recovering would mean retyping the original 28KB just as accurately.
+That is not a risk worth taking with a cron-critical function when the alternative is one
+command.
+
+**To deploy it, from a linked CLI:**
+
+```bash
+supabase functions deploy sync --project-ref yfnqszwlyoyfhuwfmcyl
+```
+
+`verify_jwt` must stay **true** — that is its current setting, confirmed live. The file on
+disk is ready; the CLI reads it straight from disk with no transcription involved.
+
+### Verified locally, so the deploy is the only unknown
+
+- **`deno check` reports the same 7 `TS18046` errors as the original file**, no more. They
+  are the pre-existing `'e' is of type 'unknown'` pattern throughout, and the function
+  currently runs in production with them.
+- The diff is +60 / −5 lines and touches nothing else.
+
+### Two findings that came out of reading the file
+
+- **`supabase/functions/sync/index.ts` contained a literal NUL byte**, inside the
+  template-version content hash: ``sha256(`${subject}\0${body}`)``. The separator is
+  deliberate and correct — it stops `("ab","c")` and `("a","bc")` hashing identically — but
+  as a raw byte it made the file read as **binary** to `grep`, `file` and every other
+  line-based tool, and one careless rewrite would silently change every template hash.
+  Replaced with the `\0` escape, which `deno eval` confirms is the same character. The file
+  is now plain UTF-8 text.
+- **`verify_jwt` is `true` on the sync function** — TRUST.md §10 item 7 records this as
+  unknown. It is now known, and the concern behind it stands: `verify_jwt` checks that a
+  JWT is *valid*, not that it is *privileged*, and the anon key is public by design
+  (it ships in `lib/db.js`). So anyone holding it can still invoke a full sync. That is
+  `AUTH_PLAN.md`'s problem, not this one, but it is no longer unverified.

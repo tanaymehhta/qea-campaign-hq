@@ -18,10 +18,40 @@ const TZ = "America/New_York";
 const INSTANTLY = "https://api.instantly.ai/api/v2";
 const LEMLIST = "https://api.lemlist.com/api";
 
+// Every write in this file is `await db.from(x).upsert(...)` with the `error`
+// half discarded — thirteen sites, without exception. A row rejected by a
+// constraint vanished, the run still counted it in rows_upserted, and the run
+// log still said `ok`. That is an entire class of corruption with no symptom.
+//
+// Rather than wrap thirteen call sites and hope the fourteenth remembers, the
+// check sits under all of them: PostgREST speaks HTTP, so a failed write is a
+// non-2xx response to a non-GET request. This catches every existing write, and
+// every one anybody adds later, without touching the call sites at all.
+//
+// It records; it does not throw. A single rejected row should not abandon the
+// rest of a sync — it should make the run say `partial` and name what failed.
+const writeFailures: string[] = [];
+
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  { auth: { persistSession: false } },
+  {
+    auth: { persistSession: false },
+    global: {
+      fetch: async (input: any, init: any) => {
+        const res = await fetch(input, init);
+        const method = init?.method ?? "GET";
+        if (!res.ok && method !== "GET" && method !== "HEAD") {
+          let body = "";
+          try { body = (await res.clone().text()).slice(0, 300); } catch { /* ignore */ }
+          let where = String(input);
+          try { where = new URL(where).pathname.replace("/rest/v1/", ""); } catch { /* ignore */ }
+          writeFailures.push(`${method} ${where} -> ${res.status} ${body}`);
+        }
+        return res;
+      },
+    },
+  },
 );
 
 // ---------------------------------------------------------------- helpers
@@ -211,7 +241,12 @@ async function syncInstantly(from: string, to: string, deep: boolean) {
         const st = steps[i];
         for (let v = 0; v < (st.variants?.length ?? 0); v++) {
           const va = st.variants[v];
-          const hash = await sha256(`${va.subject ?? ""} ${va.body ?? ""}`);
+          // The separator is a NUL, written as an escape rather than a literal byte:
+          // as a raw byte it made this file read as binary to grep and every
+          // other line-based tool, and one careless rewrite would silently
+          // change every template hash. `\0` in a template literal is the same
+          // character. It is there so ("ab","c") and ("a","bc") cannot collide.
+          const hash = await sha256(`${va.subject ?? ""}\0${va.body ?? ""}`);
           await db.from("template_versions").upsert({
             campaign_id: data.id, step_index: i, variant: String(v),
             channel: st.type ?? "email", delay_days: st.delay ?? null,
@@ -604,14 +639,22 @@ Deno.serve(async (req) => {
     err = [err, `lemlist: ${e.message}`].filter(Boolean).join(" | ");
     detail.lemlist_error = e.message;
   }
+  // These three used to record their failure in `detail` and leave `status`
+  // at 'ok'. A run where every lemlist derivation failed reported success.
   try {
     detail.grouped = await regroup();
-  } catch (e) { detail.group_error = e.message; }
+  } catch (e) {
+    detail.group_error = e.message;
+    status = status === "ok" ? "partial" : status;
+  }
 
   try {
     const { data: n } = await db.rpc("refresh_lemlist_totals");
     detail.lemlist_totals_refreshed = n;
-  } catch (e) { detail.totals_error = e.message; }
+  } catch (e) {
+    detail.totals_error = e.message;
+    status = status === "ok" ? "partial" : status;
+  }
 
   // lemlist's per-person counters are rebuilt from the cumulative activity log
   // rather than accumulated in the loop above: an incremental run only sees a
@@ -619,7 +662,19 @@ Deno.serve(async (req) => {
   try {
     const { data: n } = await db.rpc("refresh_lemlist_people");
     detail.lemlist_people_refreshed = n;
-  } catch (e) { detail.people_error = e.message; }
+  } catch (e) {
+    detail.people_error = e.message;
+    status = status === "ok" ? "partial" : status;
+  }
+
+  // A rejected row is not a healthy run, whatever else went right.
+  if (writeFailures.length) {
+    detail.write_errors = writeFailures.length;
+    detail.write_error_detail = writeFailures.slice(0, 20);
+    status = status === "ok" ? "partial" : status;
+    err = [err, `${writeFailures.length} write(s) rejected: ${writeFailures[0]}`]
+      .filter(Boolean).join(" | ");
+  }
 
   await db.from("sync_runs").update({
     finished_at: new Date().toISOString(), status, rows_upserted: wrote, detail, error: err,
