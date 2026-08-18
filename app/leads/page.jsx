@@ -4,13 +4,18 @@ import { Tile, Pill, PersonLink, ShareDonut } from "../../components/ui";
 export const dynamic = "force-dynamic";
 
 const STATUSES = ["sent", "assigned", "prospect", "held", "no_email"];
-const EMPTY_COUNTS = { total: 0, sent: 0, assigned: 0, prospect: 0, held: 0, no_email: 0 };
+const EMPTY_COUNTS = { total: 0, sent: 0, assigned: 0, prospect: 0, held: 0, no_email: 0, none: 0 };
 
 // PostgREST caps unbounded selects at its configured max rows, so counting via
-// select().length silently truncates once `leads` grows past that — use exact
+// select().length silently truncates once the list grows past that — use exact
 // head-counts instead, which read the Content-Range total, not the row body.
+//
+// Every read on this page goes to `v_leads`, not `leads`. The table is a frozen
+// spreadsheet import — 1,950 rows, newest 28 July, no writer anywhere in this
+// repo — while `people` is synced every half hour. The view is the live rows
+// plus the 24 who only ever existed on a spreadsheet. See the migration.
 async function countWhere(filters) {
-  let q = db.from("leads").select("*", { count: "exact", head: true });
+  let q = db.from("v_leads").select("*", { count: "exact", head: true });
   for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
   const { count } = await q;
   return count ?? 0;
@@ -18,7 +23,7 @@ async function countWhere(filters) {
 
 /** Head-count across a set of groups — the multi-select needs an in-list, not an eq. */
 async function countIn(groupIds, status) {
-  let q = db.from("leads").select("*", { count: "exact", head: true }).in("group_id", groupIds);
+  let q = db.from("v_leads").select("*", { count: "exact", head: true }).in("group_id", groupIds);
   if (status) q = q.eq("status", status);
   const { count } = await q;
   return count ?? 0;
@@ -37,6 +42,11 @@ export default async function Leads({ searchParams }) {
     Promise.all((groups ?? []).map((g) => countWhere({ group_id: g.id }))),
     Promise.all(STATUSES.map((s) => countWhere({ status: s }))),
   ]);
+
+  // Everyone the tools know who was never on a spreadsheet, so has no imported
+  // status. 810 of them today. Counted rather than left as the gap between the
+  // total and the four status tiles, which is how it would go unnoticed.
+  const noStatusTotal = totalCount - statusCounts.reduce((a, n) => a + n, 0);
 
   const countsByGroup = new Map((groups ?? []).map((g, i) => [g.id, groupCounts[i]]));
   const totalByStatus = STATUSES.reduce((acc, s, i) => {
@@ -72,10 +82,11 @@ export default async function Leads({ searchParams }) {
     gc.total = activeGroups.reduce((a, g) => a + (countsByGroup.get(g.id) ?? 0), 0);
     const statusBreakdown = await Promise.all(STATUSES.map((s) => countIn(activeIds, s)));
     STATUSES.forEach((s, i) => { gc[s] = statusBreakdown[i]; });
+    gc.none = gc.total - statusBreakdown.reduce((a, n) => a + n, 0);
 
     let q = db
-      .from("leads")
-      .select("id, name, email, company, title, status, email_quality, source_list")
+      .from("v_leads")
+      .select("id, name, email, company, title, status, email_quality, source_list, in_tools")
       .in("group_id", activeIds)
       .order("name")
       .limit(1000);
@@ -89,13 +100,24 @@ export default async function Leads({ searchParams }) {
     <>
       <h1>Leads</h1>
       <p className="sub">
-        Every targeted person across the priority campaigns, tagged by whether they&rsquo;ve actually
-        been sent to &mdash; reconciled against live Instantly/lemlist data, not just the source
-        spreadsheets.
+        Every targeted person across the priority campaigns, live from Instantly and lemlist,
+        plus the handful who only ever existed on a source spreadsheet. <strong>Status is a
+        human column</strong> &mdash; it came from those spreadsheets and describes a
+        pipeline no tool reports, so anyone who was never on one shows &ldquo;&mdash;&rdquo;
+        rather than a status invented for them.
       </p>
 
       <div className="grid g4">
-        <Tile hero label="Total people" value={num(totalCount)} note={`${populatedGroups.length} campaign groups`} />
+        <Tile
+          hero
+          label="Total people"
+          value={num(totalCount)}
+          note={
+            noStatusTotal
+              ? `${populatedGroups.length} groups · ${num(noStatusTotal)} never on a source spreadsheet`
+              : `${populatedGroups.length} campaign groups`
+          }
+        />
         <Tile
           plus
           label="Sent"
@@ -177,7 +199,12 @@ export default async function Leads({ searchParams }) {
               number instead of leaving a silent gap. */}
           <ShareDonut
             title={activeStatus ? "shown" : "leads"}
-            items={STATUSES.map((s) => ({ label: s, value: gc[s] ?? 0 }))}
+            items={[
+              ...STATUSES.map((s) => ({ label: s, value: gc[s] ?? 0 })),
+              // Without this slice the ring describes only the imported half and
+              // looks like the whole list.
+              { label: "no imported status", value: gc.none ?? 0 },
+            ]}
             note={activeStatus ? `Filtered to ${activeStatus.replace(/_/g, " ")} — the ring is the whole selection.` : null}
           />
           {STATUSES.filter((s) => gc[s] > 0).length < 3 && gc.total ? (
@@ -213,12 +240,27 @@ export default async function Leads({ searchParams }) {
                     <td className="dim" style={{ textAlign: "left" }}>{r.email || "—"}</td>
                     <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                     <td style={{ textAlign: "left" }}>{r.title || "—"}</td>
-                    <td><Pill status={r.status} /></td>
+                    {/* Null is not a status. Someone the tools know who was never
+                        on a source spreadsheet has no imported pipeline state,
+                        and inventing one would be the whole bug again. */}
+                    <td>{r.status ? <Pill status={r.status} /> : <span className="dim">—</span>}</td>
                     <td className="dim">{r.email_quality || "—"}</td>
                   </tr>
                 ))}
                 {!rows.length ? (
                   <tr><td colSpan={7} className="empty">No leads match this filter.</td></tr>
+                ) : null}
+                {/* PostgREST caps a response at 1,000 rows whatever .limit() asks
+                    for. The counts above are exact — they read Content-Range, not
+                    the body — so only this table is a slice, and it says so
+                    rather than reading as the whole list. */}
+                {rows.length >= 1000 ? (
+                  <tr>
+                    <td colSpan={7} className="empty">
+                      Showing the first {num(rows.length)} of {num(activeStatus ? (gc[activeStatus] ?? 0) : gc.total)}.
+                      Narrow by campaign, status, or search to see the rest.
+                    </td>
+                  </tr>
                 ) : null}
               </tbody>
             </table>

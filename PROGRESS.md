@@ -1075,3 +1075,128 @@ violations, bounce 149 = 149, 0 rows stamped by the rolled-back trigger test.
   null owner still vanishes from the rep layer, and the only fix is still editing the
   database by hand. **Not built** — it needs a form and a server action, which is a
   different kind of change from everything above.
+
+---
+
+## Step 9 · Phase 6 — the repo can rebuild the database
+
+**TRUST.md recorded two holes. There were twenty-four.**
+
+Comparing `supabase/migrations/` against `supabase_migrations.schema_migrations` — the
+database's own record of what it ran:
+
+- **24 applied migrations had no file of that name here**, including `add_proposals`,
+  `reply_identity_trigger`, seven inbound stage-3 migrations, the manual queue overrides
+  and `v_inbound_stranded`. A rebuild would have produced a database missing tables the
+  dashboard reads on every page load.
+- **The two sides used different numbering.** Files carried hand-written round numbers
+  (`20260730120000`); the database recorded real applied timestamps (`20260730132126`).
+  19 files were the same migration under a different name — which is why a
+  version-by-version comparison read as catastrophic and a name-by-name one showed the
+  real gap.
+
+### How it was rebuilt
+
+Every migration's full SQL, comments included, is kept in `schema_migrations.statements` —
+verified by pulling one and finding its prose intact.
+
+**61 files were written straight from the database to disk, byte for byte**, routed
+through a throwaway view rather than retyped: a transcription slip inside a function body
+would not surface until someone tried to restore. The view was created, read, and dropped
+inside a minute — confirmed gone afterwards.
+
+**`schedule_sync` was excluded from the export.** It is the one migration whose recorded
+SQL contains a live Vault token — checked by scanning all 62 for `create_secret`, JWT
+shapes and secret-ish words, which returned exactly that one row. The repo copy stays
+redacted to `<SUPABASE_ANON_KEY>`.
+
+**Seven files kept their local prose instead.** Their statements matched what was applied
+exactly, but the applied record had lost the comments — someone had run the statements
+rather than the file. `group_mark_dolan_roof` was 4,134 bytes here against 1,401 recorded,
+all of it reasoning. The larger version won.
+
+**20 duplicates were removed**, each verified equivalent on statements first — comments
+and whitespace stripped — never on byte size. Two needed judgement:
+
+- **`conflicts_and_human_classification`** was one migration here and three in the database
+  (`…235357`, `…235806 fill_reply_identities`, `…235834 reply_identity_trigger`). The split
+  covers it.
+- **`feedback`** differed for real. The applied version uses `--` inside two `raise
+  exception` messages; the local file had been hand-edited to em dashes and never
+  re-applied. **What runs won.** I initially read this diff backwards and said the opposite
+  in conversation — corrected on re-reading.
+
+### Where it stands
+
+**63 files. 62 map one-to-one onto the recorded history.**
+
+The 63rd, `20260728180000_inbound_schema.sql`, is the one honest irregularity: the database
+has no record of it ever being applied, yet all eleven tables it defines exist in
+production, created by the sibling `qea-inbound` repo through GitHub Actions. It is kept
+because it is the **only definition of those tables anywhere in this repository** — a
+rebuild without it comes up missing the entire inbound half and four pages fail on a
+missing table. Its header now says exactly that. Safe to re-apply: all eleven creates are
+`if not exists`, and enabling row level security twice is a no-op.
+
+**All fourteen `inbound_*` tables in production now have a create statement somewhere in
+this directory** — checked per table, not assumed.
+
+`supabase/migrations/README.md` records the two queries that show it is still true.
+
+---
+
+## Step 10 · Phase 1c — `/leads` stops being a July snapshot
+
+**Your answer: keep `leads.status` human-owned; rows never on a spreadsheet show `—`.**
+Recorded here so it is not re-asked.
+
+### `v_leads` — migration `20260818200717`
+
+Live rows from `people`, plus the people who only ever existed on a spreadsheet, with the
+human-only columns joined on email.
+
+Two measured details shaped the SQL:
+
+- **`leads` has 1,950 rows across only 1,921 distinct emails.** A direct join on email
+  would have fanned a person into two rows. `lead_one` picks one row per address, oldest
+  first.
+- **53 leads rows have no matching person, across 24 distinct addresses.** TRUST.md's "24"
+  counted people and mine counted rows — both right, and the view emits 24.
+
+### Before and after
+
+| | before | after |
+|---|---|---|
+| Total people | 1,950 | **2,780** |
+| of which live in the tools | — | 2,756 |
+| of which spreadsheet-only | — | **24** |
+| carrying an imported status | 1,950 | 1,970 |
+| showing `—` for status | 0 | **810** |
+| rows with no group | — | 0 |
+
+The 810 is exactly the number of people who were invisible on this page.
+
+### Three honesty fixes on the page itself
+
+- **The status cell renders `—`, not a pill**, when there is no imported status. 261 of
+  them are visible in the first screenful.
+- **The donut gained a "no imported status" slice.** Without it the ring described 71% of
+  the list and looked like all of it.
+- **The table says it is a slice.** `.limit(1000)` against 2,780 rows was already
+  truncating silently at 1,950 before this change — the head-counts above it are exact
+  (they read `Content-Range`, not the body), so only the table was ever short. It now
+  prints *"Showing the first 1,000 of 2,780. Narrow by campaign, status, or search to see
+  the rest."*
+
+### Surprises
+
+- **`/leads` was already silently truncating before any of this**, at 1,950 rows against a
+  1,000 cap. TRUST.md F7 lists this page as *fixed* for the ceiling — the head-counts were
+  fixed, the table was not.
+- **`leads` contains 29 duplicate email addresses.** Not previously recorded anywhere.
+
+### Not verified
+
+- **Whether anyone wants the 810 to be assignable a status.** They render `—` and there is
+  no way to set one from the interface. That is the honest state, not necessarily the
+  desired one.
