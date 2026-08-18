@@ -1,27 +1,7 @@
--- The restart button's memory.
---
--- Without a row per request the button fires into the dark: the page cannot say
--- "already queued four minutes ago", and nothing stops a rep pressing it eleven
--- times while a runner is already working the account.
---
--- The row is a request, not a result. What actually happened is read from
--- inbound_graph_runs, because a run can finish `ok` having produced nothing —
--- a stage 2 whose reveals were all refused by the Apollo daily cap records ok
--- with no error. Reporting from this table would report that as success.
---
--- NOTE: `inbound_request_rerun` below is the first version. It was replaced
--- twice the same evening — see 20260817212239, which holds the live definition.
--- Both refusals it makes here were wrong in the same way, and the later file
--- says why.
-
 create table if not exists inbound_rerun_requests (
   id            uuid primary key default gen_random_uuid(),
   company_id    uuid not null references inbound_companies(id) on delete cascade,
-  -- 1 research, 2 people, 3 draft. Always runs through to the end from here.
   stage         smallint not null check (stage between 1 and 3),
-  -- Null until there is a login. The dashboard has no session today, so a value
-  -- here could only ever be a guess; the column exists so the answer has a home
-  -- the day sign-in lands rather than a migration then.
   requested_by  text,
   requested_at  timestamptz not null default now(),
   github_run_id bigint,
@@ -34,8 +14,6 @@ create index if not exists inbound_rerun_requests_company_idx
 
 alter table inbound_rerun_requests enable row level security;
 
--- Same shape as the other 35: readable, never writable except through the
--- security definer functions.
 drop policy if exists "public read" on inbound_rerun_requests;
 create policy "public read" on inbound_rerun_requests for select using (true);
 
@@ -99,13 +77,6 @@ begin
   return v_id;
 end $$;
 
-/**
- * Record what became of the request.
- *
- * 'abandoned' is what a failed dispatch writes, and it is why the ten-minute
- * guard ignores that state: GitHub refusing the POST must not lock the company
- * out of being retried immediately.
- */
 create or replace function inbound_mark_rerun(
   p_request uuid,
   p_state   text,
@@ -126,9 +97,6 @@ begin
   if not found then raise exception 'no such request'; end if;
 end $$;
 
--- anon is what the dashboard holds today. When sign-in lands and anon is
--- revoked across the schema, these two go with it — the grant to authenticated
--- is already here so that pass is a revoke and not a rewrite.
 grant execute on function inbound_request_rerun(uuid, int, text)
   to anon, authenticated, service_role;
 grant execute on function inbound_mark_rerun(uuid, text, bigint)

@@ -23,10 +23,6 @@
 -- derived at read time from Phase 1 onward and there is nothing left to compare.
 -- `contacted` is absent too: never displayed on any page, so a difference in it
 -- cannot mislead anyone.
---
--- Validated the way a detector should be: built before the fix, against a fault
--- already understood. First run returned exactly one row -
--- instantly / bounced / daily 0 / lifetime 72 / severity high.
 create or replace view v_reconciliation as
 with daily as (
   select campaign_id,

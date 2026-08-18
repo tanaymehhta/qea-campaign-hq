@@ -7,6 +7,10 @@
 -- the moment it agrees. Nothing to mark resolved, nothing to go stale.
 -- ============================================================
 
+-- Instantly reports, per campaign per day, how many inbound were genuine
+-- replies and how many were auto-replies. We import the messages themselves
+-- and label them. When our labelling and its count disagree, the split is
+-- guesswork and a human should settle it.
 create or replace view v_reply_conflicts as
 with ours as (
   select r.campaign_id,
@@ -32,6 +36,7 @@ from ours o
 join theirs t on t.campaign_id = o.campaign_id and t.day = o.day
 where o.ours_real <> t.their_real or o.ours_auto <> t.their_auto;
 
+-- Every open question in one shape, so the page is a single query.
 create or replace view v_conflicts as
 select
   'reply_split'::text                       as kind,
@@ -108,57 +113,3 @@ grant execute on function public.classify_reply(uuid, text)                    t
 grant execute on function public.record_meeting_detail(uuid, text, text, text, text) to anon, authenticated;
 
 grant select on v_conflicts, v_reply_conflicts to anon, authenticated;
-
--- ---------- reply identities ----------
--- Instantly's Unibox gives the sender's address but not their name or company.
--- We already know both from `people`, keyed on the same campaign and email.
--- A trigger rather than another step in the edge function: it also covers
--- hand-inserted rows and cannot be forgotten in a future refactor of the sync.
-create or replace function public.fill_reply_identity()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if new.lead_email is null then return new; end if;
-  if new.lead_name is not null and new.company is not null then return new; end if;
-
-  select coalesce(new.lead_name, p.name), coalesce(new.company, p.company)
-    into new.lead_name, new.company
-    from people p
-   where p.campaign_id = new.campaign_id
-     and lower(p.email) = lower(new.lead_email)
-   limit 1;
-
-  return new;
-end $$;
-
-drop trigger if exists replies_fill_identity on replies;
-create trigger replies_fill_identity
-  before insert on replies
-  for each row execute function public.fill_reply_identity();
-
--- one-off backfill for rows imported before the trigger existed
-create or replace function public.fill_reply_identities()
-returns integer
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare n integer;
-begin
-  update replies r
-     set lead_name = coalesce(r.lead_name, p.name),
-         company   = coalesce(r.company, p.company)
-    from people p
-   where p.campaign_id = r.campaign_id
-     and lower(p.email) = lower(r.lead_email)
-     and (r.lead_name is null or r.company is null)
-     and (p.name is not null or p.company is not null);
-  get diagnostics n = row_count;
-  return n;
-end $$;
-
-revoke all on function public.fill_reply_identities() from public, anon, authenticated;
-grant execute on function public.fill_reply_identities() to service_role;

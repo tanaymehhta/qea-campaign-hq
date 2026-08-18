@@ -52,10 +52,6 @@
 --
 -- Verified before running: every column below is nullable, so dropping the
 -- default cannot make an insert fail.
---
--- Verified after running, in a transaction that was rolled back: an insert
--- naming exactly the eleven columns syncInstantly names leaves bounced NULL and
--- delivered NULL, while linkedin_sent and linkedin_accepted stay 0.
 alter table daily_metrics alter column sent                drop default;
 alter table daily_metrics alter column contacted           drop default;
 alter table daily_metrics alter column new_leads_contacted drop default;

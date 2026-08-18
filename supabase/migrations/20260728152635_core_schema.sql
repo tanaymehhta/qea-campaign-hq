@@ -228,4 +228,4 @@ create table email_accounts (
   raw            jsonb,
   last_synced    timestamptz not null default now(),
   unique (source, email)
-);;
+);

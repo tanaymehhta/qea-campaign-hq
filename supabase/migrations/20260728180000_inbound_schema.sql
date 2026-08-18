@@ -1,4 +1,27 @@
 -- ============================================================
+-- NOT IN THE APPLIED MIGRATION HISTORY. Read this before trusting it.
+--
+-- Every other file in this directory corresponds one-to-one with a row in
+-- supabase_migrations.schema_migrations. This one does not: the database has no
+-- record of it ever being applied, yet all eleven tables it defines exist in
+-- production. They were created outside the migration system — the inbound
+-- pipeline lives in a sibling repository (qea-inbound) and writes these tables
+-- through GitHub Actions.
+--
+-- It is kept, and kept here, because it is the **only definition of those
+-- eleven tables anywhere in this repository**. Without it a database rebuilt
+-- from this directory would come up missing the entire inbound half, and the
+-- four pages that read it would fail on a table that does not exist.
+--
+-- Safe to re-apply: every create is `if not exists`, and enabling row level
+-- security on a table that already has it is a no-op.
+--
+-- The three tables added later — inbound_emails, inbound_intent_signals and
+-- inbound_rerun_requests — are defined by their own recorded migrations and are
+-- deliberately absent from this file.
+-- ============================================================
+
+-- ============================================================
 -- QEA Inbound Agent schema
 -- Same project as Campaign HQ; inbound_* prefix.
 -- ============================================================

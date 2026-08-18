@@ -38,4 +38,4 @@ begin
   return n;
 end $$;
 
-grant execute on function public.refresh_lemlist_totals() to service_role;;
+grant execute on function public.refresh_lemlist_totals() to service_role;

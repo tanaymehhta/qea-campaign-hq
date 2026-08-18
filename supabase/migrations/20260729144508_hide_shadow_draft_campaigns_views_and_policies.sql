@@ -1,50 +1,3 @@
--- Hide the lemlist draft campaigns that only shadow the live ones.
---
--- Seven lemlist campaigns sit in draft with zero sends: two called
--- "QEA Resellers — Chicago", two called "QEA Resellers — Seattle", and one each
--- for Denver / Boulder, LA and LBER BEUDO Batch 2. The campaigns that actually
--- send are the "(Referral)" ones, which are running.
---
--- They hold nothing of their own. All 39 replies filed against them have a twin
--- filed against a live campaign at the same minute, and not one of their 24
--- people exists anywhere else but on a live campaign too. What they do is
--- inflate every total that sums across campaigns, and put two identically named
--- rows on a person's page.
---
--- Deleting the rows would not hold: syncLemlist upserts every campaign lemlist
--- lists, keyed on (source, source_campaign_id), so they would return within the
--- half hour. A flag survives, because the upsert names its columns and this is
--- not one of them.
-
-alter table campaigns
-  add column if not exists hidden boolean not null default false;
-
-comment on column campaigns.hidden is
-  'Kept out of every view and every read. For a campaign that exists in the vendor '
-  'but should not count here — today, the lemlist drafts that shadow a live campaign. '
-  'The sync never writes this column, so it survives a re-sync.';
-
--- Keyed on the vendor id rather than ours: if a row is ever deleted and rebuilt,
--- its uuid changes and this does not.
-update campaigns set hidden = true
-where source = 'lemlist'
-  and source_campaign_id in (
-    'cam_mak6noLXasGrMTpfY',  -- QEA Resellers — Chicago (draft copy)
-    'cam_YqqHe86NEJsnbhbWz',  -- QEA Resellers — Chicago (draft copy)
-    'cam_3sT7qCgo3GDYB28Co',  -- QEA Resellers — Seattle (draft copy)
-    'cam_iHeRBCDquqcBbiLef',  -- QEA Resellers — Seattle (draft copy)
-    'cam_CX2grgf3mfjza7bMD',  -- QEA Resellers — Denver / Boulder (draft)
-    'cam_EartWWzJJ29DRWzgN',  -- QEA Resellers — LA (Los Angeles) (draft)
-    'cam_GCDsvacgYzyHHSvQ7'   -- LBER — BEUDO Batch 2 (Cambridge) (draft)
-  );
-
--- --------------------------------------------------------------- the reads
---
--- Two levers, because the app reaches the data both ways. Views run as their
--- owner and so ignore row security, which is why the filter is written into
--- them by hand; every direct table read goes through RLS instead. Between the
--- two there is no query, present or future, that has to remember this.
-
 create or replace view v_campaign_summary as
  SELECT c.id AS campaign_id,
     c.source,
@@ -139,19 +92,6 @@ create or replace view v_group_daily as
   WHERE NOT c.hidden
   GROUP BY g.id, g.slug, c.source, d.metric_date;
 
--- v_group_summary reads v_campaign_summary, so it inherits the filter.
-
--- ----------------------------------------------------------------- the rows
---
--- The public key is select-only on every table; these policies narrow what
--- "select" means. The sync writes as the service role, which is not subject to
--- row security, so a hidden campaign still syncs — it simply is not read.
-
--- A plain subquery would not work here. Once campaigns has a policy hiding the
--- hidden rows, a subquery run by the same role cannot see them either, so
--- `not exists (… and c.hidden)` would be true for everything and filter nothing.
--- A security definer function reads the table as its owner, outside row
--- security, which is the only way to ask the question honestly.
 create or replace function is_hidden_campaign(cid uuid)
 returns boolean
 language sql
@@ -194,6 +134,3 @@ create policy "public read" on meetings for select
 drop policy if exists "public read" on proposals;
 create policy "public read" on proposals for select
   to anon, authenticated using (not is_hidden_campaign(campaign_id));
-
--- The subquery runs per row, so give it the index it wants.
-create index if not exists campaigns_hidden_idx on campaigns (id) where hidden;

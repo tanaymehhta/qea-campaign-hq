@@ -52,14 +52,16 @@
 -- v_group_status_drift is dropped rather than replaced: `actual_status` belongs
 -- near the front of its column list, and create-or-replace cannot insert a
 -- column. Only /health reads it.
---
--- NOTE: superseded twice within the hour - 20260818195103 rewrites the drift
--- view's `detail`, and 20260818195147 appends `sort_order` to v_group_summary.
--- Read those for the definitions that run.
 drop view if exists v_group_status_drift;
 
 create or replace view v_group_summary as
- SELECT g.id, g.slug, g.display_name, g.vault_name, g.status, g.owner,
+ SELECT g.id,
+    g.slug,
+    g.display_name,
+    g.vault_name,
+    g.status,
+    g.owner,
+    -- typed value wins; derived fills a blank. See the header.
     CASE
         WHEN g.platform IS NULL OR cardinality(g.platform) = 0
         THEN ( SELECT array_agg(DISTINCT c.source ORDER BY c.source)
@@ -68,7 +70,12 @@ create or replace view v_group_summary as
                 WHERE m2.group_id = g.id )
         ELSE g.platform
     END AS platform,
-    g.geography, g.segment, g.list_source, g.sequence_shape, g.started_on, g.description,
+    g.geography,
+    g.segment,
+    g.list_source,
+    g.sequence_shape,
+    g.started_on,
+    g.description,
     count(s.campaign_id) AS campaign_count,
     count(*) FILTER (WHERE (s.status = 'running'::text)) AS running_count,
     count(*) FILTER (WHERE (s.status = 'paused'::text)) AS paused_count,
@@ -83,7 +90,8 @@ create or replace view v_group_summary as
     COALESCE(sum(s.meetings), (0)::numeric) AS meetings,
     COALESCE(sum(s.positive_replies), (0)::numeric) AS positive_replies,
     COALESCE(sum(s.proposals), (0)::numeric) AS proposals,
-    dates.first_sent_on, dates.last_sent_on,
+    dates.first_sent_on,
+    dates.last_sent_on,
     -- Derived every read, so it cannot be stale. Both signals must agree.
     CASE
         WHEN count(*) FILTER (WHERE (s.status = 'running'::text)) > 0

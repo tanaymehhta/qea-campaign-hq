@@ -1,15 +1,17 @@
 -- `sort_order` on the summary, so one read answers everything about a group.
 --
--- repList() (lib/db.js) read campaign_groups directly, because sort_order was
+-- repList() (lib/db.js) reads campaign_groups directly, because sort_order was
 -- the one field the summary did not carry. That left the Overview showing the
--- typed `status` while /campaigns showed the derived one - the two pages
+-- typed `status` while /campaigns could show the derived one - the two pages
 -- disagreeing about a word again, which is the thing this whole exercise is
 -- about. Appended rather than inserted, so create-or-replace accepts it.
---
--- This is the live definition of v_group_summary. 20260818195031 has the
--- reasoning for `actual_status` and for the `platform` fallback.
 create or replace view v_group_summary as
- SELECT g.id, g.slug, g.display_name, g.vault_name, g.status, g.owner,
+ SELECT g.id,
+    g.slug,
+    g.display_name,
+    g.vault_name,
+    g.status,
+    g.owner,
     CASE
         WHEN g.platform IS NULL OR cardinality(g.platform) = 0
         THEN ( SELECT array_agg(DISTINCT c.source ORDER BY c.source)
@@ -18,7 +20,12 @@ create or replace view v_group_summary as
                 WHERE m2.group_id = g.id )
         ELSE g.platform
     END AS platform,
-    g.geography, g.segment, g.list_source, g.sequence_shape, g.started_on, g.description,
+    g.geography,
+    g.segment,
+    g.list_source,
+    g.sequence_shape,
+    g.started_on,
+    g.description,
     count(s.campaign_id) AS campaign_count,
     count(*) FILTER (WHERE (s.status = 'running'::text)) AS running_count,
     count(*) FILTER (WHERE (s.status = 'paused'::text)) AS paused_count,
@@ -33,7 +40,8 @@ create or replace view v_group_summary as
     COALESCE(sum(s.meetings), (0)::numeric) AS meetings,
     COALESCE(sum(s.positive_replies), (0)::numeric) AS positive_replies,
     COALESCE(sum(s.proposals), (0)::numeric) AS proposals,
-    dates.first_sent_on, dates.last_sent_on,
+    dates.first_sent_on,
+    dates.last_sent_on,
     CASE
         WHEN count(*) FILTER (WHERE (s.status = 'running'::text)) > 0
          AND dates.last_sent_on >= (current_date - 14) THEN 'live'

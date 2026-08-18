@@ -129,4 +129,4 @@ begin
   loop
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
   end loop;
-end $$;;
+end $$;

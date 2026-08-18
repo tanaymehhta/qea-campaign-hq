@@ -25,13 +25,13 @@
 -- trip a rule that was only ever incidentally true. Left out.
 --
 -- **delivered = sent - bounced is gone because it is no longer a comparison.**
--- 20260818193555 made v_campaign_summary derive it, so there are not two copies
--- to disagree. An invariant over a formula checks arithmetic, not data.
+-- 20260818… made v_campaign_summary derive it, so there are not two copies to
+-- disagree. An invariant over a formula checks arithmetic, not data.
 --
 -- What survives is the set that cannot be violated without something being
 -- genuinely wrong: an outcome that requires a send, and a number below zero.
 -- All of them return nothing today, which is what makes a row here worth
--- reading. Each was made to fire once, in a transaction that was rolled back.
+-- reading.
 create or replace view v_invariants as
 
 -- A bounce requires a send. Structural: the receiving server rejected something

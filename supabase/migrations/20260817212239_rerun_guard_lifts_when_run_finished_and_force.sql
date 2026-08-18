@@ -1,32 +1,3 @@
--- The live definition of `inbound_request_rerun`, after two refusals were found
--- to be wrong within an hour of the first one shipping.
---
--- It also carries the change applied minutes earlier as
--- `rerun_refuses_on_node_level_credit_errors` (20260817211639): that one has no
--- file of its own because this statement replaces the whole function, so a
--- separate file would only describe a definition nothing runs any more.
---
--- The three things this fixes, all found by pressing the button:
---
--- 1. The credit test read `inbound_graph_runs.error`, which is NULL for exactly
---    the failure it was looking for. A research run whose LLM nodes all 402
---    records status `needs_review` with no run-level error — the 402s live only
---    on `inbound_graph_node_events`. So the guard never fired, and a press on
---    17 August ran all three stages in 33 seconds, spent $0.70 on search, and
---    learnt nothing.
---
--- 2. "Already queued" counted ten minutes from the press rather than from the
---    work. The run asked for at 21:13 finished at 21:14, and the next press at
---    21:20 was still refused — the guard was protecting a request that had
---    already been served.
---
--- 3. The credit refusal could not see a top-up. A balance is not in this
---    database, so refusing for 24 hours on the last 402 locks out precisely the
---    person who has just filled the account. `p_force` is that person saying so
---    — the UI only offers it where the page has already named the empty account
---    — and it waives that one check. A run in flight still refuses, because
---    that is not a judgement call.
-
 create or replace function inbound_request_rerun(
   p_company uuid,
   p_stage   int,
@@ -62,7 +33,8 @@ begin
   -- A press is only "already queued" while the work it asked for has not come
   -- back. Once a run started after the request has finished, the request is
   -- spent and the rep is entitled to ask again — they can see the result and
-  -- have decided it is not what they wanted.
+  -- have decided it is not what they wanted. Blocking on the clock alone
+  -- refused a press seven minutes after its own run had finished.
   select r.requested_at into v_pending
     from inbound_rerun_requests r
    where r.company_id = p_company
@@ -80,6 +52,11 @@ begin
       to_char(now() - v_pending, 'MI:SS');
   end if;
 
+  -- Out of credit is an answer, not a failure — but only the caller knows
+  -- whether the account has been topped up since, and no read here can see a
+  -- balance. So this refuses once, names the account, and `p_force` is the
+  -- rep saying they have dealt with it. The refusal informs; it does not
+  -- overrule a human who knows more than the last run does.
   if not p_force then
     select * into v_last from inbound_graph_runs
      where company_id = p_company
@@ -118,7 +95,4 @@ end $$;
 grant execute on function inbound_request_rerun(uuid, int, text, boolean)
   to anon, authenticated, service_role;
 
--- The three-argument signature is gone rather than left as an overload: two
--- functions of the same name, one of which silently skips the force parameter,
--- is how a caller ends up on the wrong one.
 drop function if exists inbound_request_rerun(uuid, int, text);
