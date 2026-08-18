@@ -7,9 +7,19 @@ export const dynamic = "force-dynamic";
 export default async function Health({ searchParams }) {
   const t = today();
   const err = searchParams?.err;
-  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }, { data: broken }, { data: ownerless }, { reps }] = await Promise.all([
+  const [{ data: accounts }, { data: runs }, { data: unclean }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }, { data: broken }, { data: ownerless }, { reps }] = await Promise.all([
     db.from("email_accounts").select("*").order("email"),
     db.from("sync_runs").select("*").order("started_at", { ascending: false }).limit(12),
+    // Every run that did not finish clean, however old. The log below shows the
+    // last twelve, which is two runs an hour — six hours of history. The run
+    // that hung on 8 August was invisible there within a day of hanging, and
+    // the two `partial` runs on 2 and 12 August have never been seen by anyone.
+    // A failure that scrolls out of view is a failure nobody fixes.
+    //
+    // `running` is excluded because a run in flight is not a failure; one that
+    // never finishes is reaped to `error` after 30 minutes and appears here.
+    db.from("sync_runs").select("*").not("status", "in", "(ok,running)")
+      .order("started_at", { ascending: false }).limit(20),
     db.from("v_campaign_summary").select("*"),
     dailyRange(t, t),
     db.from("v_metric_drift").select("*").order("metric_date", { ascending: false }),
@@ -329,6 +339,39 @@ export default async function Health({ searchParams }) {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      <h2>Runs that did not finish clean</h2>
+      <div className="card tw">
+        {!unclean?.length ? (
+          <p className="empty" style={{ padding: 0 }}>
+            Every run on record finished <span className="ok">ok</span>.
+          </p>
+        ) : (
+          <>
+            <p className="note" style={{ marginTop: 0 }}>
+              {unclean.length === 20 ? "The 20 most recent" : `All ${unclean.length}`} runs that
+              ended <span className="bad">error</span> or <span className="bad">partial</span>, at
+              any age — these do not scroll out of the log below.
+            </p>
+            <table>
+              <thead><tr><th>Started</th><th>Mode</th><th>Status</th><th>Rows</th><th>What failed</th></tr></thead>
+              <tbody>
+                {unclean.map((r) => (
+                  <tr key={r.id}>
+                    <td className="name">{prettyWhen(r.started_at)}</td>
+                    <td className="dim">{r.mode}</td>
+                    <td className="bad">{r.status}</td>
+                    <Num v={r.rows_upserted} />
+                    <td className="dim" style={{ textAlign: "left", whiteSpace: "normal" }}>
+                      {r.error ?? "no error recorded"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
 
