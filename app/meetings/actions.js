@@ -23,10 +23,12 @@ export async function logMeeting(formData) {
     p_note: formData.get("note") ?? "",
     p_logged_by: formData.get("logged_by") ?? "",
   });
+  // "replace" on both: a Server Action redirect pushes by default, and this
+  // returns to /meetings, the page the form is on — a push leaves a duplicate.
   if (error) {
-    redirect(`${back}${back.includes("?") ? "&" : "?"}err=${encodeURIComponent(error.message)}`);
+    redirect(`${back}${back.includes("?") ? "&" : "?"}err=${encodeURIComponent(error.message)}`, "replace");
   }
   revalidatePath("/meetings");
   revalidatePath("/");
-  redirect(`${back}${back.includes("?") ? "&" : "?"}logged=1`);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}logged=1`, "replace");
 }

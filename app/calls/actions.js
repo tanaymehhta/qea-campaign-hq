@@ -30,7 +30,9 @@ function done(formData, error) {
   const q = new URLSearchParams();
   if (contact) q.set("open", contact);
   if (error) q.set("err", error.message);
-  redirect(`${path}?${q}${contact ? `#c-${contact}` : ""}`);
+  // "replace" — a Server Action redirect pushes by default, which would give a
+  // rep one history entry per logged call and a Back button they cannot use.
+  redirect(`${path}?${q}${contact ? `#c-${contact}` : ""}`, "replace");
 }
 
 // The order calls go in matters: log_call inserts one row per outcome, and

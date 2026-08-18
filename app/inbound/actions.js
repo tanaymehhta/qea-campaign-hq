@@ -55,9 +55,13 @@ function back(err, extra) {
     /* a referer we cannot parse is not worth failing the write over */
   }
   const q = err ? `err=${encodeURIComponent(err)}` : extra ?? "";
-  if (!q) redirect(path);
+  // "replace", not the push a Server Action redirect defaults to. These buttons
+  // land you back on the page you pressed them from, so a push stacks a second
+  // history entry for the same page and Back appears to do nothing — press
+  // Restart three times and it takes three Backs to leave the company.
+  if (!q) redirect(path, "replace");
   const sep = path.includes("?") ? "&" : "?";
-  redirect(`${path}${sep}${q}`);
+  redirect(`${path}${sep}${q}`, "replace");
 }
 
 /**

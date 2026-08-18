@@ -19,9 +19,12 @@ import { db } from "../../lib/db";
  */
 
 function done(error, paths) {
-  if (error) redirect(`/conflicts?err=${encodeURIComponent(error.message)}`);
+  // "replace", because a Server Action redirect pushes by default and both of
+  // these return to /conflicts — the page the click came from. Settling ten
+  // conflicts would otherwise leave ten copies of it in history.
+  if (error) redirect(`/conflicts?err=${encodeURIComponent(error.message)}`, "replace");
   for (const p of paths) revalidatePath(p);
-  redirect("/conflicts");
+  redirect("/conflicts", "replace");
 }
 
 export async function classifyReply(formData) {

@@ -37,7 +37,9 @@ function origin() {
 function finish(err, sent) {
   revalidatePath("/feedback");
   const q = new URLSearchParams(err ? { err } : sent ? { sent: "1" } : {});
-  redirect(`/feedback${q.size ? `?${q}` : ""}`);
+  // "replace": a Server Action redirect pushes by default, and this one lands
+  // on the page it started from, so a push buries the way back one press deeper.
+  redirect(`/feedback${q.size ? `?${q}` : ""}`, "replace");
 }
 
 export async function submitFeedback(formData) {
