@@ -1394,3 +1394,280 @@ disk is ready; the CLI reads it straight from disk with no transcription involve
   JWT is *valid*, not that it is *privileged*, and the anon key is public by design
   (it ships in `lib/db.js`). So anyone holding it can still invoke a full sync. That is
   `AUTH_PLAN.md`'s problem, not this one, but it is no longer unverified.
+
+---
+
+# Second sitting — 18 August 2026, 20:30–21:05 UTC
+
+Steps 14–17. Written by the agent that did them, in the same rule as everything above:
+append only, and no claim without the query that proves it.
+
+---
+
+## Step 14 · The whole of Steps 0–13, re-measured before anything new was written
+
+Ninety minutes and three sync cycles after the last commit, against
+`yfnqszwlyoyfhuwfmcyl`. Nothing was taken on trust from the text above.
+
+```
+v_reconciliation          0 rows   (Step 1 measured 1: instantly bounced 0 vs 72)
+v_invariants              0 rows
+v_metric_drift            0 rows
+sync_runs status=running  0        (was 1, stuck since 8 Aug)
+scripts/test-phase1.mjs   9/9 pass
+scripts/test-busy.mjs     pass
+```
+
+`test-phase1.mjs` at 20:33 UTC: *bounce 149 on both pages and in 149 people; 543 daily
+rows and 2,672 inbound people, all of them; 0 drift, 0 broken invariants, 0 hanging runs.*
+
+Two detectors were firing, both correctly, and neither is a regression:
+
+- `v_group_status_drift` — `qea` typed `live`, 11 campaigns, 0 running, last send 14 Aug.
+- `v_groups_without_an_owner` — `Ungrouped`.
+
+Both are answered below. **The work above holds.**
+
+---
+
+## Step 15 · Phase 4's other half is deployed — the sync no longer swallows a write
+
+Step 13 left this written, committed and not live, because the project was not linked and
+the only path was retyping 28,721 bytes into a tool call. Tanay logged the CLI in; the
+transcription risk disappeared with it.
+
+```bash
+supabase functions deploy sync --project-ref yfnqszwlyoyfhuwfmcyl
+```
+
+**Verified by invoking it, not by trusting the upload.** `POST /functions/v1/sync` with the
+anon key: **HTTP 200, `status: ok`, 4,085 rows, 21.6s.** Version 8 → **9**, `verify_jwt`
+still `true`, `updated_at` moved from 30 Jul to today. The deployed source read back
+through the management API carries the `writeFailures` fetch wrapper, the `\0` escape and
+the three `partial` markers.
+
+No `write_errors` key in that run's detail — zero rejected writes on a live pass. The
+instrumentation is on and the first thing it reported was silence, which is the correct
+answer today.
+
+### Not verified
+
+- **A write actually being rejected in production.** Proven only by reading the code path.
+  Nothing has been rejected since the deploy.
+
+---
+
+## Step 16 · `Ungrouped` deleted — and deleting the row would not have worked
+
+It held exactly one campaign: `[AI SDR] QEA Technologies AI Sales Agent - Fully
+Personalized Campaign`, Instantly status `errored`, **0 sent**, never started,
+auto-assigned 28 Jul. Measured before touching anything: 1 membership, **0 meetings,
+0 events, 0 proposals, 0 leads**.
+
+**The trap.** `regroup()` files any campaign whose name has no em dash under a parent
+called `Ungrouped` **and creates that group if it is missing**. Deleting the group row
+alone would have brought it back within thirty minutes, freshly typed `live`. Nobody
+would have known why.
+
+So the fix is one line in the sync, not in the group table:
+
+```ts
+const { data: campaigns } = await db.from("campaigns").select("id,name").eq("hidden", false);
+```
+
+`hidden` is already the product's word for invisible-to-the-dashboard — RLS filters on it
+for the `anon` role the app reads with, on `campaigns`, `daily_metrics`, `campaign_totals`,
+`people` and the rest. Grouping a campaign nobody can see was work with no reader.
+
+Then migration `20260818205200`: hide that campaign, delete the group (members cascade).
+
+**Proof it does not come back — the sync was run twice afterwards:**
+
+| | before | after |
+|---|---|---|
+| `campaign_groups` | 6 | **5**, no `ungrouped` |
+| `v_groups_without_an_owner` | 1 | **0** |
+| `grouped` reported by the sync | 42 | **34** |
+
+The drop of 8, not 1, is the same fix reaching further: **seven pre-existing shadow-draft
+campaigns** hidden by `20260729144446` were also being grouped every thirty minutes for
+nobody. Their membership rows still exist and are still invisible; not worth a second
+migration.
+
+`/campaigns` renders with no mention of Ungrouped; the ownerless block on `/health` is gone.
+
+### Not verified
+
+- **That nothing else auto-creates the group.** `regroup()` is the only writer of
+  `campaign_groups` in the sync, read directly. If a campaign is ever renamed to drop its
+  em dash while visible, the group returns — correctly, because then it has a live member.
+
+### Still true and outside this repo
+
+The permanent fix is deleting that campaign **inside Instantly**. Until someone does, the
+sync re-creates the `campaigns` row every thirty minutes and only `hidden` keeps it off
+the screens.
+
+---
+
+## Step 17 · The two judgments, and where the authority for each came from
+
+Migration `20260818205745`. Both decided by Tanay; neither is inferable from data.
+
+### 17a · Canada — Justin's list is ended, on Instantly's word
+
+Instruction, verbatim: *"follow what you get from instantly. Don't apply your own thing."*
+
+Measured first — all eleven campaigns carry Instantly's own status **`completed`**. Nobody
+paused anything; the lists ran out of people.
+
+| | |
+|---|---|
+| sent | 1,504 across 11 campaigns |
+| last send | 13–14 Aug |
+| replies | 6, one of them a real conversation |
+| bounced | 12 |
+
+**The website already followed Instantly, and had all along.** `actual_status` requires a
+campaign the vendor still calls running; zero running forces `ended` regardless of how
+recently anything sent. The 14-day window can only ever *demote* a group — it cannot
+promote one the vendor says is not running. So every page has read `ended` since Step 8.
+Only the hand-typed `campaign_groups.status` said `live`, and only `/health` reads it.
+
+Set to `ended`. `v_group_status_drift` → **0 rows**.
+
+**Deliberately not done: making the sync write that column from vendor status.** `lber` is
+the counter-example and it is in this database — typed `ended` by a human, with one
+campaign Instantly still calls `running` that last sent 27 days ago. Vendor status goes
+stale. That was Tanay's own correction in Step 8a and it still holds.
+
+### 17b · Bharat Mudgal's meeting never got scheduled, so it is not a meeting
+
+Instruction: *"It never got scheduled but it can happen"* — then, on how to represent it,
+*"do what you want."*
+
+The row was created 30 Jul reading *"placeholder date, Thu Aug 6 — confirm and correct
+once scheduled."* Twelve days past its own placeholder it was still counting as booked,
+and it was one of only **two** meetings company-wide at `booked`.
+
+- Meeting deleted. Meetings **5 → 4**, booked **3 → 2**.
+- His 28 Jul reply — *"Hey Justin. Thanks for reaching out. Do you have time next w…"* —
+  classified `interested` through `classify_reply`, so it records `classified_by = 'human'`.
+  He reads as the live opportunity he is, on `/replies` and his person page.
+- **His 29 Jul and 4 Aug replies were left unclassified on purpose.** Both are
+  quoted-header fragments of the same thread, and `positive_replies` counts reply *rows*
+  (`20260728162429`, line 58). Labelling all three would count one conversation three
+  times in every positive-reply figure on the dashboard. The label set has no word for
+  "same thread, nothing new", and inventing one is a larger decision than a migration.
+
+---
+
+## Step 18 · `/health` stops hiding a failed run
+
+`app/health/page.jsx:12` read the last **twelve** `sync_runs`. At two runs an hour that is
+six hours of history — the run that hung on 8 August was invisible there within a day of
+hanging, which is why it sat for ten days.
+
+A second query lists every run that ended `error` or `partial`, **at any age**, in a block
+above the log. `running` is excluded: a run in flight is not a failure, and one that never
+finishes is reaped to `error` after thirty minutes and appears here anyway.
+
+**It found two failures nobody had ever seen.** 3 unclean runs out of 1,053:
+
+| started | status | rows | what failed |
+|---|---|---|---|
+| 12 Aug 16:00 | partial | 209 | `error sending request … api.instantly.ai/api/v2/campaigns/analytics/daily` |
+| 8 Aug 20:30 | error | 0 | *"no result after 30 minutes … Reaped 9 days 23:07:37 after it started"* |
+| 2 Aug 17:30 | partial | 42 | same Instantly connection failure |
+
+Both partials are transient network errors that self-healed on the next incremental pass
+— which is exactly why they went unnoticed. **This is not data loss. It is three weeks of
+the page being unable to tell anyone.**
+
+It matters more since Step 15: rejected writes now surface as `status = 'partial'`, and
+until this change the page could hide that signal behind twelve successes.
+
+### Not verified
+
+- **The empty branch.** *"Every run on record finished ok"* cannot render today, because
+  three unclean runs exist. Same three-line pattern as the other conditional blocks on the
+  page, but it has not been exercised.
+
+---
+
+## Step 19 · The 40 unclassified replies were read, and a third of them cannot be read
+
+Not fixed — Tanay deferred classifying them — but measured, because the measurement
+changes what "read the 40" costs.
+
+| what they are | count |
+|---|---|
+| changes a KPI (interest or a meeting being arranged) | 5 |
+| clear no | 7 |
+| remove me / wrong person | 6 |
+| auto-reply, out of office, retired | 4 |
+| not the buyer | 1 |
+| not prospect replies at all (internal forwards, quoted fragments) | 5 |
+| **cannot be decided from the database** | **12** |
+
+**The finding.** Ten of those twelve are QEA Resellers referral replies whose entire
+stored body is a greeting — `"Hi Mark,"`, `"Mark,"`. The other two are lemlist LinkedIn
+replies with `subject` **and** `body` both null.
+
+Nothing truncates on our side. `syncLemlist` stores `a.messagePreview` (`index.ts:581`)
+and `syncInstantly` stores `e.content_preview` capped at 4,000 (`:401`) — measured maximum
+across all 40 is **100 characters**. The vendors return a preview; the full text was never
+sent.
+
+So the replies most likely to be positive — people who answered a referral pitch and
+opened with a greeting — are exactly the ones the dashboard cannot show. **The unknown is
+not spread evenly.** Reading them needs Mark's inbox, not this screen.
+
+One that matters and is still open: **Aurelien Leblay, AL Pro Solutions, 13 Aug** —
+*"Thank you for reaching out. Before we schedule a m…"*, Roof Campaign, five days old,
+nothing logged.
+
+### Verified while there — the /conflicts buttons work
+
+Doubted, so tested at three levels rather than read.
+
+As the `anon` role the browser actually uses, in a rolled-back transaction:
+
+| test | result |
+|---|---|
+| `classify_reply(<a real reply>, 'interested')` | `sentiment` → `interested`, `classified_by` → **`human`**, `classified_at` stamped |
+| does the card clear? | leaves `v_conflicts`; `needs_review` 40 → **39** |
+| `'maybe'` | rejected — *not a valid sentiment: maybe* |
+| an id that does not exist | rejected — *no reply with id 000…* |
+| after `rollback` | still `unclassified` / `ai` |
+
+Rendered: `/conflicts` HTTP 200, 193KB, **44 classify forms** (40 unread + 4 messages
+under the two `reply_split` cards), 220 buttons, both server actions present.
+
+There are **no meeting-gap forms** today — every meeting has a name — so only reply
+classification is live on that page.
+
+---
+
+## Corrections and additions to the record
+
+| earlier | now |
+|---|---|
+| Step 13: the sync change is not deployed | **deployed**, version 9, verified by invocation |
+| "Still open": `ungrouped` needs an owner decision | **the group is gone**; the question was the wrong one |
+| "Still open": `/health` shows twelve runs | **fixed**, Step 18 |
+| "Still open": Phase 0's Bharat meeting stands | **deleted**; he is an `interested` reply now |
+| `v_group_status_drift` fires on `qea` | **0 rows**; the typed word was corrected |
+| replies bodies are stored | **previews only** — both vendors, ≤100 characters, Step 19 |
+
+## Still open, and still needing a person
+
+- **38 unclassified replies.** Twelve of them unreadable without Mark's inbox.
+- **`leads.status` vocabulary** (PLAN Phase 1c). Unanswered since it was asked.
+- **`OUTCOME_PRIORITY`** (`app/calls/actions.js:43`) contradicts its own comment: the
+  comment says a stray *booked meeting* tick should still read as a voicemail, the array
+  sorts `booked_meeting` last and last-written wins the pill — and it writes a meetings
+  row. Code or comment is wrong; which one is a decision.
+- **F9, the opens denominator.** Blocked on lemlist never syncing `open_tracking`.
+- **The `EMPTY` seed** (D8). A total assembled entirely from nulls still prints `0`.
+- **Two vestigial `delivered` columns.**
