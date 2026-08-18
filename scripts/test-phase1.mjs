@@ -84,5 +84,35 @@ const { count: factsCount } = await db
 assert.equal(facts.length, factsCount,
   `dailyRange reaches ${facts.length} of ${factsCount} daily rows`);
 
+// -------------------------------------------------------- 7 · the invariants
+//
+// Statements that cannot be true without something being genuinely wrong. Each
+// rule in the view was made to fire once, against a deliberately corrupted row,
+// in a transaction that was rolled back.
+const { data: broken } = await db.from("v_invariants").select("rule, subject, detail");
+assert.equal(broken.length, 0,
+  `v_invariants: ${broken.map((b) => `${b.rule} on ${b.subject} (${b.detail})`).join("; ")}`);
+
+// ------------------------------------------------- 8 · delivered is a formula
+//
+// Both halves of the dashboard now compute it the same way. It was stored on
+// this side, and one campaign's stored copy had drifted 2 high.
+const summary = await all("v_campaign_summary", "name, sent, bounced, delivered");
+const wrong = summary.filter((c) => c.delivered !== c.sent - c.bounced);
+assert.equal(wrong.length, 0,
+  `delivered is not sent - bounced on: ${wrong.map((c) => c.name).join(", ")}`);
+
+// --------------------------------------------------- 9 · no run left hanging
+//
+// A crashed sync leaves `status = 'running'` forever; one row sat that way for
+// ten days. trigger_sync reaps anything older than 30 minutes before it
+// dispatches the next one.
+const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+const { count: stuck } = await db.from("sync_runs")
+  .select("*", { count: "exact", head: true })
+  .eq("status", "running").lt("started_at", cutoff);
+assert.equal(stuck, 0, `${stuck} sync run(s) stuck at "running" past the 30-minute reap`);
+
 console.log(`ok — bounce ${overviewBounce} on both pages and in ${bouncedPeople} people;` +
-  ` ${facts.length} daily rows and ${people.length} inbound people, all of them`);
+  ` ${facts.length} daily rows and ${people.length} inbound people, all of them;` +
+  ` 0 drift, 0 broken invariants, 0 hanging runs`);

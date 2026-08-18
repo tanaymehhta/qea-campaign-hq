@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Health() {
   const t = today();
-  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }] = await Promise.all([
+  const [{ data: accounts }, { data: runs }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }, { data: broken }] = await Promise.all([
     db.from("email_accounts").select("*").order("email"),
     db.from("sync_runs").select("*").order("started_at", { ascending: false }).limit(12),
     db.from("v_campaign_summary").select("*"),
@@ -13,6 +13,7 @@ export default async function Health() {
     db.from("v_metric_drift").select("*").order("metric_date", { ascending: false }),
     db.from("v_group_status_drift").select("*"),
     db.from("v_reconciliation").select("*").order("difference", { ascending: false }),
+    db.from("v_invariants").select("*").order("rule"),
   ]);
 
   const sentToday = new Map();
@@ -169,6 +170,39 @@ export default async function Health() {
                   <td className={r.severity === "high" ? "bad" : r.severity === "medium" ? "mid" : "dim"}>
                     {r.severity}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h2>Things that must never be true</h2>
+      <p className="sub" style={{ marginTop: -8 }}>
+        A short list, kept short on purpose. Every rule here is one that cannot be broken
+        without something being genuinely wrong &mdash; a bounce with no send behind it, a
+        count below zero, a campaign that has sent and has no lifetime row. Rules that only
+        looked sound were left out: an open is dated when it happens and the send that
+        earned it was days earlier, so &ldquo;opened &le; sent&rdquo; on a single day is
+        eleven false alarms, not a check.
+      </p>
+      <div className="card tw">
+        {!broken?.length ? (
+          <p className="empty" style={{ padding: 0 }}>Clean &mdash; nothing impossible is true.</p>
+        ) : (
+          <table>
+            <thead><tr><th style={{ textAlign: "left" }}>Subject</th><th>Tool</th>
+              <th style={{ textAlign: "left" }}>Rule broken</th>
+              <th style={{ textAlign: "left" }}>What it says</th></tr></thead>
+            <tbody>
+              {broken.map((b, i) => (
+                <tr key={`${b.rule}-${b.campaign_id ?? i}`}>
+                  <td className="name" style={{ textAlign: "left" }}>
+                    {b.campaign_id ? <a href={`/c/${b.campaign_id}`}>{b.subject}</a> : b.subject}
+                  </td>
+                  <td className="dim">{b.source}</td>
+                  <td className="bad" style={{ textAlign: "left" }}>{b.rule.replace(/_/g, " ")}</td>
+                  <td className="dim" style={{ textAlign: "left" }}>{b.detail}</td>
                 </tr>
               ))}
             </tbody>
