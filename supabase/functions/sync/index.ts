@@ -165,7 +165,13 @@ const slugify = (s: string) =>
 
 /** Assign every campaign to a group by name prefix. Never touches an override. */
 async function regroup(): Promise<number> {
-  const { data: campaigns } = await db.from("campaigns").select("id,name");
+  // Hidden campaigns are invisible to the whole product — RLS hides them from
+  // the dashboard's anon role. Grouping them anyway is what kept the Ungrouped
+  // group alive: one errored Instantly campaign that never sent an email, whose
+  // name has no em dash, so splitName() files it under "Ungrouped" and this
+  // function re-creates that group every 30 minutes no matter how often anyone
+  // deletes it. A campaign nobody can see does not need a home.
+  const { data: campaigns } = await db.from("campaigns").select("id,name").eq("hidden", false);
   if (!campaigns?.length) return 0;
 
   const { data: overrides } = await db
