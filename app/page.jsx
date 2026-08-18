@@ -21,8 +21,8 @@ export default async function Overview({ searchParams }) {
       // activity. Only booked + held count — a cancelled meeting is not a KPI,
       // and this is the rule v_campaign_summary already applies.
       (w.range === "all"
-        ? db.from("meetings").select("id, campaign_id, group_id, meeting_date").in("status", ["booked", "held"])
-        : db.from("meetings").select("id, campaign_id, group_id, meeting_date").in("status", ["booked", "held"]).gte("meeting_date", w.from).lte("meeting_date", w.to)),
+        ? db.from("meetings").select("id, campaign_id, group_id, meeting_date, logged_by").in("status", ["booked", "held"])
+        : db.from("meetings").select("id, campaign_id, group_id, meeting_date, logged_by").in("status", ["booked", "held"]).gte("meeting_date", w.from).lte("meeting_date", w.to)),
       (w.range === "all"
         ? db.from("proposals").select("id, campaign_id, sent_date")
         : db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to)),
@@ -62,8 +62,12 @@ export default async function Overview({ searchParams }) {
 
   // A meeting can be logged against a group with no campaign, so scope on
   // either — otherwise a rep's hand-logged meetings vanish from their own view.
+  // A call-created meeting has neither, because the calls workspace is tied to
+  // no campaign, so it also answers to whoever logged it. Without that last
+  // clause a rep's totals can never sum to the all-reps total.
   const scopedMeetings = (meetings ?? []).filter(
     (m) => !myGroupIds || myGroupIds.has(m.group_id) || myGroupIds.has(groupOf.get(m.campaign_id))
+      || (!m.group_id && !m.campaign_id && m.logged_by === rep)
   );
   const scopedProposals = (proposals ?? []).filter((p) => inScope(p.campaign_id));
 

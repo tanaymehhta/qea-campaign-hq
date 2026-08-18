@@ -7,9 +7,15 @@ export const dynamic = "force-dynamic";
 /**
  * The primary KPI, and the only thing on this dashboard no tool records.
  *
- * A meeting's rep is the owner of the group it sits in — `logged_by` records who
- * typed it in, which is often not the same person and is not what "whose
- * meeting is this" means.
+ * A meeting's rep is the owner of the group it sits in. `logged_by` records who
+ * typed it in, which is often not the same person and is not what "whose meeting
+ * is this" means — so it is a fallback, not the answer.
+ *
+ * It is the answer for exactly one case: a meeting created by logging a call.
+ * The calls workspace is tied to no campaign and no group, so those rows have
+ * neither, and grouping alone returns null. They used to disappear the moment
+ * any rep filter was applied, which is why rep totals never summed to the
+ * all-reps total. For those, whoever made the call is whose meeting it is.
  */
 export default async function Meetings({ searchParams }) {
   const rep = searchParams?.rep ?? "all";
@@ -29,7 +35,13 @@ export default async function Meetings({ searchParams }) {
   const subById = new Map((subs ?? []).map((s) => [s.campaign_id, s]));
   const groupOfCampaign = (id) => subById.get(id)?.group_id ?? null;
   const ownerOfGroup = (gid) => groupById.get(gid)?.owner ?? null;
-  const ownerOfMeeting = (m) => ownerOfGroup(m.group_id ?? groupOfCampaign(m.campaign_id));
+  // A meeting created by logging a call carries no campaign and no group — the
+  // calls workspace is not tied to either — so grouping alone returns null and
+  // the meeting vanished the moment any rep filter was applied. Rep totals could
+  // never sum to the all-reps total. Fall back to who logged it, which for a
+  // call-created meeting is the rep who made the call.
+  const ownerOfMeeting = (m) =>
+    ownerOfGroup(m.group_id ?? groupOfCampaign(m.campaign_id)) ?? m.logged_by ?? null;
 
   const known = reps.find((r) => r.id === rep);
   const myGroupIds = known ? new Set(known.groupIds) : null;

@@ -1200,3 +1200,99 @@ The 810 is exactly the number of people who were invisible on this page.
 - **Whether anyone wants the 810 to be assignable a status.** They render `—` and there is
   no way to set one from the interface. That is the honest state, not necessarily the
   desired one.
+
+---
+
+## Step 11 · Phase 0 and Phase 2 — one meeting, one row, one edit
+
+Held to the end by instruction. Both done together because Phase 0's insert is only
+verifiable once Phase 2's link exists.
+
+### 11a · Phase 0 — the data judgment, all three confirmed against the live table
+
+| PLAN.md said | Measured | Done |
+|---|---|---|
+| Insert **Baris Acar**, 4 Aug, `baris@pacenpc.com`, logged by Mark Vasu | call `c7e3c9f1…`, 4 Aug 17:40, outcome `booked_meeting`, `deleted_at` **null** | **inserted** |
+| Do **not** insert Bashkim Caci | logged 4 Aug 17:52, **soft-deleted 19:00 the same evening**, note reads *"x105 left voicemail"* | **not inserted** |
+| Decide the two Jeffrey Hohenstein rows | one insert, `created_at` identical to the microsecond, notes *"First of two meetings"* / *"Second of two meetings"* | **both counted** |
+
+**TRUST.md's "6 meetings" is wrong and PLAN.md's correction is right.** Bashkim's
+`booked_meeting` was the stray-tick bug in `OUTCOME_PRIORITY` and somebody withdrew it
+within eighty minutes. Restoring it would restore a mistake already correctly undone. The
+real figure was **five rows across four people**, and is now five with Baris in it.
+
+The Jeffrey answer is yours, recorded so it stops being re-asked: the tile says "Meetings
+booked", two meetings genuinely happened, it counts both.
+
+**Why the KPI was short for two weeks:** `log_call` only began writing meetings rows on
+**6 August**. Baris's call was **4 August**. Two days, never backfilled.
+
+### 11b · Phase 2 — migration `20260818201145`
+
+`meetings.source_call_id` and `meetings.origin`, plus a **partial unique index** on
+`source_call_id` so "one meeting per call" is a rule the database enforces rather than a
+convention three functions have to remember.
+
+Nothing to backfill: `log_call` started writing meetings on 6 Aug and the newest existing
+row was created 30 Jul, so all four are hand-typed and take the `manual` default, which is
+true.
+
+Then the three functions, of which **two had no meetings code at all**:
+
+| function | before | now |
+|---|---|---|
+| `log_call` | inserts a meeting, matched on name **raw and case-sensitive** | links it, matches **lowered and trimmed** like `log_meeting`, stores the email lowered |
+| `edit_call` | **nothing, either direction** | away from `booked_meeting` cancels the linked meeting; **to** it creates or un-cancels one, and keeps the date in step |
+| `delete_call` | **nothing** | cancels the linked meeting |
+
+Cancel, never delete — a withdrawn meeting keeps its row with `status = 'cancelled'`, so
+the history stays readable and the drill-down, which already filters to booked + held,
+stops counting it.
+
+**All four transitions proven in a rolled-back transaction. Two of them had no code path
+before today:**
+
+| step | meeting status | date | KPI |
+|---|---|---|---|
+| start | booked | 4 Aug | **5** |
+| edited away from `booked_meeting` | **cancelled** | 4 Aug | **4** |
+| edited back to `booked_meeting` | **booked** | **5 Aug** — follows the call | **5** |
+| call deleted | **cancelled** | 5 Aug | **4** |
+
+Rollback verified clean: 5 meetings, Baris `booked`, his call still live.
+
+### 11c · Rep attribution — the last bullet of Phase 2
+
+A call-created meeting carries no `campaign_id` and no `group_id`, because the calls
+workspace is tied to neither. `ownerOfMeeting` returned null, so the meeting **vanished
+the moment any rep filter was applied** and rep totals could never sum to the all-reps
+total. Both readers now fall back to `logged_by`, which for a call-created meeting is the
+rep who made the call.
+
+**Measured on the rendered pages:**
+
+```
+Overview, all reps      Meetings booked = 5     (was 4)
+Overview, Mark Vasu     Meetings booked = 3     (was 2)
+
+/meetings   Mark Vasu 3 · Tanay 1 · Justin 1 · Mark Dolan 0  =  5  =  All reps
+```
+
+They sum. PLAN.md says that was previously impossible.
+
+### Surprises
+
+- **None of the four pre-existing meetings came from a call**, so the backfill PLAN
+  anticipated turned out to be a single row. `log_call`'s meeting-writing is two days
+  younger than the only call it should have caught.
+
+### Not verified
+
+- **A real call logged through the interface end to end.** The functions were exercised
+  directly with the same arguments `app/calls/actions.js` passes; the form itself was not
+  driven.
+- **`OUTCOME_PRIORITY` still does the opposite of what its comment says** — a voicemail
+  with a stray "booked meeting" tick still reads as a booked meeting, because
+  `booked_meeting` is last in the array and the pill reads the newest row. Bashkim's call
+  is the evidence. **Not fixed** — it is a calls-workspace bug, not a meetings one, and it
+  is not in PLAN.
