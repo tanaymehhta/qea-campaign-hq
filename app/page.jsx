@@ -136,6 +136,25 @@ export default async function Overview({ searchParams }) {
   ).size;
   const responseRate = pct(responders, overall.new_leads_contacted);
 
+  // What the number leaves out, said on the tile rather than only in this file.
+  //
+  // 3 out of 58 inbound is a startling drop to meet with no explanation, and
+  // the explanation is the whole point of the metric: most of what arrives is
+  // not a person answering. Naming the two subtractions is what separates "our
+  // reply rate collapsed" from "47 of those were robots".
+  //
+  // Message counts, not people — that is the order the filtering happens in,
+  // and it is why 5 surviving messages become 3 people.
+  const robots = scopedReplies.filter((r) => r.sentiment === "auto_reply").length;
+  const refusals = scopedReplies.filter((r) => r.sentiment === "not_interested").length;
+  const removed = [
+    robots ? `${num(robots)} robot${robots === 1 ? "" : "s"}` : null,
+    refusals ? `${num(refusals)} refusal${refusals === 1 ? "" : "s"}` : null,
+  ].filter(Boolean).join(" and ");
+  const funnel = removed
+    ? `${num(scopedReplies.length)} inbound, less ${removed}`
+    : `${num(scopedReplies.length)} inbound, nothing removed`;
+
   // ------------------------------------------------------------------ bounce
   //
   // Instantly bounce is dated but not campaign-shaped, and it is placed here
@@ -368,9 +387,11 @@ export default async function Overview({ searchParams }) {
           note={
             !overall.new_leads_contacted
               ? "No rate here — lemlist never reported people reached"
-            : unread
-              ? `${responseRate}% of people reached · ${num(unread)} unread — a ceiling until they are labelled`
-              : `${responseRate}% of people reached · every reply read`
+              : [
+                  `${responseRate}% of people reached`,
+                  funnel,
+                  unread ? `${num(unread)} unread — a ceiling until they are labelled` : null,
+                ].filter(Boolean).join(" · ")
           }
           href={unread ? "/replies?tag=unclassified" : "/replies"}
         />
