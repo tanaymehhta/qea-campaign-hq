@@ -1,5 +1,5 @@
 import {
-  db, dailyRange, today, shift, num, pct, windowFrom, prettyDate,
+  db, dailyRange, mailboxRange, today, shift, num, pct, windowFrom, prettyDate,
   EMPTY, addInto, listHref, repList,
 } from "../lib/db";
 import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
@@ -11,11 +11,14 @@ export default async function Overview({ searchParams }) {
   const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { groups, reps }, rows, { data: meetings }, { data: proposals }, { data: calls }] =
+  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: meetings }, { data: proposals }, { data: calls }] =
     await Promise.all([
-      db.from("campaigns").select("id, source, name, status"),
+      // sender_emails is the edge that makes Instantly bounce placeable — see the
+      // bounce section below. It is a text[] on the campaign, written by the sync.
+      db.from("campaigns").select("id, source, name, status, sender_emails"),
       repList(),
       dailyRange(w.from, w.to),
+      mailboxRange(w.from, w.to),
       // Meetings/proposals are hand-logged and can be booked for a future date;
       // "all time" means every one ever logged, not capped at today like send
       // activity. Only booked + held count — a cancelled meeting is not a KPI,
@@ -73,35 +76,72 @@ export default async function Overview({ searchParams }) {
 
   // ------------------------------------------------------------------ bounce
   //
-  // Instantly bounce is dated but not campaign-shaped. It arrives from
-  // v_daily_facts as overlay rows carrying no campaign_id, which the loop above
-  // has already skipped, so it is added here and only to totals wide enough to
-  // hold it. The source, email_account_daily, is keyed on the mailbox, and 13 of
-  // 23 Instantly mailboxes send for more than one campaign.
+  // Instantly bounce is dated but not campaign-shaped, and it is placed here
+  // rather than left company-wide.
   //
-  // A null on an overlay row means that date's mailbox pull has not landed — it
-  // runs on the 03:00 nightly, not the 30-minute sync, so today is always null.
-  // The total is therefore a floor with a date on it, and the tile says the date
-  // out loud. That is the difference between this and the 77 it replaces: 77 was
-  // also a floor, and nothing on screen admitted it.
-  const overlay = rows.filter((r) => !r.campaign_id);
-  const counted = overlay.filter((r) => r.bounced != null);
-  const instantlyBounce = counted.reduce((a, r) => a + r.bounced, 0);
-  const bounceThrough = counted.length
-    ? counted.reduce((a, r) => (a > r.metric_date ? a : r.metric_date), "")
-    : null;
-  const bounceIsPartial = counted.length < overlay.length;
+  // What the vendor gives up, exactly: `campaigns/analytics/daily` has no bounce
+  // field, `campaigns/analytics` has one but only lifetime, and
+  // `accounts/analytics/daily` — email_account_daily — has a dated one keyed on
+  // the mailbox with no campaign on it. So the dated number exists and cannot be
+  // read at campaign grain from the vendor alone.
+  //
+  // The missing edge is ours: `campaigns.sender_emails` says which mailboxes a
+  // campaign sends from. Following it to the campaign is still wrong — one box
+  // serves ten Chicago Retrofit sub-campaigns and a bounce on it cannot be split
+  // between them. Following it one level up, to the **group**, is exact: a
+  // mailbox belongs to one group. Measured 19 Aug 2026: 0 of 23 Instantly
+  // mailboxes reach more than one group, and rolling the result to group matches
+  // the vendor's own lifetime endpoint on all three — 48 / 12 / 12.
+  //
+  // The rule is asked of the data every render, not assumed. A mailbox that ever
+  // does reach two groups, or a campaign in no group, resolves to null and is
+  // counted only company-wide, where it is still true.
+  const boxGroup = new Map();
+  for (const c of campaigns ?? []) {
+    if (c.source !== "instantly") continue;
+    const gid = groupOf.get(c.id) ?? null;
+    for (const e of c.sender_emails ?? []) {
+      if (!boxGroup.has(e)) boxGroup.set(e, gid);
+      else if (boxGroup.get(e) !== gid) boxGroup.set(e, null); // ambiguous — refuse
+    }
+  }
 
-  // Which scopes can hold a real bounce number:
-  //   no Instantly in scope   — lemlist writes it per campaign-day, nothing missing
-  //   every campaign in scope — the overlay is exactly the whole-company figure
-  //   one rep's groups        — a share of a company-wide number is not a thing
+  const instByGroup = new Map();
+  let instUnplaceable = 0;
+  const mailboxDates = new Set();
+  for (const r of mailbox) {
+    mailboxDates.add(r.metric_date);
+    if (r.bounced == null) continue;
+    const gid = boxGroup.get(r.email) ?? null;
+    if (gid) instByGroup.set(gid, (instByGroup.get(gid) ?? 0) + r.bounced);
+    else instUnplaceable += r.bounced;
+  }
+
+  // A date whose mailbox pull has not landed yet. email_account_daily is written
+  // by the 03:00 nightly, not the 30-minute sync, so a day that sends before
+  // then has sends and no bounce figure. The total is a floor with a date on it
+  // and the tile says the date out loud rather than reading as a clean zero —
+  // which is the whole fault this section exists to end.
+  const instDays = new Set(
+    rows.filter((r) => r.campaign_id && r.sent && inScope(r.campaign_id)
+      && cById.get(r.campaign_id)?.source === "instantly").map((r) => r.metric_date)
+  );
+  const covered = [...instDays].filter((d) => mailboxDates.has(d)).sort();
+  const bounceThrough = covered.length ? covered[covered.length - 1] : null;
+  const bounceIsPartial = covered.length < instDays.size;
+
   const scopeHasInstantly = (campaigns ?? []).some((c) => c.source === "instantly" && inScope(c.id));
+  // Nothing known yet: Instantly sent in this window and not one of those days
+  // has a mailbox row. A 0 here would be the original lie, so it is an em dash.
+  const bounceUnknown = scopeHasInstantly && instDays.size > 0 && covered.length === 0;
+
+  const scopedInstBounce = [...instByGroup].reduce(
+    (a, [gid, v]) => a + (!myGroupIds || myGroupIds.has(gid) ? v : 0), 0
+  );
   const overallBounced =
-    !scopeHasInstantly ? overall.bounced
-    : rep !== "all" ? null
-    : counted.length ? overall.bounced + instantlyBounce
-    : null;
+    bounceUnknown ? null
+    // An unplaceable mailbox is still inside the company total, and only there.
+    : overall.bounced + scopedInstBounce + (rep === "all" ? instUnplaceable : 0);
 
   // Same question per group. Grouping is derived from the campaign name, so a
   // group is not permanently one vendor — this is asked of the data, not assumed.
@@ -241,13 +281,13 @@ export default async function Overview({ searchParams }) {
           }
           note={
             overallBounced == null
-              ? rep !== "all"
-                ? "Instantly bounce is counted company-wide, not per rep"
-                : "Not counted for this window yet — mailbox figures land on the 03:00 run"
+              ? "Not counted for this window yet — mailbox figures land on the 03:00 run"
               : !overall.sent ? "—"
               : bounceIsPartial
                 ? `${pct(overallBounced, overall.sent)}% of sent · Instantly counted to ${prettyDate(bounceThrough)}`
-                : `${pct(overallBounced, overall.sent)}% of sent · stop above 5%`
+                : rep !== "all" && instUnplaceable
+                  ? `${pct(overallBounced, overall.sent)}% of sent · a floor, some mailboxes serve two groups`
+                  : `${pct(overallBounced, overall.sent)}% of sent · stop above 5%`
           }
           href={overallBounced == null ? undefined : drill("bounced")}
         />
@@ -323,11 +363,15 @@ export default async function Overview({ searchParams }) {
               // Derived, never typed. `g.status` is the intent someone recorded
               // once; `actual_status` is what the campaigns inside are doing.
               const status = g.actual_status ?? "unknown";
-              // Null, not 0, for any group holding an Instantly campaign. The
-              // dated bounce figure is a mailbox total and 13 of 23 mailboxes
-              // serve several campaigns, so there is no honest way down to this
-              // row. /campaigns carries the lifetime number, labelled as such.
-              const gBounced = groupsWithInstantly.has(g.id) ? null : m.bounced;
+              // `m.bounced` holds only the lemlist side — v_daily_facts makes an
+              // Instantly campaign-day NULL and addInto skips it. The Instantly
+              // side arrives from the mailboxes this group owns. Null only while
+              // nothing has been pulled yet, which is the one state where a
+              // number here would be invented.
+              const gBounced =
+                bounceUnknown && groupsWithInstantly.has(g.id)
+                  ? null
+                  : m.bounced + (instByGroup.get(g.id) ?? 0);
               return (
                 <tr key={g.id}>
                   <td className="name"><a className="drilled" href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
