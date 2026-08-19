@@ -5,13 +5,17 @@ import { NodeStrip } from "./nodes";
 import { setCompanyRelevant } from "../inbound/actions";
 import {
   inboundOverview, peopleOverview, researchOverview, latestByStage, STAGES, money,
-  runLog, strandedList, runSeconds, nodeErrors, HOSTS, RUN_RANGES, DECIDED,
+  runLog, strandedList, runSeconds, nodeErrors, HOSTS, RUN_RANGES, DECIDED, dateWindow,
 } from "../../lib/pipeline";
 
 export const dynamic = "force-dynamic";
 
 const STAGE_MARK = { ok: "ok", needs_review: "review", error: "error",
                      running: "running", cancelled: "killed" };
+
+// No future dates in the pickers. The page is force-dynamic, so this is today
+// at request time rather than at build time.
+const TODAY = () => new Date().toISOString().slice(0, 10);
 
 const TONE = { ok: "ok", error: "bad", running: "", cancelled: "bad" };
 const toneOf = (s) => TONE[s] ?? "warn";
@@ -176,11 +180,14 @@ function Requeue({ id }) {
 export default async function Pipeline({ searchParams }) {
   const view = VIEWS.some(([k]) => k === searchParams?.view) ? searchParams.view : "runs";
   const range = RUN_RANGES.some(([k]) => k === searchParams?.range) ? searchParams.range : "7";
+  const from = searchParams?.from ?? null;
+  const to = searchParams?.to ?? null;
+  const win = dateWindow({ range, from, to });
 
   const { companies, events, runsByCompany } = await inboundOverview();
   const pv = view === "person" ? await peopleOverview() : null;
   const rv = view === "research" ? await researchOverview() : null;
-  const log = view === "runs" ? await runLog({ range }) : null;
+  const log = view === "runs" ? await runLog({ range, from, to }) : null;
   const stuck = view === "stuck" ? await strandedList() : null;
 
   const researched = companies.filter((c) => c.research_status !== "new");
@@ -235,8 +242,22 @@ export default async function Pipeline({ searchParams }) {
           </p>
 
           <div className="segrow">
-            <Seg options={RUN_RANGES} current={range}
+            <Seg options={RUN_RANGES} current={win.custom ? null : range}
                  hrefFor={(k) => `/pipeline?range=${k}`} />
+
+            {/* The browser ships the calendar. Two date inputs and a GET form
+                keep this a server component with no picker library and no
+                client JavaScript, and the window ends up in the URL, so a
+                window worth arguing about can be pasted to somebody else. */}
+            <form className="ib-dates" method="GET">
+              <label>From <input type="date" name="from" max={TODAY()}
+                                 defaultValue={win.from ?? ""} /></label>
+              <label>To <input type="date" name="to" max={TODAY()}
+                               defaultValue={win.to ?? ""} /></label>
+              <button type="submit">Apply</button>
+              {win.custom ? <a href="/pipeline?range=7">Clear</a> : null}
+            </form>
+
             <span className="note">
               {num(log.executions.length)} of {num(log.total)} execution
               {log.total === 1 ? "" : "s"}
