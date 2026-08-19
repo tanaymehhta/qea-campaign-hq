@@ -115,10 +115,25 @@ export default async function Overview({ searchParams }) {
     scopedReplies.filter((r) => !DEAD.has(r.sentiment) && r.lead_email)
       .map((r) => r.lead_email.toLowerCase())
   ).size;
-  // The number above is a ceiling while these sit unread. An unlabelled reply
-  // is counted as a real one, and some of them are people saying no — so the
-  // tile says how many are outstanding instead of presenting a floor as final.
-  const unread = scopedReplies.filter((r) => r.sentiment === "unclassified").length;
+  // Which of those people are only in the count because nobody has read them
+  // yet — not how many unread replies there are.
+  //
+  // The two are not the same, and counting messages overstated the doubt. Every
+  // unread reply on file today is a fragment of Bharat Mudgal's thread, and his
+  // 28 Jul message is already `interested`, so he is counted whatever those two
+  // turn out to say. The tile was warning of a ceiling that could not fall.
+  //
+  // A person is at risk only when every reply they sent is unread. One
+  // `interested` anywhere settles them; one `not_interested` removes them.
+  const settled = new Set(
+    scopedReplies.filter((r) => !DEAD.has(r.sentiment) && r.sentiment !== "unclassified" && r.lead_email)
+      .map((r) => r.lead_email.toLowerCase())
+  );
+  const unread = new Set(
+    scopedReplies.filter((r) => r.sentiment === "unclassified" && r.lead_email)
+      .map((r) => r.lead_email.toLowerCase())
+      .filter((e) => !settled.has(e))
+  ).size;
   const responseRate = pct(responders, overall.new_leads_contacted);
 
   // ------------------------------------------------------------------ bounce
@@ -355,7 +370,7 @@ export default async function Overview({ searchParams }) {
               ? "No rate here — lemlist never reported people reached"
             : unread
               ? `${responseRate}% of people reached · ${num(unread)} unread — a ceiling until they are labelled`
-              : `${responseRate}% of people reached · robots and refusals removed`
+              : `${responseRate}% of people reached · every reply read`
           }
           href={unread ? "/replies?tag=unclassified" : "/replies"}
         />
