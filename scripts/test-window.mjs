@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { dateWindow } from "../lib/pipeline.js";
+import { filterLeads } from "../lib/inbound/queue.js";
 
 const day = (iso) => new Date(iso).getTime();
 
@@ -55,4 +56,35 @@ for (const junk of ["", "yesterday", "2026-8-1", "'; drop table", "2026-08-17T00
   assert.ok(!Number.isNaN(day(w.start)));
 }
 
-console.log("ok — date windows");
+// The queue filters in memory on the last visit, so it has to agree with the
+// window /pipeline queries with. "The 18th" meaning two different spans on two
+// screens is the failure this shares a function to avoid.
+{
+  const lead = (id, seen) => ({ id, reps: ["mv"], lastVisit: seen ? { seen_at: seen } : null });
+  const leads = [
+    lead("before", "2026-08-17T23:59:00Z"),
+    lead("early", "2026-08-18T00:00:00Z"),
+    lead("late", "2026-08-18T23:59:59Z"),
+    lead("after", "2026-08-19T00:00:01Z"),
+    lead("never", null),
+  ];
+  const ids = (o) => filterLeads(leads, o).map((l) => l.id);
+
+  assert.deepEqual(ids({ rep: "all", from: "2026-08-18", to: "2026-08-18" }),
+                   ["early", "late"], "one picked day is that whole day, and only it");
+  assert.deepEqual(ids({ rep: "all", from: "2026-08-18" }), ["early", "late", "after"]);
+  assert.deepEqual(ids({ rep: "all", to: "2026-08-18" }), ["before", "early", "late"]);
+
+  // A company nobody has visited is outside every window except All. It is the
+  // pre-existing behaviour, and the filter is on when somebody came.
+  assert.ok(!ids({ rep: "all", from: "2026-08-18" }).includes("never"));
+  assert.equal(filterLeads(leads, { rep: "all", range: "all" }).length, 5);
+
+  // Territory still applies inside a picked window.
+  assert.deepEqual(
+    filterLeads([...leads, { id: "theirs", reps: ["jk"], lastVisit: { seen_at: "2026-08-18T10:00:00Z" } }],
+                { rep: "mv", from: "2026-08-18", to: "2026-08-18" }).map((l) => l.id),
+    ["early", "late"]);
+}
+
+console.log("ok — date windows, and the queue filter agrees with them");

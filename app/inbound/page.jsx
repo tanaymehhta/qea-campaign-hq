@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import "./inbound.css";
 import { prettyWhen, num } from "../../lib/db";
-import { money } from "../../lib/pipeline";
+import { money, dateWindow } from "../../lib/pipeline";
 import { ALL_REPS, REGIONS, repById } from "../../lib/inbound/routing";
 import { cap, errorReason, isCreditError, RUNNING_CHIP } from "../../lib/inbound/words";
 import { RelevanceToggle, RestartButton } from "./controls";
@@ -33,16 +33,33 @@ export const dynamic = "force-dynamic";
  * `/pipeline`.
  */
 
-const href = ({ rep, range, as, show = "all" }) =>
-  `/inbound?rep=${rep}&range=${range}&as=${as}&show=${show}`;
+/**
+ * Every link on this page carries the whole filter, picked dates included —
+ * changing the rep must not silently widen the window back to seven days.
+ * Pressing a preset passes `from: null, to: null`, which is how a preset gets
+ * to win: the dates leave the URL rather than being overridden in place.
+ */
+// No future dates in the pickers. Evaluated per request — the page is
+// force-dynamic, so this is today rather than the day of the last build.
+const TODAY = () => new Date().toISOString().slice(0, 10);
+
+const href = ({ rep, range, as, show = "all", from = null, to = null }) =>
+  `/inbound?rep=${rep}&range=${range}&as=${as}&show=${show}`
+  + (from ? `&from=${from}` : "") + (to ? `&to=${to}` : "");
 
 /**
  * The window, as a sentence. Slotting the option's own label into "seen in the
  * last …" worked for the two middle options and produced "seen in the last all"
  * and "seen in the last today" for the other two.
  */
-const seenWhen = (range) =>
-  range === "all" ? "all time" : range === "1" ? "seen today" : `seen in the last ${range} days`;
+const seenWhen = (range, win) =>
+  win?.custom
+    ? (win.from && win.to
+        ? (win.from === win.to ? `seen on ${win.from}` : `seen ${win.from} to ${win.to}`)
+        : win.from ? `seen since ${win.from}` : `seen up to ${win.to}`)
+    : range === "all" ? "all time"
+    : range === "1" ? "seen today"
+    : `seen in the last ${range} days`;
 
 /**
  * A figure, and the whole card is the way into it.
@@ -253,15 +270,20 @@ export default async function Inbound({ searchParams }) {
   const rep = repById(searchParams?.rep) ? searchParams.rep : "all";
   const range = RANGES.some(([k]) => k === searchParams?.range) ? searchParams.range : "7";
   const as = searchParams?.as === "table" ? "table" : "cards";
+  // A picked window. `dateWindow` throws out anything that is not a yyyy-mm-dd,
+  // so a mangled bookmark falls back to the preset instead of filtering to zero.
+  const from = searchParams?.from ?? null;
+  const to = searchParams?.to ?? null;
+  const win = dateWindow({ range, from, to });
 
   const show = VIEWS[searchParams?.show] ? searchParams.show : "all";
   const { companies, traffic, excluded } = await loadQueue();
 
-  const inRange = filterLeads(companies, { rep: null, range });
+  const inRange = filterLeads(companies, { rep: null, range, from, to });
   // What the header counts and what the list shows are the same set, minus the
   // tile the reader is standing on — the tiles are the picker for that last
   // filter, so they must not count themselves out of existence.
-  const scope = filterLeads(companies, { rep, range });
+  const scope = filterLeads(companies, { rep, range, from, to });
   const rows = scope.filter(VIEWS[show].of);
   const stats = tally(scope);
   // The footer talks about the whole queue, whatever the header is filtered to.
@@ -270,7 +292,7 @@ export default async function Inbound({ searchParams }) {
 
   const chip = repById(rep);
   const unrouted = companies.filter((l) => l.region === "UNKNOWN").length;
-  const here = { rep, range, as, show };
+  const here = { rep, range, as, show, from: win.from, to: win.to };
   const pickers = [{ id: "all", name: "All reps", initials: "ALL", tint: "var(--tint-n)" }, ...ALL_REPS];
 
   // Everything in flight, not just what this filter shows. A run the window
@@ -312,7 +334,7 @@ export default async function Inbound({ searchParams }) {
           check. */}
       <section>
         <Sec title="This morning"
-             right={`Counting ${rep === "all" ? "every rep" : chip.name} · ${seenWhen(range)}`} />
+             right={`Counting ${rep === "all" ? "every rep" : chip.name} · ${seenWhen(range, win)}`} />
         {/* Every card that is a share of something says so, and says of what.
             "2,296 people found" over "506 emails drafted" reads as a pair of
             unrelated facts until the second one says 22% of the first; then it
@@ -387,10 +409,31 @@ export default async function Inbound({ searchParams }) {
       <div className="i-segrow">
         <div className="i-seg">
           {RANGES.map(([k, label]) => (
-            <a key={k} href={href({ ...here, range: k })}
-               className={String(range) === String(k) ? "on" : ""}>{label}</a>
+            <a key={k} href={href({ ...here, range: k, from: null, to: null })}
+               className={!win.custom && String(range) === String(k) ? "on" : ""}>{label}</a>
           ))}
         </div>
+        {/* The window the presets cannot say — last Tuesday, or the four days
+            somebody is asking about in a meeting. Native `<input type="date">`,
+            so the calendar, the keyboard handling and the locale all come from
+            the browser: no picker library, no client component, and the window
+            ends up in the URL where it can be pasted to somebody else. The
+            hidden fields carry the rest of the filter through the GET, which a
+            form would otherwise drop. */}
+        <form className="i-dates" method="GET" action="/inbound">
+          <input type="hidden" name="rep" value={rep} />
+          <input type="hidden" name="as" value={as} />
+          <input type="hidden" name="show" value={show} />
+          <label>From <input type="date" name="from" max={TODAY()}
+                             defaultValue={win.from ?? ""} /></label>
+          <label>To <input type="date" name="to" max={TODAY()}
+                           defaultValue={win.to ?? ""} /></label>
+          <button type="submit">Apply</button>
+          {win.custom
+            ? <a href={href({ ...here, range: "7", from: null, to: null })}>Clear</a>
+            : null}
+        </form>
+
         <div className="i-seg">
           {[["cards", "Cards"], ["table", "Table"]].map(([k, label]) => (
             <a key={k} href={href({ ...here, as: k })}
@@ -399,12 +442,12 @@ export default async function Inbound({ searchParams }) {
         </div>
         <span className="i-note">
           {num(rows.length)} compan{rows.length === 1 ? "y" : "ies"}
-          {rep !== "all" ? ` for ${chip.name}` : ""} · {seenWhen(range)}
+          {rep !== "all" ? ` for ${chip.name}` : ""} · {seenWhen(range, win)}
           {show !== "all" ? ` · ${VIEWS[show].label.toLowerCase()}` : ""}
         </span>
         {show !== "all" ? (
           <span className="i-links">
-            <a href={href({ rep, range, as })}>Clear filters</a>
+            <a href={href({ ...here, show: "all" })}>Clear filters</a>
           </span>
         ) : null}
       </div>
