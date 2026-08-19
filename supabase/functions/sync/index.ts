@@ -395,7 +395,16 @@ async function syncInstantly(from: string, to: string, deep: boolean) {
         const cid = idOf.get(e.campaign_id);
         if (!cid || !ts) continue;
 
-        const auto = looksAutomatic(e.subject ?? "", e.content_preview ?? "");
+        // `content_preview` stops at 60 characters and was all this ever kept.
+        // The whole message is on the same payload, under body.text, and the
+        // quoted thread underneath it carries the outbound email being answered
+        // — so the reply and what prompted it arrive together, for free.
+        const full = (e.body?.text ?? e.content_preview ?? "").trim();
+        // The heuristic now reads the message instead of the first 60
+        // characters of it. That truncation is why an out-of-office saying
+        // "I am currently on maternity lea…" was filed as a real reply: the
+        // pattern needs the end of the word and the preview had cut it off.
+        const auto = looksAutomatic(e.subject ?? "", full);
         inboundRows.push({
           campaign_id: cid, source: "instantly", source_message_id: e.id,
           lead_email: e.lead ?? e.from_address_email ?? null,
@@ -404,7 +413,7 @@ async function syncInstantly(from: string, to: string, deep: boolean) {
           channel: "email",
           received_at: ts,
           subject: e.subject ?? null,
-          body: (e.content_preview ?? "").slice(0, 4000) || null,
+          body: full.slice(0, 20000) || null,
           sentiment: auto ? "auto_reply" : "unclassified",
           classified_by: "ai",
           classified_at: new Date().toISOString(),
@@ -420,13 +429,21 @@ async function syncInstantly(from: string, to: string, deep: boolean) {
       if (!after) break;
     }
 
-    // ignoreDuplicates keeps a human's confirmed label intact: once a reply row
-    // exists, later syncs never touch its sentiment.
+    // ingest_replies, not upsert(ignoreDuplicates), because those two needs
+    // pull apart: a human's label must survive every later sync, and a body
+    // stored back when we only kept a 60-character preview must be repaired by
+    // one. ignoreDuplicates could only ever do the first. The function updates
+    // the vendor's fields and leaves sentiment alone — so re-running this over
+    // any past window backfills the real messages without disturbing a single
+    // judgment. That is also how the rows already in the table get fixed.
+    // Not thrown on. An RPC is a POST like every other write here, so a failure
+    // is already caught by the fetch wrapper at the top of this file and turns
+    // the run `partial` with the reason attached. Throwing would abandon the
+    // mailbox pull below it, and that is where the bounce figures come from —
+    // one rejected reply row should not cost the dashboard its bounce numbers.
     if (inboundRows.length) {
       for (let i = 0; i < inboundRows.length; i += 500) {
-        await db.from("replies").upsert(inboundRows.slice(i, i + 500), {
-          onConflict: "source,source_message_id", ignoreDuplicates: true,
-        });
+        await db.rpc("ingest_replies", { p_rows: inboundRows.slice(i, i + 500) });
       }
       wrote += inboundRows.length;
       wrote += await writeActivities(inboundActs);

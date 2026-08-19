@@ -11,7 +11,7 @@ export default async function Overview({ searchParams }) {
   const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: meetings }, { data: proposals }, { data: calls }] =
+  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: meetings }, { data: proposals }, { data: calls }, { data: replies }] =
     await Promise.all([
       // sender_emails is the edge that makes Instantly bounce placeable — see the
       // bounce section below. It is a text[] on the campaign, written by the sync.
@@ -35,6 +35,14 @@ export default async function Overview({ searchParams }) {
       (w.range === "all"
         ? db.from("phone_calls").select("id, call_date").is("deleted_at", null)
         : db.from("phone_calls").select("id, call_date").is("deleted_at", null).gte("call_date", w.from).lte("call_date", w.to)),
+      // Every inbound message in the window, for the response rate below. Read
+      // from `replies` rather than v_daily_facts.replied because that column is
+      // a per-day count with no person and no label on it — it can neither
+      // collapse two messages from one human nor drop the ones who said no.
+      db.from("replies")
+        .select("campaign_id, lead_email, sentiment, source")
+        .gte("received_at", `${w.from}T00:00:00Z`)
+        .lte("received_at", `${w.to}T23:59:59.999Z`),
     ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
@@ -73,6 +81,45 @@ export default async function Overview({ searchParams }) {
       || (!m.group_id && !m.campaign_id && m.logged_by === rep)
   );
   const scopedProposals = (proposals ?? []).filter((p) => inScope(p.campaign_id));
+
+  // ---------------------------------------------------------------- response
+  //
+  // How many humans wrote back and meant it.
+  //
+  // Three things are deliberately not counted. A robot is not a response, so
+  // `auto_reply` is out — the out-of-office, the maternity leave, the one who
+  // retired in October. Someone declining is not a response either, so
+  // `not_interested` is out. And a person is counted once however many times
+  // they wrote, which is why this dedupes on the address rather than adding up
+  // rows: the 41 real messages on file today come from 35 people.
+  //
+  // Everything else counts, including a forward — when a prospect passes the
+  // mail to a colleague with "please address this", that is the strongest
+  // signal in the set, and it is a response even though it was not addressed
+  // to us.
+  //
+  // The bar is a reply worth having, not a meeting. "Tell me more", "not right
+  // now", "talk to my colleague" — all responses.
+  // Instantly only, and that is a correctness rule rather than a preference.
+  // lemlist never reported `new_leads_contacted` — 0 across all 234 of its
+  // campaign-days, measured 19 Aug 2026 — so not one of its people is inside
+  // the "people reached" this divides by. Counting its repliers on top would
+  // put 35 people over an Instantly-only 1,839 and overstate the rate 2.7x.
+  // lemlist is being retired; /replies still lists every message from both, and
+  // if a vendor ever does start reporting people reached, this line is what
+  // changes.
+  const scopedReplies = (replies ?? [])
+    .filter((r) => inScope(r.campaign_id) && r.source === "instantly");
+  const DEAD = new Set(["auto_reply", "not_interested"]);
+  const responders = new Set(
+    scopedReplies.filter((r) => !DEAD.has(r.sentiment) && r.lead_email)
+      .map((r) => r.lead_email.toLowerCase())
+  ).size;
+  // The number above is a ceiling while these sit unread. An unlabelled reply
+  // is counted as a real one, and some of them are people saying no — so the
+  // tile says how many are outstanding instead of presenting a floor as final.
+  const unread = scopedReplies.filter((r) => r.sentiment === "unclassified").length;
+  const responseRate = pct(responders, overall.new_leads_contacted);
 
   // ------------------------------------------------------------------ bounce
   //
@@ -293,7 +340,25 @@ export default async function Overview({ searchParams }) {
         />
       </div>
 
-      <div className="grid g3" style={{ marginBottom: 34 }}>
+      <div className="grid g4" style={{ marginBottom: 34 }}>
+        <Tile
+          label="People who replied"
+          // No Instantly sending in this scope means no denominator and no
+          // repliers either — a 0 would read as "nobody wrote back", which is a
+          // different sentence from "this rate does not describe these
+          // campaigns". lemlist-only reps land here.
+          value={overall.new_leads_contacted ? num(responders) : "—"}
+          raw={overall.new_leads_contacted ? responders : undefined}
+          tone={overall.new_leads_contacted && responders ? undefined : "muted"}
+          note={
+            !overall.new_leads_contacted
+              ? "No rate here — lemlist never reported people reached"
+            : unread
+              ? `${responseRate}% of people reached · ${num(unread)} unread — a ceiling until they are labelled`
+              : `${responseRate}% of people reached · robots and refusals removed`
+          }
+          href={unread ? "/replies?tag=unclassified" : "/replies"}
+        />
         <Tile
           label="Emails opened"
           value={num(overall.opened)}

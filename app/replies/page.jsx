@@ -1,13 +1,36 @@
 import { db, num, prettyWhen, initials } from "../../lib/db";
 import { PersonLink, Pill, Chev } from "../../components/ui";
+import { classifyReply } from "../conflicts/actions";
 
 export const dynamic = "force-dynamic";
 
 const TAGS = ["all", "unclassified", "interested", "referral", "not_now", "not_interested", "auto_reply"];
 
+// The same five the schema allows and /conflicts already offers. "Out of office"
+// is the label for auto_reply because that is what a person calls it — and it
+// has to be here, not only on the sync's guess: four of the unclassified replies
+// read today were robots the subject-line heuristic let through, and without a
+// button for them they stay inside the response rate for good.
+const LABELS = [
+  ["interested", "Interested"],
+  ["not_now", "Not now"],
+  ["referral", "Referral"],
+  ["not_interested", "Not interested"],
+  ["auto_reply", "Out of office"],
+];
+
 export default async function Replies({ searchParams }) {
   const tag = searchParams?.tag ?? "all";
   const search = (searchParams?.q ?? "").replace(/[,()%]/g, "").trim();
+
+  // Rebuilt from the two params this page understands rather than echoed back
+  // from the URL, so whatever the action receives is something this file wrote.
+  const backHere = (() => {
+    const q = new URLSearchParams();
+    if (tag !== "all") q.set("tag", tag);
+    if (search) q.set("q", search);
+    return q.toString() ? `/replies?${q}` : "/replies";
+  })();
 
   let q = db.from("replies")
     .select("*")
@@ -110,6 +133,42 @@ export default async function Replies({ searchParams }) {
                   r.lead_email,
                 ].filter(Boolean).join(" · ")}
               </div>
+
+              {/* lemlist only, and it will stay that way. Its /activities feed
+                  carries `messagePreview` and nothing else — usually the
+                  greeting and no more — so what is above is a fragment and
+                  labelling from it is guessing. The full text does exist behind
+                  a second call, per contact, which is not being built: lemlist
+                  is being retired.
+
+                  Instantly needs no such warning any more. Its whole message is
+                  stored now, quoted thread and all, and every reply on file was
+                  inside the backfill that repaired them. */}
+              {r.source === "lemlist" ? (
+                <div className="dim" style={{ fontSize: 11.5, marginTop: 6, fontStyle: "italic" }}>
+                  Preview only — lemlist never handed over the rest of this message.
+                </div>
+              ) : null}
+
+              <form action={classifyReply} className="choices">
+                <span className="choices-label">
+                  {r.classified_by === "human" ? "You said" : "It is actually"}
+                </span>
+                {LABELS.map(([v, label]) => (
+                  <button
+                    key={v}
+                    name="sentiment"
+                    value={v}
+                    className={r.sentiment === v ? "choice on" : "choice"}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <input type="hidden" name="id" value={r.id} />
+                {/* Land back on the tab and search the click came from, so a
+                    run through the unclassified list survives each label. */}
+                <input type="hidden" name="from" value={backHere} />
+              </form>
             </div>
           </div>
         </details>
