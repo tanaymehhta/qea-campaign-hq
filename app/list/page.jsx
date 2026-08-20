@@ -1,6 +1,7 @@
 import {
   db, num, prettyDate, prettyWhen, windowFrom, shift, today,
   METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, campaignIdsForRep, listHref, pileArgs,
+  reachedCounts, pct, dailyRange,
 } from "../../lib/db";
 import { RangePicker, Pill, Seg, PersonLink, ShareDonut, tally } from "../../components/ui";
 
@@ -14,6 +15,20 @@ export const dynamic = "force-dynamic";
  * where a list cannot honour the date window, it says so rather than quietly
  * returning the wrong people.
  */
+/**
+ * What one row of this list is. The page used to call every row a "person",
+ * including the send log, where 6,861 message rows read as 6,861 humans and
+ * matched no other number on the site — which is how the word came to be
+ * reported as confusing. A row is a person only where the grain is a person.
+ */
+const UNIT = {
+  activities: ["send", "sends"],
+  replies:    ["message", "messages"],
+  meetings:   ["meeting", "meetings"],
+  proposals:  ["proposal", "proposals"],
+  people:     ["person", "people"],
+};
+
 export default async function List({ searchParams }) {
   const sp = searchParams ?? {};
   const key = sp.metric ?? "sent";
@@ -62,6 +77,16 @@ export default async function List({ searchParams }) {
 
   let rows = [], count = 0;
 
+  // The window and campaigns every RPC-backed metric asks with. Named once
+  // because the open-rate box below has to be counting the same people the
+  // list is showing, and a second copy of these three lines is how it stops.
+  const rpcScope = {
+    from: w.range === "all" ? null : w.from,
+    to: w.range === "all" ? null : w.to,
+    campaignIds: scopeIds,
+    source: null,
+  };
+
   // Built as a function rather than a value, because it is needed twice: once
   // for the page of rows on screen, and once — selecting a single column — for
   // the breakdown above it, which summarises the whole result rather than the
@@ -79,12 +104,7 @@ export default async function List({ searchParams }) {
       // limit/offset params, so it is fine), and ordering by a column that is
       // not in `select` fails on a set-returning function — which is why the
       // breakdown query asks for its ordering column too.
-      q = db.rpc(m.rpc, pileArgs({
-        from: w.range === "all" ? null : w.from,
-        to: w.range === "all" ? null : w.to,
-        campaignIds: scopeIds,
-        source: null,
-      }), { count: "exact" });
+      q = db.rpc(m.rpc, pileArgs(rpcScope), { count: "exact" });
       if (cols) q = q.select(`${cols}, last_contacted_at`);
       // The pile is the same people either way; `counter` picks which of their
       // lifetime columns has to be non-zero. Applied as a filter on the
@@ -172,6 +192,25 @@ export default async function List({ searchParams }) {
     breakdown = tally(cats.data, field);
   }
 
+  // What the vendors say they sent over this window, against how many send
+  // records we actually hold. Instantly keeps only a lead's more recent sends,
+  // so the event stream is a floor and the notebook is the count — the note
+  // under the list says the difference out loud rather than leaving two numbers
+  // to be discovered by someone trying to reconcile them.
+  let vendorSends = null;
+  if (m.table === "activities" && m.event === "sent" && !scopeEmpty) {
+    const ids = scopeIds ? new Set(scopeIds) : null;
+    vendorSends = (await dailyRange(w.from, w.to)).reduce(
+      (a, r) => a + (r.campaign_id && (!ids || ids.has(r.campaign_id)) ? r.sent ?? 0 : 0), 0
+    );
+  }
+
+  // Both denominators for "people who opened", counted over the same scope as
+  // the list. Fetched rather than written down: a note carrying 1,491 as text
+  // would be a second copy of a number nothing keeps in step.
+  const openScope =
+    m.counter === "opened_count" && !scopeEmpty ? await reachedCounts(rpcScope) : null;
+
   const pages = Math.max(1, Math.ceil(count / size));
   const base = {
     metric: key, group: sp.group, campaign: sp.campaign, rep: sp.rep, size,
@@ -186,7 +225,7 @@ export default async function List({ searchParams }) {
     <>
       <h1>{m.label}</h1>
       <p className="sub">
-        {num(count)} {count === 1 ? "person" : "people"} · {scopeLabel} ·{" "}
+        {num(count)} {(m.unit ?? UNIT[m.table] ?? UNIT.people)[count === 1 ? 0 : 1]} · {scopeLabel} ·{" "}
         {w.range === "day" ? prettyDate(w.from) : w.label.toLowerCase()}. {m.note}
       </p>
 
@@ -213,6 +252,38 @@ export default async function List({ searchParams }) {
         <div className="warnbox w">
           Neither Instantly nor lemlist timestamps this event, so it cannot be filtered to
           a date range. This is the lifetime list, not {w.label.toLowerCase()}.
+        </div>
+      ) : null}
+
+      {/* Only where the two denominators actually differ. In a scope whose
+          campaigns all carry a pixel — Chicago Retrofit, every lemlist group —
+          there is no second denominator to be confused by, and a box saying
+          "0 people between them" is noise pretending to be rigour. */}
+      {vendorSends && vendorSends > count ? (
+        <div className="warnbox plain">
+          <b>We hold {num(count)} of the {num(vendorSends)} sends the tools counted here</b> —{" "}
+          {num(vendorSends - count)} short. Instantly keeps only a lead&rsquo;s more recent
+          sends and drops the older ones, so this list is a floor rather than the whole
+          history; lemlist&rsquo;s side is complete. The tile on the Overview says{" "}
+          {num(vendorSends)}, because that is what the tools counted at the time. Both are
+          messages, not people — {" "}
+          <a className="drilled" href={listHref({ metric: "contacted", range: base.range, d: base.d, group: sp.group, campaign: sp.campaign, rep: sp.rep })}>
+            the people behind them are here
+          </a>.
+        </div>
+      ) : null}
+
+      {openScope?.trackable && openScope.people > openScope.trackable ? (
+        <div className="warnbox plain">
+          <b>Two denominators, and {num(openScope.people - openScope.trackable)} people between them.</b> {num(count)} of the{" "}
+          {num(openScope.trackable)} people whose mail could register an open is{" "}
+          <b>{pct(count, openScope.trackable)}%</b> — the figure on the tile. Over everyone
+          reached, all {num(openScope.people)}, it is {pct(count, openScope.people)}%.
+          {" "}The difference is the {num(openScope.people - openScope.trackable)} people in
+          campaigns that carry no tracking pixel: they did not decline to open the mail,
+          nothing was watching. Counting them can only push the rate down, and it would fall
+          again every time a campaign runs with tracking off — which would read as
+          engagement dropping when nothing about it had changed.
         </div>
       ) : null}
 

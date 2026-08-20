@@ -1,4 +1,4 @@
-import { db, num } from "../../lib/db";
+import { db, num, prettyWhen } from "../../lib/db";
 import { Tile, Pill, PersonLink, ShareDonut } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +22,29 @@ async function countWhere(filters) {
 }
 
 /** Head-count across a set of groups — the multi-select needs an in-list, not an eq. */
-async function countIn(groupIds, status) {
+async function countIn(groupIds, status, reached = null) {
   let q = db.from("v_leads").select("*", { count: "exact", head: true }).in("group_id", groupIds);
   if (status) q = q.eq("status", status);
+  if (reached === "yes") q = q.not("first_contacted_at", "is", null);
+  if (reached === "no") q = q.is("first_contacted_at", null);
+  const { count } = await q;
+  return count ?? 0;
+}
+
+/**
+ * Reached out or not — the tools' answer, not the spreadsheet's.
+ *
+ * `status = 'sent'` is a human column typed on a source file: 49 rows carry it
+ * with no send in either tool, and 906 people with a real send do not carry it.
+ * `first_contacted_at` is written by the sync from what Instantly and lemlist
+ * actually did, and it is the same column the Overview's People reached counts,
+ * so the two pages cannot disagree about who has been emailed.
+ */
+async function countReached(groupIds, reached, status = null) {
+  let q = db.from("v_leads").select("*", { count: "exact", head: true });
+  if (groupIds?.length) q = q.in("group_id", groupIds);
+  if (status) q = q.eq("status", status);
+  q = reached ? q.not("first_contacted_at", "is", null) : q.is("first_contacted_at", null);
   const { count } = await q;
   return count ?? 0;
 }
@@ -37,10 +57,11 @@ export default async function Leads({ searchParams }) {
     .select("id, slug, display_name, sort_order")
     .order("sort_order");
 
-  const [totalCount, groupCounts, statusCounts] = await Promise.all([
+  const [totalCount, groupCounts, statusCounts, reachedTotal] = await Promise.all([
     countWhere({}),
     Promise.all((groups ?? []).map((g) => countWhere({ group_id: g.id }))),
     Promise.all(STATUSES.map((s) => countWhere({ status: s }))),
+    countReached(null, true),
   ]);
 
   // Everyone the tools know who was never on a spreadsheet, so has no imported
@@ -62,6 +83,7 @@ export default async function Leads({ searchParams }) {
   const activeGroups = selSlugs.length ? selSlugs.map((s) => bySlug.get(s)) : populatedGroups;
   const allSelected = !selSlugs.length;
   const activeStatus = STATUSES.includes(sp.status) ? sp.status : null;
+  const activeReached = sp.reached === "yes" || sp.reached === "no" ? sp.reached : null;
   const activeIds = activeGroups.map((g) => g.id);
 
   // Clicking a group toggles it in or out of the set; "All" clears the set.
@@ -71,26 +93,57 @@ export default async function Leads({ searchParams }) {
       : [...selSlugs, slug];
     return next.length ? `/leads?group=${next.join(",")}` : "/leads";
   };
+  const search = (sp.q ?? "").replace(/[,()%]/g, "").trim();
   const groupParam = selSlugs.length ? `group=${selSlugs.join(",")}` : null;
-  const withFilters = (extra) =>
-    `/leads?${[groupParam, extra].filter(Boolean).join("&")}` .replace(/\?$/, "");
+  // Every filter survives a click on any other one. `status` and `reached` are
+  // different questions — the spreadsheet's and the tools' — and the whole
+  // point of showing both is being able to cross them: "marked sent, never
+  // actually emailed" is one click.
+  const hrefWith = (over = {}) => {
+    const q = new URLSearchParams();
+    if (selSlugs.length) q.set("group", selSlugs.join(","));
+    const st = "status" in over ? over.status : activeStatus;
+    const rc = "reached" in over ? over.reached : activeReached;
+    if (st) q.set("status", st);
+    if (rc) q.set("reached", rc);
+    if (search) q.set("q", search);
+    const qs = q.toString();
+    return qs ? `/leads?${qs}` : "/leads";
+  };
 
   let rows = [];
   const gc = { ...EMPTY_COUNTS };
-  const search = (sp.q ?? "").replace(/[,()%]/g, "").trim();
   if (activeGroups.length) {
-    gc.total = activeGroups.reduce((a, g) => a + (countsByGroup.get(g.id) ?? 0), 0);
-    const statusBreakdown = await Promise.all(STATUSES.map((s) => countIn(activeIds, s)));
+    // Each tab's number is what clicking it would show, with the *other*
+    // filter still applied. A "reached 2,395" sitting above a list filtered to
+    // "marked sent" would be a count and a list that are not the same pile —
+    // the fault this whole dashboard has spent a week removing.
+    const scopeTotal = activeGroups.reduce((a, g) => a + (countsByGroup.get(g.id) ?? 0), 0);
+    gc.total = activeReached ? await countIn(activeIds, null, activeReached) : scopeTotal;
+    const statusBreakdown = await Promise.all(
+      STATUSES.map((s) => countIn(activeIds, s, activeReached))
+    );
     STATUSES.forEach((s, i) => { gc[s] = statusBreakdown[i]; });
     gc.none = gc.total - statusBreakdown.reduce((a, n) => a + n, 0);
 
+    [gc.reached, gc.unreached, gc.allReachedScope] = await Promise.all([
+      countReached(activeIds, true, activeStatus),
+      countReached(activeIds, false, activeStatus),
+      // What the "All" tab above would show — this scope without the reached
+      // filter, which is what clicking it clears. Reading `gc.total` here would
+      // print the filtered number on a tab that removes the filter.
+      activeStatus ? countIn(activeIds, activeStatus) : Promise.resolve(scopeTotal),
+    ]);
+
     let q = db
       .from("v_leads")
-      .select("id, name, email, company, title, status, email_quality, source_list, in_tools")
+      .select("id, name, email, company, title, status, email_quality, source_list, in_tools, first_contacted_at")
       .in("group_id", activeIds)
       .order("name")
       .limit(1000);
     if (activeStatus) q = q.eq("status", activeStatus);
+    if (activeReached === "yes") q = q.not("first_contacted_at", "is", null);
+    if (activeReached === "no") q = q.is("first_contacted_at", null);
     if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,company.ilike.%${search}%`);
     const { data } = await q;
     rows = data ?? [];
@@ -107,7 +160,7 @@ export default async function Leads({ searchParams }) {
         rather than a status invented for them.
       </p>
 
-      <div className="grid g4">
+      <div className="grid g5">
         <Tile
           hero
           label="Total people"
@@ -119,11 +172,23 @@ export default async function Leads({ searchParams }) {
           }
         />
         <Tile
+          hero
+          label="Reached out"
+          value={num(reachedTotal)}
+          note={`Emailed at least once, both tools · ${num(totalCount - reachedTotal)} not yet`}
+          href="/list?metric=contacted&range=all"
+        />
+        <Tile
           plus
-          label="Sent"
+          label="Marked sent"
           value={num(totalByStatus.sent)}
           tone={totalByStatus.sent ? "" : "muted"}
-          note="Confirmed in Instantly/lemlist"
+          // This is the human column off the source spreadsheets, and it is not
+          // the same question as the tile beside it: 49 rows carry `sent` with
+          // no send in either tool, and 906 people with a real send do not carry
+          // it. Naming it "Confirmed in Instantly/lemlist", as it was until
+          // today, made a spreadsheet look like vendor proof.
+          note="Typed on the source spreadsheet — not the tools"
         />
         <Tile
           plus
@@ -165,6 +230,7 @@ export default async function Leads({ searchParams }) {
           <form action="/leads" method="GET" className="searchbox" style={{ marginBottom: 14 }}>
             {selSlugs.length ? <input type="hidden" name="group" value={selSlugs.join(",")} /> : null}
             {activeStatus ? <input type="hidden" name="status" value={activeStatus} /> : null}
+            {activeReached ? <input type="hidden" name="reached" value={activeReached} /> : null}
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.5" />
               <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -177,19 +243,40 @@ export default async function Leads({ searchParams }) {
             />
           </form>
 
-          <div className="seg" style={{ marginBottom: 14 }}>
-            <a href={withFilters(search ? `q=${encodeURIComponent(search)}` : null)} className={!activeStatus ? "on" : ""}>
+          {/* The tools' answer and the spreadsheet's, one above the other. They
+              are different questions and they disagree — which is the point of
+              being able to see both, and of not deriving either from the other. */}
+          <div className="segrow" style={{ marginBottom: 10 }}>
+            <span className="note">Reached out — what Instantly and lemlist actually did</span>
+            <div className="seg">
+              <a href={hrefWith({ reached: null })} className={!activeReached ? "on" : ""}>
+                All ({num(gc.allReachedScope ?? gc.total)})
+              </a>
+              <a href={hrefWith({ reached: "yes" })} className={activeReached === "yes" ? "on" : ""}>
+                reached ({num(gc.reached ?? 0)})
+              </a>
+              <a href={hrefWith({ reached: "no" })} className={activeReached === "no" ? "on" : ""}>
+                not reached ({num(gc.unreached ?? 0)})
+              </a>
+            </div>
+          </div>
+
+          <div className="segrow" style={{ marginBottom: 14 }}>
+            <span className="note">Status — typed on the source spreadsheet</span>
+            <div className="seg">
+            <a href={hrefWith({ status: null })} className={!activeStatus ? "on" : ""}>
               All ({num(gc.total)})
             </a>
             {STATUSES.map((s) => (
               <a
                 key={s}
-                href={withFilters(`status=${s}${search ? `&q=${encodeURIComponent(search)}` : ""}`)}
+                href={hrefWith({ status: s })}
                 className={activeStatus === s ? "on" : ""}
               >
                 {s.replace(/_/g, " ")} ({num(gc[s] ?? 0)})
               </a>
             ))}
+            </div>
           </div>
 
           {/* The whole selection, not the page: the counts come from head-counts
@@ -228,6 +315,7 @@ export default async function Leads({ searchParams }) {
                   <th style={{ textAlign: "left" }}>Email</th>
                   <th style={{ textAlign: "left" }}>Company</th>
                   <th style={{ textAlign: "left" }}>Title</th>
+                  <th>Reached out?</th>
                   <th>Status</th>
                   <th>Email quality</th>
                 </tr>
@@ -240,6 +328,11 @@ export default async function Leads({ searchParams }) {
                     <td className="dim" style={{ textAlign: "left" }}>{r.email || "—"}</td>
                     <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
                     <td style={{ textAlign: "left" }}>{r.title || "—"}</td>
+                    <td>
+                      {r.first_contacted_at
+                        ? <span className="pill p-running" title={`First emailed ${prettyWhen(r.first_contacted_at)}`}>yes</span>
+                        : <span className="dim">not yet</span>}
+                    </td>
                     {/* Null is not a status. Someone the tools know who was never
                         on a source spreadsheet has no imported pipeline state,
                         and inventing one would be the whole bug again. */}
@@ -248,7 +341,7 @@ export default async function Leads({ searchParams }) {
                   </tr>
                 ))}
                 {!rows.length ? (
-                  <tr><td colSpan={7} className="empty">No leads match this filter.</td></tr>
+                  <tr><td colSpan={8} className="empty">No leads match this filter.</td></tr>
                 ) : null}
                 {/* PostgREST caps a response at 1,000 rows whatever .limit() asks
                     for. The counts above are exact — they read Content-Range, not
@@ -256,7 +349,7 @@ export default async function Leads({ searchParams }) {
                     rather than reading as the whole list. */}
                 {rows.length >= 1000 ? (
                   <tr>
-                    <td colSpan={7} className="empty">
+                    <td colSpan={8} className="empty">
                       Showing the first {num(rows.length)} of {num(activeStatus ? (gc[activeStatus] ?? 0) : gc.total)}.
                       Narrow by campaign, status, or search to see the rest.
                     </td>

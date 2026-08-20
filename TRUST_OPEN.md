@@ -105,6 +105,10 @@ And on 20 August 2026:
 | `81bfc96` | One SQL definition of a response (`response_people` / `response_counts`). The homepage tile and `/replies` read it together, so the number and the list are one pile. T2. |
 | `bbfdb96` | The lemlist inbox pulled, read and labelled before the subscription ended. Three answers replace five. Both vendors. T3. |
 | `e247272` | QEA Resellers and LBER — Boston reassigned from Tanay to Mark Vasu. Four reps become three. |
+| `abda53b` | People reached, both tools. T4 §7. |
+| `6a74984` | People who opened, people over people. T5 §8. |
+| *(same day)* | **Every list says what it counts.** `/list` called every row a "person", including the send log — 6,861 message rows read as 6,861 humans and matched no number on the site. Rows are now sends / messages / meetings / people by grain, and the send list states the 756 records Instantly counted but never handed over. |
+| *(same day)* | **`/leads` answers "have we actually emailed them?"** A `Reached out` tile and column and a filter, read from `first_contacted_at` — the same column the Overview counts, so the two pages cannot disagree. The `Sent` tile is renamed **Marked sent** and no longer claims to be "Confirmed in Instantly/lemlist": it is a spreadsheet column, and `status=sent & reached=no` is now one click and lists 49 people. Closes Q7. |
 
 Also live: five labelling buttons on `/replies`.
 
@@ -664,12 +668,25 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
   The bodies can only be pulled via `get_inbox_conversation`; the `/activities` feed the
   sync uses carries `messagePreview` only. Not an engineering task, and the highest-value
   item on this page.
-- **Q7 · `/leads` "SENT 1,536 · Confirmed in Instantly/lemlist" is not vendor
-  confirmation.** It is the human `status` column typed on the source spreadsheets. The
+- **Q7 · CLOSED 20 Aug 2026.** ~~`/leads` "SENT 1,536 · Confirmed in Instantly/lemlist" is
+  not vendor confirmation.~~ It is the human `status` column typed on the source spreadsheets. The
   tools say **2,393** (T4). Measured 20 Aug: 49 rows marked `sent` have no send in either
   tool, and 906 people with a real send are not marked `sent`. The three status tiles also
   do not sum to Total people — 1,536 + 420 + 14 + **810 with no status at all** = 2,780 —
   which is honest but reads as arithmetic that failed. Same family as T4, one page over.
+- **Q9 · `v_leads` is a security-definer view and shows 49 rows the anon key may not
+  read.** Measured 20 Aug: `select count(*) from v_leads` returns 2,780 to anon while
+  `people` returns 2,707 — the difference is 49 people in hidden campaigns, which RLS
+  excludes everywhere else. None of them has ever been contacted, so no count on the site
+  is wrong today; the fix is one line (`alter view v_leads set (security_invoker = on)`)
+  and it moves the Leads total from 2,780 to 2,731, which is why it is an ask and not a
+  patch.
+- **Q10 · nothing warns when a campaign belongs to no group.** Every campaign is in one
+  today, by hand. A new one — a dental sequence, say — syncs into `campaigns`, `people` and
+  `daily_metrics` within 30 minutes and lands in every Overview total, but not in the
+  per-group table and not in any rep's view, so the table silently stops summing to the
+  tile. `/health` checks for ownerless *groups* and not for ungrouped *campaigns*. One
+  view plus one card, and the sustainability problem in §1 of the handoff goes away.
 - **Q6 · `unclassified` carries two meanings.** "Read it, genuinely cannot tell" (Bharat's
   two, per `20260818205745`) and "never read, the body was a 60-char preview" (all 26
   lemlist). Both correctly count as replies under C′, so this blocks nothing today — but
