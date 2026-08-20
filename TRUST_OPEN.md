@@ -96,6 +96,14 @@ Recorded so they are not re-investigated. All on `main`, all 19 August 2026.
 | `8aafd4f` | Opened tile was 800 events ÷ 7,542 = 10.6%. Now **225 unique ÷ 3,574 tracked sends = 6.3%**, because 12 of 22 Instantly campaigns run with tracking off and their sends cannot be in the denominator. |
 | `e911761` | `/pipeline` and the queue now mean the same day when asked about one day. |
 
+And on 20 August 2026:
+
+| commit | what it settled |
+|---|---|
+| `81bfc96` | One SQL definition of a response (`response_people` / `response_counts`). The homepage tile and `/replies` read it together, so the number and the list are one pile. T2. |
+| `bbfdb96` | The lemlist inbox pulled, read and labelled before the subscription ended. Three answers replace five. Both vendors. T3. |
+| `e247272` | QEA Resellers and LBER — Boston reassigned from Tanay to Mark Vasu. Four reps become three. |
+
 Also live: five labelling buttons on `/replies`.
 
 Two standing rules that came out of this work:

@@ -1658,11 +1658,15 @@ classification is live on that page.
 | "Still open": `/health` shows twelve runs | **fixed**, Step 18 |
 | "Still open": Phase 0's Bharat meeting stands | **deleted**; he is an `interested` reply now |
 | `v_group_status_drift` fires on `qea` | **0 rows**; the typed word was corrected |
-| replies bodies are stored | **previews only** — both vendors, ≤100 characters, Step 19 |
+| replies bodies are stored | Instantly: **whole message**, `2dc5428`. lemlist: **rescued from the inbox API**, `bbfdb96` — the feed only ever served ≤100-character previews and the API is now gone |
 
 ## Still open, and still needing a person
 
-- **38 unclassified replies.** Twelve of them unreadable without Mark's inbox.
+- ~~**38 unclassified replies.** Twelve of them unreadable without Mark's inbox.~~
+  **CLOSED 20 Aug 2026** (`bbfdb96`). The lemlist bodies were pulled from the inbox API two
+  days before the subscription ended — joined on the activity id, which is already
+  `replies.source_message_id` — and Tanay read and labelled all 135 replies himself. Zero
+  unclassified people remain on either vendor. See `LEMLIST_RESCUE.md` and `RESPONSE_PILE.md`.
 - **`leads.status` vocabulary** (PLAN Phase 1c). Unanswered since it was asked.
 - **`OUTCOME_PRIORITY`** (`app/calls/actions.js:43`) contradicts its own comment: the
   comment says a stray *booked meeting* tick should still read as a voicemail, the array

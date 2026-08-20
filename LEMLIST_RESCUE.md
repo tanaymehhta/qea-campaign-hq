@@ -3,8 +3,12 @@
 Pulled 20 August 2026 from the lemlist inbox API, before the subscription ends. Every
 message body below is stored in this file because after Friday it cannot be fetched again.
 
-**Nothing has been written to the database yet.** This is the review sheet. Tanay confirms
-or corrects the right-hand column, then it goes in.
+> **STATUS: EXECUTED, 20 August 2026, migration `20260820160000`, commit `bbfdb96`.**
+> This file is kept as the record of what was proposed and why. Tanay reviewed all 135
+> replies in a local tool and changed **26** of them; his export, not this sheet, is what
+> was applied. Where the two differ, his export won and the differences are listed at the
+> bottom under "What he actually decided". The message bodies below are the only surviving
+> copy of text lemlist will not serve again.
 
 ---
 
@@ -146,3 +150,33 @@ Not done until you say. Nothing is written yet.
    "26 lemlist replies unlabelled, highest-value item on this page" note.
 
 No new tables at any step.
+
+
+---
+
+## What he actually decided
+
+Reviewed all 135 in one sitting on `localhost:4600`, three buttons, and exported JSON. The
+migration SQL was generated from that export rather than transcribed, so no label could be
+mistyped between his click and the database.
+
+**Final: 19 rows interested, 18 not interested, 98 automatic. 26 rows changed.**
+
+Where he differed from the proposals above:
+
+| Person | I proposed | He chose | |
+|---|---|---|---|
+| Galen Williams | *your call* | **interested** | the polite "very interesting technology" |
+| Ben Myers | *your call* | **interested** | the LinkedIn connection accept |
+| Mark Attard (2nd row) | *your call* | **interested** | already interested on his other message |
+| Bharat Mudgal | *your call* | **interested** | overrides the standing note on `20260818205745`; he was already interested elsewhere, so no count moves |
+| **Scott Farbman** | *(not surfaced — sat in the robot pile)* | **not_interested** | **he caught this one.** Filed `auto_reply` by the subject-line regex; the message is "Not interested." A refusal is a response. |
+
+He accepted every other proposal, including the two referrals as `interested` and Douglas
+Lee's second row — Mark's own forward — as `auto_reply`.
+
+**Result, both vendors, all time:** Total responses **31**, Interested **15**, Not
+interested **16**, still to read **0**.
+
+The `Q5` entry in `TRUST_OPEN.md` §7 — *"26 lemlist replies unlabelled … the highest-value
+item on this page"* — is closed by this.

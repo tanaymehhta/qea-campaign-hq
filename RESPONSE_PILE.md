@@ -503,3 +503,64 @@ sides of the line.
 18 scopes, tile against the rows behind its own href, all matching. Justin 4 + Mark Dolan 5
 + Tanay 22 = 31. Every route still 200.
 
+
+---
+
+## 11. The rep move · DONE
+
+`e247272`, migration `20260820180000`. Not a metric change, recorded here because it moves
+who every number belongs to.
+
+Tanay asked for his name off the campaigns. `Tanay` existed in exactly two places in the
+whole database — checked before touching anything, because a rep's identity in this schema
+is a **string**, not a foreign key, so it can hide anywhere:
+
+| where | rows |
+|---|---|
+| `campaign_groups.owner` | 2 — QEA Resellers (13 campaigns), LBER — Boston (7) |
+| `meetings.logged_by` | 1 — Mark Attard, Point6, 28 Jul, held |
+
+Nothing else. `call_campaigns.owner`, `phone_calls.rep`, `proposals.logged_by`,
+`inbound_companies.assigned_to`, `feedback.rep`, `call_contact_edits.rep` — all clean. No
+hardcoded `Tanay` in any code path either; the three hits are two comments and a
+`lib/pipeline.js` label for which machine ran a job.
+
+**Reassigned, never blanked.** `repList()` skips a group whose owner is null, so a blank
+owner would have deleted those 20 campaigns from the rep layer entirely — no avatar, no
+filter, no `/calls` roster entry. That is precisely the fault `20260818201502` was written
+to prevent, so "remove the name" had to mean "hand it over".
+
+**Written through `set_group_owner`** — the validating security-definer path already in the
+schema for this exact column — rather than a raw `UPDATE`, so there stays one way to change
+an owner instead of two. Keyed on the owner name, not on group ids, so nothing generated is
+hardcoded and re-running it is a no-op.
+
+**`meetings.logged_by` moved too**, and that one is a judgment call worth naming.
+`logged_by` is provenance — who typed the record in — not ownership, and this meeting's rep
+was already resolved from its group (`app/meetings/page.jsx:44`). It was changed anyway for
+two reasons: the meeting detail card prints "Logged by" on its face, so the name would have
+survived one click from the campaigns it had just left; and the unattached-meeting fallback
+at `app/page.jsx:73` scopes on that column, where a name that is no longer a rep can never
+match again.
+
+### After
+
+| rep | groups | Total responses | Interested |
+|---|---:|---:|---:|
+| Mark Vasu | 3 | **22** | 12 |
+| Mark Dolan | 1 | 5 | 2 |
+| Justin | 1 | 4 | 1 |
+| **all reps** | 5 | **31** | **15** |
+
+22 + 5 + 4 = 31. All-reps totals unmoved by the reassignment, which is the check that it was
+a move and not an edit. `?rep=Tanay` in an old URL now falls through to all-reps — the
+existing `reps.some(...)` guard treats an unknown rep as no scoping, which is the right
+failure.
+
+### Noticed, not changed
+
+`components/ui.jsx:67` renders rep chips as `r.name.split(" ")[0]`, so there are now **two
+chips both reading "Mark"**, told apart only by their avatar initials (MV / MD) and their
+subtitles ("3 groups" / "Canada"). Pre-existing — both Marks were always there — but more
+confusing now that one of them owns three of the five groups. It is a shared component used
+on several pages, so it was left alone rather than bundled into an unrelated change.
