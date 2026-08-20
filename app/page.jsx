@@ -119,17 +119,33 @@ export default async function Overview({ searchParams }) {
     from: w.range === "all" ? null : w.from,
     to: w.range === "all" ? null : w.to,
     campaignIds: scopedIds,
-    source: "instantly",
+    // Both vendors. This was Instantly-only until 20 Aug 2026, because the
+    // Interested tile divided by `new_leads_contacted` and lemlist has never
+    // written that column — a lemlist person in the numerator would have been
+    // divided by a denominator they are not inside.
+    //
+    // That objection is about a *rate*. Total responses is a **count**, and a
+    // count has no denominator to be wrong about. Once the lemlist inbox was
+    // read and labelled (20260820160000), keeping 22 humans off the tile
+    // because of an arithmetic problem the tile does not have would have been
+    // the same fault in the other direction: deleting a true number to avoid
+    // explaining it. So the count is both vendors, and the rate below changed
+    // its denominator instead.
+    source: null,
   };
   const pile = await responseCounts(scope);
-  // Only when there is something to divide by. A window can hold a reply and no
-  // first touches at all — 4 Aug 2026 is one: 1 person answered, 0 new leads
-  // contacted, because the sends that day were follow-ups. The count is still
-  // true; only the rate is unavailable.
+  // Total responses is exactly two things and nothing else: the people who said
+  // yes and the people who said no. Robots are not a response and unread mail is
+  // not an answer, so both sit outside this pair. That is what lets the tile
+  // print its own breakdown — the parts are guaranteed to sum.
+  const notInterested =
+    pile.responded == null || pile.interested == null ? null : pile.responded - pile.interested;
+  // Interested over everyone who replied — one pile on both sides of the line.
+  // It used to be "% of people reached", which cannot survive lemlist: that
+  // denominator is Instantly-only and always will be. This one is true whatever
+  // mix of vendors is in scope, which is the whole reason for the swap.
   const interestedRate =
-    pile.interested == null || !overall.new_leads_contacted
-      ? null
-      : pct(pile.interested, overall.new_leads_contacted);
+    pile.interested == null || !pile.responded ? null : pct(pile.interested, pile.responded);
 
   // ------------------------------------------------------------------ opened
   //
@@ -408,52 +424,45 @@ export default async function Overview({ searchParams }) {
       <div className="grid g5" style={{ marginBottom: 34 }}>
         <Tile
           label="Total responses"
-          // The em dash asks whether an Instantly campaign is in this view at
-          // all — NOT whether anyone was newly contacted in the window.
-          //
-          // Those two came apart on 4 Aug 2026 and the tile got it wrong: 1
-          // person answered, 0 first touches that day (the sends were
-          // follow-ups), and the old guard blanked a tile whose list held a
-          // real human. A count needs no denominator. The em dash is for a
-          // scope this pile cannot describe — a lemlist-only rep — where 0
-          // would say "nobody wrote back" instead of "not measured here".
-          value={scopeHasInstantly ? num(pile.responded) : "—"}
-          raw={scopeHasInstantly ? pile.responded ?? undefined : undefined}
-          tone={scopeHasInstantly && pile.responded ? undefined : "muted"}
+          // A count, so there is no denominator to be missing and no scope this
+          // cannot describe. The only em dash left is a failed read — `pile`
+          // comes back all-null on error rather than all-zero, because "nobody
+          // wrote back" and "the question never reached the database" are
+          // different sentences and only one of them is ever true here.
+          value={num(pile.responded)}
+          raw={pile.responded ?? undefined}
+          tone={pile.responded ? undefined : "muted"}
+          // The split, on the face of the tile. You should not have to click to
+          // learn whether 31 responses were good news.
           note={
-            !scopeHasInstantly
-              ? "No Instantly campaign in this view — lemlist never reported who replied as people"
+            pile.responded == null
+              ? "Could not be counted just now"
               : [
-                  "People, not messages. Robots and out-of-office excluded",
-                  pile.needs_label ? `${num(pile.needs_label)} need a label` : null,
+                  pile.responded
+                    ? `${num(pile.interested)} interested · ${num(notInterested)} not interested`
+                    : "Nobody has written back in this view",
+                  pile.needs_label ? `${num(pile.needs_label)} still to read` : null,
                 ].filter(Boolean).join(" · ")
           }
           href={pileHref("responded")}
         />
         <Tile
           label="Interested"
-          // One percent on this tile, not two. "6.3% of 3,574" next to a count
-          // of a different pile is exactly how the opened tile came to read as
-          // though it disagreed with sends — the rate here is people who said
-          // yes over people we reached, and the count is the same people.
-          //
-          // The count survives a missing denominator; only the percent drops.
-          // Blanking the whole tile because a window had no first touches would
-          // be deleting a rate to avoid explaining it, which is the one thing
-          // TRUST_OPEN.md §7 says never to do.
+          // One percent, and both sides of it are the same pile: people who said
+          // yes, over people who answered at all. Nothing here divides one
+          // vendor's numerator by another's denominator, which is the fault
+          // TRUST_OPEN.md §1 says every broken rate on this dashboard shared.
           value={
-            !scopeHasInstantly ? "—"
+            pile.interested == null ? "—"
               : interestedRate == null ? num(pile.interested)
               : <>{num(pile.interested)}<span className="pair"> / {interestedRate}%</span></>
           }
-          raw={scopeHasInstantly && interestedRate == null ? pile.interested ?? undefined : undefined}
-          tone={scopeHasInstantly && pile.interested ? undefined : "muted"}
+          raw={interestedRate == null ? pile.interested ?? undefined : undefined}
+          tone={pile.interested ? undefined : "muted"}
           note={
-            !scopeHasInstantly
-              ? "No Instantly campaign in this view"
-              : interestedRate == null
-                ? "No first touches in this window — these answer earlier sends, so there is no rate to give"
-                : `${interestedRate}% of ${num(overall.new_leads_contacted)} people reached`
+            pile.interested == null ? "Could not be counted just now"
+              : interestedRate == null ? "Nobody has written back in this view"
+              : `${num(pile.interested)} of the ${num(pile.responded)} who replied`
           }
           href={pileHref("interested")}
         />

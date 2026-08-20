@@ -18,10 +18,11 @@ cold: read §1 and §2, then the `OPEN` and `DECIDED` entries. That is enough to
 2. [The shape every entry shares](#2-the-shape-every-entry-shares)
 3. [Closed since the 18 August review](#3-closed-since-the-18-august-review)
 4. [T1 · OPEN · `/campaigns` "Reply %"](#4-t1--open--campaigns-reply-)
-5. [T2 · DECIDED · Homepage Total responses + Interested](#5-t2--decided--homepage-total-responses--interested)
-6. [Reported, not yet written up](#6-reported-not-yet-written-up)
-7. [House rules for anything that lands here](#7-house-rules-for-anything-that-lands-here)
-8. [The queries behind this file](#8-the-queries-behind-this-file)
+5. [T2 · SHIPPED · Homepage Total responses + Interested](#5-t2--shipped--homepage-total-responses--interested)
+6. [T3 · SHIPPED · Three answers, both vendors](#6-t3--shipped--three-answers-both-vendors)
+7. [Reported, not yet written up](#7-reported-not-yet-written-up)
+8. [House rules for anything that lands here](#8-house-rules-for-anything-that-lands-here)
+9. [The queries behind this file](#9-the-queries-behind-this-file)
 
 ---
 
@@ -209,7 +210,7 @@ Q5 below.
 
 ---
 
-## 5. T2 · DECIDED · Homepage Total responses + Interested
+## 5. T2 · SHIPPED · Homepage Total responses + Interested
 
 Tanay, 20 August 2026. Build this. Do not re-argue the ledgers. Do not collapse the
 labelling buttons to two. Step 1 of the homepage revamp (Opened as a percent, Bounce as a
@@ -280,7 +281,24 @@ moment the inbox grows.
 - **D — one SQL definition over `replies`, both tiles and the list read it, counts in
   Postgres, labels stay on the row.** Accepted.
 
-**Decision — settled, not built.** Steps 2 and 3 of the homepage revamp. Step 1 is not
+**SHIPPED 20 August 2026**, commit `81bfc96` plus the follow-up below. Built as decided —
+one SQL definition (`response_people` / `response_counts`, migration `20260820120000`), the
+homepage and `/replies` both reading it, no fourth ledger, no stored count. Verified by
+following each tile's own href and counting the rows behind it across 32 scopes.
+
+Three things changed after the decision was written, all on the same day, all recorded here
+because a decision revised in a chat is a decision that gets re-argued in three weeks:
+
+1. **The em-dash guard was wrong and the verification caught it.** The tile blanked when
+   `new_leads_contacted` was 0. On 4 Aug one person answered and no first touches went out
+   — the sends were follow-ups — and a tile whose list held a real human read `—`. A count
+   needs no denominator. Fixed.
+2. **Both vendors, not Instantly-only.** See T3 below.
+3. **Five labelling buttons became three.** See T3 below. This reverses the 20 August
+   "do not collapse the buttons to two" decision in this entry — it is now three, not two,
+   and it was Tanay's call after reading all 135 replies himself.
+
+**Original decision text follows.** Steps 2 and 3 of the homepage revamp. Step 1 is not
 redone. Step 4 (copy Instantly’s interest guess onto new mail as `classified_by = 'ai'`)
 is not this pass. Step 5 (by-campaign table) is not this pass.
 
@@ -409,7 +427,55 @@ match the tile, it is not done.
 
 ---
 
-## 6. Reported, not yet written up
+## 6. T3 · SHIPPED · Three answers, both vendors
+
+Tanay, 20 August 2026, after reading all 135 replies himself. Two changes, one cause.
+
+**The vocabulary is three, not five.** Interested / Not interested / Automatic. `referral`
+and `not_now` stay legal in the schema and are used by **no row in the table** (measured
+the same day), so nothing was discarded. The two referrals the lemlist rescue turned up —
+Jennifer Berthelot-Jelovic passing us to BranchPattern, John Forester naming Jason Kilgo —
+he filed as `interested`. `unclassified` survives but is not a button: it is the state of
+mail nobody has read yet, which is a fact about us, not an answer from them.
+
+This reverses "do not collapse the labelling buttons" in T2. Recorded rather than quietly
+applied, because the reason it was written still stands for the *machine* — the sync must
+never guess these — and only the human's palette changed.
+
+**Both vendors, and why the old objection does not apply.** Total responses was
+Instantly-only because the Interested tile divided by `new_leads_contacted`, which lemlist
+has never written. That is an argument about a **rate**. Total responses is a **count**, and
+a count has no denominator to be wrong about. Keeping 22 labelled humans off a headcount to
+protect an arithmetic problem the headcount does not have would be deleting a true number
+to avoid explaining it — house rule 5, in the other direction.
+
+**So the rate changed its denominator instead.** Interested is now `interested ÷ responded`
+— people who said yes over people who answered — one pile on both sides, true whatever mix
+of vendors is in scope. The old `÷ new_leads_contacted` could never have survived lemlist
+and was going to break the first time somebody widened the tile.
+
+**Measured, 20 August 2026, all time, all reps:**
+
+| | Instantly only | Both vendors |
+|---|---:|---:|
+| Total responses | 9 | **31** |
+| Interested | 3 | **15** |
+| Not interested | 6 | **16** |
+| Still to read | 0 | **0** |
+
+15 + 16 = 31, and that is not a coincidence to be grateful for — `not_interested` has no
+flag of its own anywhere in the stack. It is `responded && !interested` on the tile and in
+the `/replies` filter both, so the parts cannot stop summing to the whole.
+
+**What this made visible.** `rep=Tanay` read an em dash before this and now reads **22
+responses, 12 interested**. He owns the lemlist groups. His work was not being counted.
+
+**Verify.** Query 6 in §8, with `p_source` null. Then click each tile and count the rows —
+18 scopes checked, all matching.
+
+---
+
+## 7. Reported, not yet written up
 
 Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it is worked.
 
@@ -427,7 +493,7 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
 - **Q4 · `/list?metric=opened` says 351 against the tile's 225.** Click a number, get a
   different number. Same family as F2 in `TRUST.md`, still live after `8aafd4f` fixed the
   tile alone.
-- **Q5 · 26 lemlist replies unlabelled** (22 distinct people; 19 rows / 17 people in QEA
+- **Q5 · CLOSED 20 Aug 2026.** ~~26 lemlist replies unlabelled~~ (22 distinct people; 19 rows / 17 people in QEA
   Resellers, 7 rows / 5 people in LBER). One of them is Mark Attard's *"I would be open to
   meeting, availability Thursday"* — a meeting sitting outside every metric on the site.
   The bodies can only be pulled via `get_inbox_conversation`; the `/activities` feed the
@@ -440,7 +506,7 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
 
 ---
 
-## 7. House rules for anything that lands here
+## 8. House rules for anything that lands here
 
 Earned from the entries above, not asserted.
 
@@ -465,7 +531,7 @@ Earned from the entries above, not asserted.
 
 ---
 
-## 8. The queries behind this file
+## 9. The queries behind this file
 
 Run against `yfnqszwlyoyfhuwfmcyl`. Do not take this file's word for anything.
 

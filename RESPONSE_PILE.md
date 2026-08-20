@@ -436,3 +436,70 @@ this is Tanay's call.
   unclassified. Still `OPEN`.
 - `TRUST_OPEN.md` §5 has not been moved from `DECIDED` to `SHIPPED`. That happens on
   commit, with the hash, per its own convention.
+
+---
+
+## 10. The lemlist rescue and the three-answer model · DONE
+
+Same day, after the above. Two days before the lemlist subscription ends.
+
+**The problem was never the tiles.** All 135 lemlist replies were already in `replies` —
+no missing table, no missing integration. One field was missing: `sentiment`. 111 rows had
+no body stored at all, because lemlist's `/activities` feed only ever handed the sync a
+`messagePreview`. `"Mark,"` was the whole of what we held for a man who had written *"I am
+definitely interested, though."*
+
+**Pulled** from the inbox API, joined on the activity id — which is already this table's
+`source_message_id`, so nothing was matched by guesswork. The whole team inbox is 22
+conversations; the other 109 rows never created one, which independently corroborates the
+robot classification the subject-line regex had guessed.
+
+**lemlist's own AI was tested and rejected.** `aiLeadInterest` looked like a free pre-tag.
+Douglas Lee's thread has two rows: his real reply scored `negative` correctly, and
+`act_omRZzjg3hxJcvfB7C` — **Mark Vasu's own forward to a colleague**, misfiled by lemlist
+as inbound — scored **positive, 4 of 6**. Using that field would have invented an
+interested prospect out of our own outbound mail. It is written nowhere.
+
+**A local review tool** (`localhost:4600`, kept out of the repo — it holds customer email
+bodies) put all 135 replies in front of Tanay with three buttons, 131 of them pre-tagged
+with a proposed read and a note saying why. He tagged all 135 and exported JSON. The
+migration SQL was generated from that JSON rather than transcribed, so no label could be
+mistyped.
+
+**He changed 26 rows, and found one I had missed:** Scott Farbman, filed `auto_reply` by
+the subject-line regex, had written *"Not interested."* A refusal is a response.
+
+### The model this settles on
+
+Three answers, and Total responses is exactly the first two:
+
+```
+Total responses  =  Interested  +  Not interested
+Automatic        =  not a response
+Unclassified     =  nobody has read it yet
+```
+
+`not_interested` gets **no flag of its own** anywhere — not in the RPC, not in `PILES`, not
+on the tile. It is `responded && !interested` in all three places, so the parts cannot drift
+out of summing to the whole.
+
+### What it reads now
+
+| | before today | now |
+|---|---:|---:|
+| Total responses | 3 | **31** |
+| Interested | — | **15** |
+| Not interested | — | **16** |
+| Still to read | 21 | **0** |
+| `rep=Tanay` | — (em dash) | **22 responses, 12 interested** |
+
+The Interested rate changed denominator, and had to: `% of people reached` is Instantly-only
+forever, so with lemlist in the count it would have divided 15 people by 1,839 they are not
+all inside. It is now **`interested ÷ responded`** — 15 of 31, 48.4% — one pile on both
+sides of the line.
+
+### Verified
+
+18 scopes, tile against the rows behind its own href, all matching. Justin 4 + Mark Dolan 5
++ Tanay 22 = 31. Every route still 200.
+

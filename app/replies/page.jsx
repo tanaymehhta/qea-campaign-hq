@@ -7,44 +7,50 @@ import { classifyReply } from "../conflicts/actions";
 
 export const dynamic = "force-dynamic";
 
-// The five the schema allows and /conflicts already offers. "Out of office" is
-// the label for auto_reply because that is what a person calls it — and it has
-// to be here, not only on the sync's guess: four of the unclassified replies
-// read on 19 Aug were robots the subject-line heuristic let through, and
-// without a button for them they stay inside the response pile for good.
+// Three answers, not five. Settled 20 Aug 2026 by Tanay after reading all 135
+// replies in one sitting: a reply is interest, a refusal, or a machine. The
+// schema still allows `referral` and `not_now`, and nothing is lost by dropping
+// the buttons — not one row in the table has ever used either (measured the
+// same day). The two referrals found in the lemlist inbox, Jennifer
+// Berthelot-Jelovic passing us to BranchPattern and John Forester naming Jason
+// Kilgo, he filed as Interested.
+//
+// `unclassified` is deliberately not a button. It is the state of mail nobody
+// has read yet, which is a fact about us rather than an answer from them.
 const LABELS = [
   ["interested", "Interested"],
-  ["not_now", "Not now"],
-  ["referral", "Referral"],
   ["not_interested", "Not interested"],
-  ["auto_reply", "Out of office"],
+  ["auto_reply", "Automatic"],
 ];
 
-// The four piles, in the order the homepage reads left to right.
+// The piles, in the order the homepage reads left to right.
 //
-// `source` is not a display preference. The first three carry a rate on the
-// homepage and lemlist has never written `new_leads_contacted`, so a lemlist
-// person cannot be divided by people reached — mixing them in is the T1 fault
-// one column over. "All inbound" has no rate on it, so it can show everything,
-// which is what keeps this page a place where nothing is hidden.
+// Total responses is the parent and the next two are its only children: a
+// person who answered either said yes or said no. `not_interested` therefore
+// needs no flag of its own — it is `responded` minus `interested`, both on the
+// tile and in the filter below, so the three counts cannot fail to add up.
+//
+// Every pile here is both vendors, matching the homepage since 20 Aug 2026.
 const VIEWS = {
-  responded:   { label: "Total responses", source: "instantly", count: (c) => c.responded },
-  interested:  { label: "Interested",      source: "instantly", count: (c) => c.interested },
-  needs_label: { label: "Needs a label",   source: "instantly", count: (c) => c.needs_label },
-  all:         { label: "All inbound",     source: null,        count: (c) => c.people },
+  responded:      { label: "Total responses", count: (c) => c.responded },
+  interested:     { label: "Interested",      count: (c) => c.interested },
+  not_interested: { label: "Not interested",  count: (c) => (c.responded == null ? null : c.responded - c.interested) },
+  needs_label:    { label: "Still to read",   count: (c) => c.needs_label },
+  all:            { label: "Everything",      count: (c) => c.people },
 };
 
 const BLURB = {
-  responded: "People who wrote back and said something a human has named. Robots and out-of-office are out; so is anyone nobody has read yet.",
-  interested: "People with an `interested` message anywhere in their thread. One yes wins, even if they later said no.",
-  needs_label: "Homework. Every message from these people is still unclassified, so they count in no tile. The five buttons are how they leave this list.",
-  all: "Every inbound message on file, both vendors, robots included. Nothing is hidden here — it is just not the default after a tile click.",
+  responded: "Everyone who wrote back and meant it — the interested and the not interested together. This is the homepage number.",
+  interested: "People with an interested message anywhere in their thread. One yes wins, even if they later said no.",
+  not_interested: "People who answered and said no. They are responses — someone read the mail and replied — they are just not leads.",
+  needs_label: "Nobody has read these yet, so they count in no tile. The three buttons are how they leave this list.",
+  all: "Every inbound message on file, both tools, machines included. Nothing is hidden here — it is just not what a tile click opens.",
 };
 
 // A person can hold several labels across a thread; show them all rather than
 // picking one, because which one "wins" differs per pile and a single pill
 // would have to lie about at least one of them.
-const PILL_ORDER = ["interested", "referral", "not_now", "not_interested", "unclassified", "auto_reply"];
+const PILL_ORDER = ["interested", "not_interested", "unclassified", "auto_reply"];
 
 export default async function Replies({ searchParams }) {
   const sp = searchParams ?? {};
@@ -62,7 +68,6 @@ export default async function Replies({ searchParams }) {
     : tag === "unclassified" ? "needs_label"
     : tag ? "all"
     : "responded";
-  const { source } = VIEWS[view];
 
   const { reps } = await repList();
   const rep = reps.some((r) => r.id === sp.rep) ? sp.rep : "all";
@@ -75,18 +80,17 @@ export default async function Replies({ searchParams }) {
     from: w.range === "all" ? null : w.from,
     to: w.range === "all" ? null : w.to,
     campaignIds: ids,
-    source,
+    source: null,
   };
 
   const LIMIT = 300;
-  const [instantly, everyone, people, { data: subs }] = await Promise.all([
-    responseCounts({ ...scope, source: "instantly" }),
-    responseCounts({ ...scope, source: null }),
+  const [counts, people, { data: subs }] = await Promise.all([
+    responseCounts(scope),
     responsePeople(scope, { pile: view, limit: LIMIT, tag, search }),
     db.from("v_campaign_summary").select("campaign_id, name, sub_campaign_label, group_name"),
   ]);
 
-  const shown = VIEWS[view].count(view === "all" ? everyone : instantly);
+  const shown = VIEWS[view].count(counts);
   const emails = people.map((p) => p.lead_email);
 
   // The messages behind the people on this page, and only them. Bounded by the
@@ -152,14 +156,13 @@ export default async function Replies({ searchParams }) {
       <div className="seg" style={{ marginBottom: 14 }}>
         {Object.entries(VIEWS).map(([k, v]) => (
           <a key={k} href={here({ ...base, view: k, tag: "" })} className={view === k ? "on" : ""}>
-            {v.label} ({num(v.count(k === "all" ? everyone : instantly))})
+            {v.label} ({num(v.count(counts))})
           </a>
         ))}
       </div>
 
       <p className="sub" style={{ marginTop: -4, marginBottom: 14 }}>
         {BLURB[view]}
-        {view !== "all" ? " Instantly only — lemlist never reported the people-reached these divide by." : null}
         {tag && view === "all" ? ` Filtered to ${tag.replace(/_/g, " ")}.` : null}
       </p>
 
