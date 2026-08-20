@@ -529,3 +529,90 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
 .gapform label.datefield > span{font-size:10.5px;letter-spacing:.06em;
   text-transform:uppercase;color:var(--ink-3)}
 .gapform label.datefield input{min-width:150px;flex:0 0 auto}
+
+/* ============================================================
+   Leads — the facet rail (Option B, 20 Aug 2026)
+   Four stacked segmented bars became one sticky column of facets:
+   every filter and every count on screen at once, nothing in a menu.
+   Colour carries the channel — blue is email, violet is the phone —
+   so a row's origin reads before you get to the words.
+   ============================================================ */
+/* Declared light-first, then overridden — same specificity, so order decides. */
+:root{--violet:#6d43c8}
+[data-theme="dark"]{--violet:#a184e8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--violet:#a184e8}}
+
+.leadsplit{display:grid;grid-template-columns:232px minmax(0,1fr);gap:16px;align-items:start}
+@media(max-width:920px){.leadsplit{grid-template-columns:1fr}}
+
+details.rail{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 15px;position:sticky;top:14px}
+details.rail > summary{display:none;list-style:none;cursor:pointer;font-size:13px;
+  color:var(--ink-2);font-weight:600}
+details.rail > summary::-webkit-details-marker{display:none}
+@media(max-width:920px){
+  details.rail{position:static}
+  details.rail > summary{display:flex;align-items:center;gap:8px}
+  details.rail[open] > summary{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--grid)}
+}
+.railbody{display:flex;flex-direction:column;gap:17px}
+.facet h4{margin:0 0 7px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;display:flex;justify-content:space-between;
+  align-items:baseline;gap:8px}
+.rst{font-size:10.5px;letter-spacing:0;text-transform:none;color:var(--s1);font-weight:400;
+  border-bottom:1px solid transparent;transition:border-color .14s}
+.rst:hover{border-bottom-color:var(--s1)}
+.frow{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px;color:var(--ink-2);
+  transition:color .14s}
+.frow:hover{color:var(--ink-1)}
+.frow .box{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--axis);flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center;font-size:9px;line-height:1;
+  color:var(--page);transition:background .14s,border-color .14s}
+.frow.on{color:var(--ink-1);font-weight:600}
+.frow.on .box{background:var(--s1);border-color:var(--s1)}
+.frow.on.v .box{background:var(--violet);border-color:var(--violet)}
+.frow .sw{width:8px;height:8px;border-radius:2px;flex:0 0 auto}
+.frow .n{margin-left:auto;font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--ink-3)}
+.frow.nil{color:var(--ink-3)}
+.frow .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+/* result line above the table */
+.resline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;
+  color:var(--ink-3);margin:12px 0 9px;font-variant-numeric:tabular-nums}
+.resline b{color:var(--ink-1);font-weight:600;font-size:13px}
+.resline .sep{color:var(--axis)}
+
+/* channel pills — the one place a new hue was added */
+.pill.p-list_email{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 38%,transparent);
+  background:color-mix(in srgb,var(--s1) 10%,transparent)}
+.pill.p-list_call{color:var(--violet);border-color:color-mix(in srgb,var(--violet) 38%,transparent);
+  background:color-mix(in srgb,var(--violet) 12%,transparent)}
+.pill.p-emailed{color:var(--good);border-color:color-mix(in srgb,var(--good) 38%,transparent);
+  background:color-mix(in srgb,var(--good) 10%,transparent)}
+
+/* buildings carried, as a number with a bar under it */
+.bldgbar{height:4px;border-radius:2px;background:var(--wash-2);margin-top:4px;width:70px;overflow:hidden}
+.bldgbar i{display:block;height:100%;background:var(--violet);transform-origin:left;
+  animation:growWide .6s cubic-bezier(.22,.8,.3,1) both}
+
+/* this table reads left to right — names, addresses, companies, not figures */
+.leadtable th,.leadtable td{text-align:left}
+.leadtable td.idx{color:var(--ink-3);font-variant-numeric:tabular-nums;width:40px}
+.leadtable td{white-space:normal;vertical-align:top}
+.leadtable .who{font-weight:600;font-size:13.5px}
+.leadtable .said{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.leadtable .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+
+/* A filter change is a router push now, not a document load — so the only
+   thing that should move is the answer. The table and its count belong to the
+   previous question while the next one is in flight; dimming them is the whole
+   feedback, and the rail stays exactly where it is. */
+html[data-busy="1"] .leadtable,
+html[data-busy="1"] .resline b{opacity:.45}
+.leadtable,.resline b{transition:opacity .16s ease}
+html[data-busy="1"] .leadsplit{cursor:progress}
+.frow{border-radius:6px;padding-left:4px;margin-left:-4px}
+.frow:hover{background:var(--wash)}
+.frow.waiting .box{border-color:var(--s1)}
+.frow.waiting.v .box{border-color:var(--violet)}
