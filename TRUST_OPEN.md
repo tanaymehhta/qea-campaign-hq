@@ -21,9 +21,10 @@ cold: read §1 and §2, then the `OPEN` and `DECIDED` entries. That is enough to
 5. [T2 · SHIPPED · Homepage Total responses + Interested](#5-t2--shipped--homepage-total-responses--interested)
 6. [T3 · SHIPPED · Three answers, both vendors](#6-t3--shipped--three-answers-both-vendors)
 7. [T4 · SHIPPED · Homepage People reached](#7-t4--shipped--homepage-people-reached)
-8. [Reported, not yet written up](#8-reported-not-yet-written-up)
-9. [House rules for anything that lands here](#9-house-rules-for-anything-that-lands-here)
-10. [The queries behind this file](#10-the-queries-behind-this-file)
+8. [T5 · SHIPPED · Homepage People who opened](#8-t5--shipped--homepage-people-who-opened)
+9. [Reported, not yet written up](#9-reported-not-yet-written-up)
+10. [House rules for anything that lands here](#10-house-rules-for-anything-that-lands-here)
+11. [The queries behind this file](#11-the-queries-behind-this-file)
 
 ---
 
@@ -215,7 +216,7 @@ tile exactly, and is the whole company's measured interest. There are 26 lemlist
 all count as replies, correctly. They move the **interest** number, not this one. See
 Q5 below.
 
-**Verify.** Query 3 in §10.
+**Verify.** Query 3 in §11.
 
 ---
 
@@ -244,7 +245,7 @@ email. The sync guesses robots from subject/body (`looksAutomatic` in
 interest field is currently ignored. Treating those five words as vendor truth would
 rebuild the lie in a new place.
 
-**Measured.** Not re-counted for this write-up; the live split is Query 6 in §10. The
+**Measured.** Not re-counted for this write-up; the live split is Query 6 in §11. The
 shape, already known:
 
 - Homepage tile = distinct Instantly people after dropping `auto_reply` and
@@ -385,7 +386,7 @@ So:
    Instantly person (`lower(lead_email)`) with `bool_or` on the labels, scoped by
    `received_at` and campaign membership so date and rep filters are real. The per-person
    rollup is what catches two messages from one human, and what lets one `interested` win.
-   Query 6 in §10 is the all-time, all-reps version.
+   Query 6 in §11 is the all-time, all-reps version.
 2. **Homepage asks for counts.** `/replies` asks for those same people, paged. Both call
    the same helper. If the tile says 12, the list is those 12. The number, the click, and
    the list are one pile.
@@ -431,7 +432,7 @@ explains why. His 28 Jul message is already `interested`, so he is already in In
   and a different rule on unclassified.
 - Invent a `replies_totals` table.
 
-**Verify.** Query 6 in §10. Then click each tile and count the rows. If the list does not
+**Verify.** Query 6 in §11. Then click each tile and count the rows. If the list does not
 match the tile, it is not done.
 
 ---
@@ -479,7 +480,7 @@ the `/replies` filter both, so the parts cannot stop summing to the whole.
 **What this made visible.** `rep=Tanay` read an em dash before this and now reads **22
 responses, 12 interested**. He owns the lemlist groups. His work was not being counted.
 
-**Verify.** Query 6 in §10, with `p_source` null. Then click each tile and count the rows —
+**Verify.** Query 6 in §11, with `p_source` null. Then click each tile and count the rows —
 18 scopes checked, all matching.
 
 ---
@@ -560,7 +561,7 @@ The two groups that moved are the two that ran on lemlist, and both of them read
 see it at all. Mark Vasu owns both — the same rep whose responses were invisible until
 `bbfdb96`, now the rep whose 554 emailed people were invisible too.
 
-**Verify.** Query 7 in §10. Then the scrape: 19 window/rep scopes and 12 group cells
+**Verify.** Query 7 in §11. Then the scrape: 19 window/rep scopes and 12 group cells
 checked on 20 August, tile equals click in every one, and the group cells sum to the tile
 exactly (2,393 all time, 2,028 last 30 days, 366 on 28 July). Reps sum too:
 1,491 + 498 + 404 = 2,393.
@@ -568,11 +569,76 @@ exactly (2,393 all time, 2,028 last 30 days, 366 on 28 July). Reps sum too:
 **What this does not fix.** `/leads` still says **SENT 1,536 · "Confirmed in
 Instantly/lemlist"**. That is the human `status` column typed on the source spreadsheets,
 not vendor confirmation — 49 of those rows have no send in either tool and 906 people with
-a real send are not marked `sent`. Same family, one page over. Q7 in §8.
+a real send are not marked `sent`. Same family, one page over. Q7 in §9.
 
 ---
 
-## 8. Reported, not yet written up
+## 8. T5 · SHIPPED · Homepage People who opened
+
+Was **Q4**. Closed the same day it was ranked, because T4 had already built the pile it
+needed.
+
+**Symptom.** Tile read `6.3% / 225`. Its own click opened **351 people**.
+
+**Measured, 20 August 2026, all time.** Three different things were being called "opened":
+
+| | | |
+|---|---:|---|
+| `unique_opened`, notebook, Instantly | **225** | unique per campaign-**day** — one person opening Monday and Tuesday is two |
+| people with `opened_count > 0`, Instantly | **123** | Instantly's two records disagree with each other by 102 |
+| people with `opened_count > 0`, lemlist | **228** | lemlist writes no `unique_opened` at all, so none of them were visible |
+
+**Why it is wrong.** The numerator counted events from one vendor while the click counted
+humans from two — F2 again. And the denominator was *3,574 tracked sends*: messages under a
+numerator trying to be people, one vendor under two, which is house rule 4 failing on the
+very tile built to demonstrate it.
+
+**The denominator, measured:**
+
+| | reached | opened | |
+|---|---:|---:|---|
+| Instantly, tracking on | 937 | 123 | 13.1% |
+| Instantly, tracking off | 902 | 0 | **unobservable, not zero** |
+| lemlist | 554 | 228 | 41.2% |
+
+Those 902 have no pixel in their mail. They did not decline to open it; nothing was
+watching. Padding the bottom of the fraction with them is what made 23.5% read as 6.3%.
+
+**Decision — SHIPPED 20 August 2026**, migration `20260820210000`. Opens are not a pile of
+their own: they are a property of a person we reached. `reached_people` grew one column,
+`can_open`, and the callers filter on `opened_count` — the same move `PILES` makes over
+`response_people`. `reached_counts` returns `opened` and `trackable` alongside `people`, so
+the tile, the per-group column and the drill-down are three `count(*) filter`s over one set
+of rows.
+
+```
+People who opened   23.5% / 351     351 of 1,491 who could register one
+                                    902 reached with no pixel
+```
+
+**What it cost, stated on the tile and on the list.** The window now selects on the date we
+reached the person, not the date they opened. Neither tool dates an open per person —
+`opened_count` is lifetime state — and the notebook's per-campaign-day figure is not a
+headcount, so the two cannot both be had. The tile is renamed **People who opened**:
+"Emails opened" was honest for a number counting events and a lie for one counting humans.
+
+**Q1 is closed for this column too.** A group or a rep whose campaigns cannot register an
+open now renders `—` rather than `0`. `rep=Justin` — 404 people, 11 campaigns, tracking off
+throughout — reads *"No campaign here can register an open"* instead of `0% / 0`. The
+per-group `Opened` column does the same. `/campaigns` still shows `0` and is still Q1.
+
+**Clicked moved with it** for consistency, one line: 1 person, both tools, same definition.
+**Bounce deliberately did not.** Its tile is assembled from the per-mailbox daily table with
+a partial-day guard and an unplaceable-mailbox total, and it agrees with its own click
+today; rebuilding working provenance to make an unrelated point is not a fix.
+
+**Verify.** Query 8 in §11, then the scrape: 10 window/rep scopes and 4 group cells, tile
+equals click in every one that has a click, and every scope that has none says why on its
+face — 8 Aug 12 is 323 people reached, all Roof Campaign, tracking off, and reads `—`.
+
+---
+
+## 9. Reported, not yet written up
 
 Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it is worked.
 
@@ -580,6 +646,9 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
   on 1,504 emails; all 11 of its campaigns have tracking off. This is the F9 denominator
   problem from `TRUST.md` in its other half — the tile was fixed in `8aafd4f`, the
   per-group column was not. A campaign with tracking off must render `—`, not `0`.
+  **Half closed 20 Aug 2026 by T5**: the Overview's per-group column and its rep-scoped
+  tile now render `—` and say why. `/campaigns` still prints `0`, and that page reads
+  `v_campaign_summary`, so it is a different fix.
 - **Q2 · `campaign_totals.reached` is never written and is `COALESCE`d to 0.** A landmine
   for the next person who reaches for a denominator, which is exactly how B got proposed.
   Either populate it or drop the column; leaving a plausible zero in place is the worst of
@@ -587,9 +656,8 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
 - **Q3 · `contacted` is mixed units.** Instantly writes people (`new_leads_contacted`),
   lemlist writes messages (it equals `sent`). Never displayed today, so no user-visible
   effect — but `v_campaign_summary` computes `bounce_pct_of_contacted` from it.
-- **Q4 · `/list?metric=opened` says 351 against the tile's 225.** Click a number, get a
-  different number. Same family as F2 in `TRUST.md`, still live after `8aafd4f` fixed the
-  tile alone.
+- **Q4 · CLOSED 20 Aug 2026 — became T5, §8.** ~~`/list?metric=opened` says 351 against the
+  tile's 225.~~ Both are 351 now, and the rate divides people by people.
 - **Q5 · CLOSED 20 Aug 2026.** ~~26 lemlist replies unlabelled~~ (22 distinct people; 19 rows / 17 people in QEA
   Resellers, 7 rows / 5 people in LBER). One of them is Mark Attard's *"I would be open to
   meeting, availability Thursday"* — a meeting sitting outside every metric on the site.
@@ -609,7 +677,7 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
 
 ---
 
-## 9. House rules for anything that lands here
+## 10. House rules for anything that lands here
 
 Earned from the entries above, not asserted.
 
@@ -634,7 +702,7 @@ Earned from the entries above, not asserted.
 
 ---
 
-## 10. The queries behind this file
+## 11. The queries behind this file
 
 Run against `yfnqszwlyoyfhuwfmcyl`. Do not take this file's word for anything.
 
@@ -764,3 +832,23 @@ group by 1;
 Expect `instantly 1,839 / lemlist 0` from the first and `instantly 1,839 / lemlist 554`
 from the second. The 1,839 appearing on both sides is what says the two are the same
 population differently dated, rather than two populations that happen to be close.
+
+**Q8 — T5 people who opened, and the three numbers that used to fight.** The last column is
+the one the old tile printed.
+
+```sql
+select c.source, c.open_tracking,
+       count(distinct lower(p.email))                                  as reached,
+       count(distinct lower(p.email)) filter (where p.opened_count > 0) as opened_people,
+       (select sum(f.unique_opened) from v_daily_facts f
+         join campaigns c2 on c2.id = f.campaign_id and c2.source = c.source) as notebook_unique
+from people p
+join campaigns c on c.id = p.campaign_id and not c.hidden
+where p.first_contacted_at is not null
+group by 1, 2 order by 1, 2;
+```
+
+Expect three rows: Instantly tracking-off `902 reached / 0 opened`, Instantly tracking-on
+`937 / 123`, lemlist `554 / 228`, with the notebook column reading 225 against Instantly and
+0 against lemlist. 123 + 228 = 351 is the tile; 937 + 554 = 1,491 is its denominator; the
+902 belong in neither.

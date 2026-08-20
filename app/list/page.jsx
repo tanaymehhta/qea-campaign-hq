@@ -86,6 +86,11 @@ export default async function List({ searchParams }) {
         source: null,
       }), { count: "exact" });
       if (cols) q = q.select(`${cols}, last_contacted_at`);
+      // The pile is the same people either way; `counter` picks which of their
+      // lifetime columns has to be non-zero. Applied as a filter on the
+      // function's output rather than inside it, so opened, clicked and
+      // reached cannot end up scoped or dated three different ways.
+      if (m.counter) q = q.gt(m.counter, 0);
       q = q.order("last_contacted_at", { ascending: false, nullsFirst: false });
       // Scope is an argument to the function, not a filter on its output, so
       // a person in two campaigns is still found by the campaign that is not

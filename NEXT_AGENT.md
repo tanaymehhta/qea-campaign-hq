@@ -34,7 +34,8 @@ that one definition. Not in a React render, where a second page cannot call it.
 | `bbfdb96` | lemlist's inbox rescued before the subscription ended; 135 replies read and labelled by Tanay; five answer categories collapsed to three. |
 | `e247272` | QEA Resellers + LBER reassigned from Tanay to Mark Vasu. Four reps → three. |
 | `275aff9` | docs |
-| *(this session)* | `reached_people` / `reached_counts` — People reached becomes a headcount of humans across **both** tools. The tile said 1,839 and its own click opened 2,393. T4 in `TRUST_OPEN.md`. |
+| `abda53b` | `reached_people` / `reached_counts` — People reached becomes a headcount of humans across **both** tools. The tile said 1,839 and its own click opened 2,393. T4 in `TRUST_OPEN.md`. |
+| *(this session)* | Opened becomes people over people: `23.5% / 351`, where the tile said `6.3% / 225` and its click opened 351. Opens are a column on the reached pile, not a pile of their own. T5. |
 
 Migrations: `20260820120000` (the definition), `20260820160000` (the lemlist rescue),
 `20260820180000` (the rep move), `20260820200000` (people reached, both tools).
@@ -42,11 +43,15 @@ Migrations: `20260820120000` (the definition), `20260820160000` (the lemlist res
 **Live numbers, all time, all reps, scraped from the tiles:**
 
 ```
-People reached  2,393   =  1,839 Instantly + 554 lemlist
-Total responses    32   =  16 interested + 16 not interested
-Interested         16   =  50% of the 32 who replied
-Meetings booked     5   (4 distinct people — still unfixed, §5a)
+People reached    2,393   =  1,839 Instantly + 554 lemlist
+People who opened   351   =  23.5% of the 1,491 who could register one
+Total responses      32   =  16 interested + 16 not interested
+Interested           16   =  50% of the 32 who replied
+Meetings booked       5   (4 distinct people — still unfixed, §5a)
 ```
+
+Every one of those is a headcount of humans from both tools, and every one opens onto
+exactly the people it counted. Meetings is the last that is not.
 
 Two of those moved after the body of this handoff was written and neither is a bug in the
 code:
@@ -85,8 +90,8 @@ summing to the whole. Preserve that property.
 reached_people(p_from date, p_to date, p_campaigns uuid[], p_source text)
 -- one row per person ever emailed: id, campaign_id, source, email, name, company,
 --   status, sent_count, opened_count, clicked_count, replied_count, bounced,
---   first_contacted_at (corrected — see below), last_contacted_at
-reached_counts(same args)      -- people, instantly, lemlist
+--   can_open, first_contacted_at (corrected — see below), last_contacted_at
+reached_counts(same args)      -- people, instantly, lemlist, opened, trackable
 
 response_people(p_from date, p_to date, p_campaigns uuid[], p_source text)
 -- one row per person: lead_email, lead_name, company, sources[], labels[], msgs,
@@ -100,6 +105,11 @@ response_counts(same args) -- people, responded, interested, needs_label, robot_
   It defaults to `'instantly'` on the response pair and to NULL on the reached pair: the
   Instantly default existed to protect a rate's denominator, and `reached_people` **is**
   that denominator.
+- **Opens and clicks are columns on this pile, not piles of their own.** `/list` filters
+  `opened_count > 0` on the same rows the tile counted; `can_open` is
+  `open_tracking is distinct from false`, which is the only honest denominator for a rate —
+  902 of the people we reached are in campaigns with no pixel and can never register one.
+  A scope with `trackable = 0` prints `—` and says so, never `0%`.
 - `reached_people` dates a person by `least(stored first contact, earliest surviving send)`.
   Instantly's API never exposes first-touch — the sync writes `timestamp_last_contact` —
   so before the 6 Aug trigger a July person could be stored as 4 August. The `least` cuts
@@ -305,11 +315,13 @@ Useful SQL lives in `TRUST_OPEN.md` §9 (Q6 is the response definition, by hand)
    list size, and sends-per-lead swings 5× between groups (Chicago 3.8, Mark Dolan 0.7).
    LBER reads 8.0% and ranks first off 87 leads. Decision written and awaiting go —
    `TRUST_OPEN.md` §4. Tanay said campaigns is *not* this session's work.
-2. **Q4 · `/list?metric=opened` says 351 against the tile's 225.** Same F2 family, one page
-   over. `response_people` is now the pattern for fixing it.
-3. **Q1 · `/campaigns` shows `0` opened where tracking is off.** Canada: 0 opens on 1,504
-   sends across 11 campaigns that cannot register one. Must render `—`. The homepage tile
-   was fixed in `8aafd4f`; the per-group column never was.
+2. ~~**Q4 · `/list?metric=opened` says 351 against the tile's 225.**~~ **Closed** — T5,
+   `TRUST_OPEN.md` §8. Both are 351.
+3. **Q1 · `/campaigns` shows `0` opened where tracking is off.** **Half closed by T5**: the
+   Overview's per-group column and its rep-scoped tile now say *"No campaign here can
+   register an open"*. `/campaigns` still prints `0` on 1,504 Canadian sends across 11
+   campaigns that cannot register one. That page reads `v_campaign_summary`, so it needs
+   its own fix.
 4. **Did the sync drop lemlist replies?** Two replies existed in lemlist's inbox that were
    never in `replies` (Younes 3 Aug, Sherry Chen 20 Jul). That is a *dropped row*, not a
    truncated body. Nobody counted how many. **The API is gone, so this can no longer be

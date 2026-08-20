@@ -171,68 +171,58 @@ export default async function Overview({ searchParams }) {
   // The same question per group, asked of the same function. A column that
   // summed a different definition from the tile above it is exactly how a page
   // ends up disagreeing with itself.
+  // The whole counts row per group, not just `people`: the First touches column
+  // and the Opened column beside it are two `count(*) filter`s over one set of
+  // rows, so a group cannot be reached-by-one-definition and opened-by-another.
   const reachedByGroup = new Map(
     await Promise.all(
       shownGroups.map(async (g) => [
         g.id,
-        (
-          await reachedCounts({
-            ...scope,
-            campaignIds: (campaigns ?? []).filter((c) => groupOf.get(c.id) === g.id).map((c) => c.id),
-          })
-        ).people,
+        await reachedCounts({
+          ...scope,
+          campaignIds: (campaigns ?? []).filter((c) => groupOf.get(c.id) === g.id).map((c) => c.id),
+        }),
       ])
     )
   );
 
   // ------------------------------------------------------------------ opened
   //
-  // An open rate over every email sent is two mistakes at once, and this tile
-  // made both.
+  // Three numbers were being called "opened" and the tile picked the one that
+  // was neither of the other two. Measured 20 Aug, all time:
   //
-  // The denominator: 12 of the 22 Instantly campaigns run with open tracking
-  // off. They have recorded 0 opens across 2,049 sends and always will, because
-  // there is no pixel in the mail — not because nobody opened it. Those sends
-  // are guaranteed-zero rows padding the bottom of the fraction, and the old
-  // note already knew it ("Two-thirds of campaigns run tracking off"), it just
-  // said so only when the total happened to be zero.
+  //   225  `unique_opened` from the notebook, Instantly only, unique per
+  //        campaign-DAY. What this tile used to print.
+  //   123  Instantly people who have ever opened. Instantly's own two records
+  //        disagree with each other by 102.
+  //   228  lemlist people who have ever opened, and lemlist writes no
+  //        `unique_opened` at all — so the tile could not see one of them,
+  //        exactly as it could not see its 554 reached people this morning.
   //
-  // The numerator: `opened` counts open *events*. Instantly's 246 events came
-  // from 225 distinct emails, and lemlist's figure is derived as
-  // `count(*) filter (where event_type = 'opened')` — it never writes
-  // unique_opened at all, so one person opening the same mail ten times is ten.
-  // Mixing a both-vendor numerator into a denominator only one vendor can
-  // populate is the same fault the response rate had.
+  // The click had always opened all 351 of them. Q4 in TRUST_OPEN.md.
   //
-  // So: unique opens, over the sends that could actually register one. 800 over
-  // 7,542 read 10.6%; the honest figure is 225 over 3,574, which is 6.3%.
+  // The denominator was worse than the numerator: 3,574 tracked *sends*, which
+  // is messages under a numerator trying to be people, one vendor under two.
+  // It is now the people whose mail could register an open at all — 1,491 of
+  // the 2,393 we reached. The other 902 are in campaigns with no pixel; they
+  // did not decline to open, nothing was watching, and padding the bottom of a
+  // fraction with them is what made 23.5% read as 6.3%.
   //
-  // Known and left: unique_opened is unique per campaign-day, so someone opening
-  // on Monday and again on Tuesday counts twice. It is a far tighter bound than
-  // the event count and the only per-day figure either vendor gives.
-  const tracked = new Set(
-    (campaigns ?? [])
-      .filter((c) => c.source === "instantly" && c.open_tracking === true && inScope(c.id))
-      .map((c) => c.id)
-  );
-  let trackedSent = 0, uniqueOpens = 0;
-  for (const r of rows) {
-    if (!tracked.has(r.campaign_id)) continue;
-    trackedSent += r.sent ?? 0;
-    uniqueOpens += r.unique_opened ?? 0;
-  }
-  const blindSent = overall.sent - trackedSent;
+  // The cost, and it is real: a window now selects on the date we reached the
+  // person, not the date they opened, because neither tool dates an open per
+  // person. Migration 20260820210000 has the full argument.
+  const openRate = reached.opened == null || !reached.trackable ? null : pct(reached.opened, reached.trackable);
+  const blindReached =
+    reached.people == null || reached.trackable == null ? null : reached.people - reached.trackable;
 
-  // The same rule per group, so the column under this tile cannot disagree with
-  // it. A group with no tracking-on campaign gets null rather than 0: it did not
-  // fail to be opened, it is unobservable. Only Chicago Retrofit tracks today.
-  const opensByGroup = new Map();
-  for (const r of rows) {
-    if (!tracked.has(r.campaign_id)) continue;
-    const gid = groupOf.get(r.campaign_id);
-    if (!gid) continue;
-    opensByGroup.set(gid, (opensByGroup.get(gid) ?? 0) + (r.unique_opened ?? 0));
-  }
+  // The same rule per group — `reachedByGroup` above already carries both
+  // halves. A group with nothing trackable renders `—` rather than 0: it did
+  // not fail to be opened, it is unobservable. That is Q1 in TRUST_OPEN.md,
+  // closed here for this column by counting people instead of notebook rows.
+  const groupOpens = (gid) => {
+    const c = reachedByGroup.get(gid);
+    return !c || !c.trackable ? null : c.opened;
+  };
 
   // ------------------------------------------------------------------ bounce
   //
@@ -356,7 +346,6 @@ export default async function Overview({ searchParams }) {
   const proposalCount = scopedProposals.length;
   // Not rep-scoped — phone_calls has no campaign_id to scope by, same as /meetings.
   const callCount = (calls ?? []).length;
-  const openRate = trackedSent ? pct(uniqueOpens, trackedSent) : null;
   const bounceRate = overallBounced == null || !overall.sent ? null : pct(overallBounced, overall.sent);
 
   // Every link carries the current window and rep through to the page behind it.
@@ -438,24 +427,25 @@ export default async function Overview({ searchParams }) {
         />
         <Tile
           hero
-          label="Emails opened"
-          // Rate first, then the count. The two numbers do not share a pile with
-          // Emails sent: this is unique opens over Instantly campaigns that
-          // carry a tracking pixel, not over every send. Do not pass `raw` —
-          // the count-up tween would replace "6.3% / 225" with an integer.
+          label="People who opened"
+          // Rate first, then the count. Both halves are headcounts of the same
+          // people — those who opened, over those whose mail could register an
+          // open — so this is the one shape a rate is allowed to have here. Do
+          // not pass `raw`: the count-up tween would replace "23.5% / 351" with
+          // an integer.
           value={
-            openRate == null ? "—" : <>{openRate}%<span className="pair"> / {num(uniqueOpens)}</span></>
+            openRate == null ? "—" : <>{openRate}%<span className="pair"> / {num(reached.opened)}</span></>
           }
-          tone={trackedSent && uniqueOpens ? undefined : "muted"}
+          tone={reached.trackable && reached.opened ? undefined : "muted"}
           note={
-            !trackedSent
-              ? "No campaign here records opens"
+            !reached.trackable
+              ? "No campaign here can register an open"
               : [
-                  `${pct(uniqueOpens, trackedSent)}% of ${num(trackedSent)} tracked sends`,
-                  blindSent ? `${num(blindSent)} sent with no pixel` : null,
+                  `${num(reached.opened)} of ${num(reached.trackable)} who could register one`,
+                  blindReached ? `${num(blindReached)} reached with no pixel` : null,
                 ].filter(Boolean).join(" · ")
           }
-          href={trackedSent ? drill("opened") : undefined}
+          href={reached.trackable ? drill("opened") : undefined}
         />
       </div>
 
@@ -573,7 +563,7 @@ export default async function Overview({ searchParams }) {
               <th>Campaign</th><th>Status</th><th>Sent</th>
               <th title="First time we emailed this person — not a follow-up">First touches</th>
               <th>Bounced</th>
-              <th>Bounce %</th><th title="Unique opens, and only from campaigns that carry a tracking pixel — a dash means the campaign cannot register one">Opened</th><th>Replies</th>
+              <th>Bounce %</th><th title="People who have opened at least once — a dash means no campaign in this group can register an open">Opened</th><th>Replies</th>
               <th>Meetings</th><th>Proposals</th>
             </tr>
           </thead>
@@ -601,10 +591,10 @@ export default async function Overview({ searchParams }) {
                   <td className="name"><a className="drilled" href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
                   <td><span className={`pill p-${status}`}>{status.replace(/_/g, " ")}</span></td>
                   <DrillCell v={m.sent} href={drill("sent", { group: g.slug })} />
-                  <DrillCell v={reachedByGroup.get(g.id) ?? null} href={drill("contacted", { group: g.slug })} />
+                  <DrillCell v={reachedByGroup.get(g.id)?.people ?? null} href={drill("contacted", { group: g.slug })} />
                   <DrillCell v={gBounced} href={drill("bounced", { group: g.slug })} />
                   <BounceCell bounced={gBounced} base={m.sent} />
-                  <DrillCell v={opensByGroup.get(g.id) ?? null} href={drill("opened", { group: g.slug })} />
+                  <DrillCell v={groupOpens(g.id)} href={drill("opened", { group: g.slug })} />
                   <DrillCell v={m.replied} href={drill("replied", { group: g.slug })} />
                   <DrillCell v={mt} href={drill("meetings", { group: g.slug })} />
                   <DrillCell v={pr} href={drill("proposals", { group: g.slug })} />
@@ -617,7 +607,7 @@ export default async function Overview({ searchParams }) {
               <td>{num(reached.people)}</td>
               <td>{overallBounced == null ? "—" : num(overallBounced)}</td>
               <td>{overallBounced != null && overall.sent ? `${pct(overallBounced, overall.sent)}%` : "—"}</td>
-              <td>{trackedSent ? num(uniqueOpens) : "\u2014"}</td>
+              <td>{reached.trackable ? num(reached.opened) : "\u2014"}</td>
               <td>{num(overall.replied)}</td>
               <td>{num(meetingCount)}</td>
               <td>{num(proposalCount)}</td>
