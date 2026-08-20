@@ -11,6 +11,11 @@ Every figure below was read out of the live Supabase project (`yfnqszwlyoyfhuwfm
 18 August 2026, not inferred from code. Where something is inference rather than
 measurement, it says so in the line.
 
+**This file is a snapshot and is not updated as things are fixed.** Several findings below
+were closed on 19 August. `TRUST_OPEN.md` is the rolling register — what is still open,
+what was decided since, and why. Read that one for current state; read this one for how
+the architecture got this way.
+
 ---
 
 ## Contents

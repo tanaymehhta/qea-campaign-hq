@@ -1,6 +1,6 @@
 import {
   db, dailyRange, mailboxRange, today, shift, num, pct, windowFrom, prettyDate,
-  EMPTY, addInto, listHref, repList,
+  EMPTY, addInto, listHref, repList, responseCounts,
 } from "../lib/db";
 import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
 
@@ -11,7 +11,7 @@ export default async function Overview({ searchParams }) {
   const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: meetings }, { data: proposals }, { data: calls }, { data: replies }] =
+  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: meetings }, { data: proposals }, { data: calls }] =
     await Promise.all([
       // sender_emails is the edge that makes Instantly bounce placeable — see the
       // bounce section below. It is a text[] on the campaign, written by the sync.
@@ -35,14 +35,6 @@ export default async function Overview({ searchParams }) {
       (w.range === "all"
         ? db.from("phone_calls").select("id, call_date").is("deleted_at", null)
         : db.from("phone_calls").select("id, call_date").is("deleted_at", null).gte("call_date", w.from).lte("call_date", w.to)),
-      // Every inbound message in the window, for the response rate below. Read
-      // from `replies` rather than v_daily_facts.replied because that column is
-      // a per-day count with no person and no label on it — it can neither
-      // collapse two messages from one human nor drop the ones who said no.
-      db.from("replies")
-        .select("campaign_id, lead_email, sentiment, source")
-        .gte("received_at", `${w.from}T00:00:00Z`)
-        .lte("received_at", `${w.to}T23:59:59.999Z`),
     ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
@@ -84,76 +76,60 @@ export default async function Overview({ searchParams }) {
 
   // ---------------------------------------------------------------- response
   //
-  // How many humans wrote back and meant it.
+  // Who wrote back, and who said yes.
   //
-  // Three things are deliberately not counted. A robot is not a response, so
-  // `auto_reply` is out — the out-of-office, the maternity leave, the one who
-  // retired in October. Someone declining is not a response either, so
-  // `not_interested` is out. And a person is counted once however many times
-  // they wrote, which is why this dedupes on the address rather than adding up
-  // rows: the 41 real messages on file today come from 35 people.
+  // This used to be forty lines of JavaScript: pull every reply in the window,
+  // drop `auto_reply` and `not_interested`, unique the addresses, count the
+  // set. It was right, and it was unreachable — `/replies` could not call a
+  // filter that lived inside this render, so it listed something else, and the
+  // tile said 3 while the click opened 193 rows.
   //
-  // Everything else counts, including a forward — when a prospect passes the
-  // mail to a colleague with "please address this", that is the strongest
-  // signal in the set, and it is a response even though it was not addressed
-  // to us.
+  // The rule is `response_counts` now (migration 20260820120000), and
+  // `/replies` asks the same function for the same people. That is the whole
+  // point: not that the number got better, but that there is only one of it.
   //
-  // The bar is a reply worth having, not a meeting. "Tell me more", "not right
-  // now", "talk to my colleague" — all responses.
+  // Two changes of meaning arrive with it, both decided in TRUST_OPEN.md §5:
+  //
+  //   A refusal is a response.  `not_interested` used to be subtracted, which
+  //   made the tile "people who might buy" while calling itself "people who
+  //   replied". Somebody who writes back to say no has answered. They belong in
+  //   Total and nowhere near Interested — which is why this is two tiles.
+  //
+  //   Unclassified is homework, not a KPI.  A person nobody has read yet counts
+  //   in neither tile. They surface as "N need a label" under Total, and
+  //   labelling them on /replies is what moves them into it.
+  //
   // Instantly only, and that is a correctness rule rather than a preference.
   // lemlist never reported `new_leads_contacted` — 0 across all 234 of its
   // campaign-days, measured 19 Aug 2026 — so not one of its people is inside
   // the "people reached" this divides by. Counting its repliers on top would
   // put 35 people over an Instantly-only 1,839 and overstate the rate 2.7x.
-  // lemlist is being retired; /replies still lists every message from both, and
-  // if a vendor ever does start reporting people reached, this line is what
-  // changes.
-  const scopedReplies = (replies ?? [])
-    .filter((r) => inScope(r.campaign_id) && r.source === "instantly");
-  const DEAD = new Set(["auto_reply", "not_interested"]);
-  const responders = new Set(
-    scopedReplies.filter((r) => !DEAD.has(r.sentiment) && r.lead_email)
-      .map((r) => r.lead_email.toLowerCase())
-  ).size;
-  // Which of those people are only in the count because nobody has read them
-  // yet — not how many unread replies there are.
+  // lemlist is being retired; /replies still lists every message from both
+  // behind its "All inbound" pile, and if a vendor ever does start reporting
+  // people reached, the `source` argument below is what changes.
   //
-  // The two are not the same, and counting messages overstated the doubt. Every
-  // unread reply on file today is a fragment of Bharat Mudgal's thread, and his
-  // 28 Jul message is already `interested`, so he is counted whatever those two
-  // turn out to say. The tile was warning of a ceiling that could not fall.
-  //
-  // A person is at risk only when every reply they sent is unread. One
-  // `interested` anywhere settles them; one `not_interested` removes them.
-  const settled = new Set(
-    scopedReplies.filter((r) => !DEAD.has(r.sentiment) && r.sentiment !== "unclassified" && r.lead_email)
-      .map((r) => r.lead_email.toLowerCase())
-  );
-  const unread = new Set(
-    scopedReplies.filter((r) => r.sentiment === "unclassified" && r.lead_email)
-      .map((r) => r.lead_email.toLowerCase())
-      .filter((e) => !settled.has(e))
-  ).size;
-  const responseRate = pct(responders, overall.new_leads_contacted);
-
-  // What the number leaves out, said on the tile rather than only in this file.
-  //
-  // 3 out of 58 inbound is a startling drop to meet with no explanation, and
-  // the explanation is the whole point of the metric: most of what arrives is
-  // not a person answering. Naming the two subtractions is what separates "our
-  // reply rate collapsed" from "47 of those were robots".
-  //
-  // Message counts, not people — that is the order the filtering happens in,
-  // and it is why 5 surviving messages become 3 people.
-  const robots = scopedReplies.filter((r) => r.sentiment === "auto_reply").length;
-  const refusals = scopedReplies.filter((r) => r.sentiment === "not_interested").length;
-  const removed = [
-    robots ? `${num(robots)} robot${robots === 1 ? "" : "s"}` : null,
-    refusals ? `${num(refusals)} refusal${refusals === 1 ? "" : "s"}` : null,
-  ].filter(Boolean).join(" and ");
-  const funnel = removed
-    ? `${num(scopedReplies.length)} inbound, less ${removed}`
-    : `${num(scopedReplies.length)} inbound, nothing removed`;
+  // A rep owns groups, not campaigns, so their scope is resolved to campaign
+  // ids here — the same `inScope` rule every other tile on this page uses,
+  // handed to Postgres instead of applied to rows after the fact.
+  const scopedIds = myGroupIds
+    ? (campaigns ?? []).filter((c) => myGroupIds.has(groupOf.get(c.id))).map((c) => c.id)
+    : null;
+  const scope = {
+    // All time asks for no window at all rather than for 2020-01-01.
+    from: w.range === "all" ? null : w.from,
+    to: w.range === "all" ? null : w.to,
+    campaignIds: scopedIds,
+    source: "instantly",
+  };
+  const pile = await responseCounts(scope);
+  // Only when there is something to divide by. A window can hold a reply and no
+  // first touches at all — 4 Aug 2026 is one: 1 person answered, 0 new leads
+  // contacted, because the sends that day were follow-ups. The count is still
+  // true; only the rate is unavailable.
+  const interestedRate =
+    pile.interested == null || !overall.new_leads_contacted
+      ? null
+      : pct(pile.interested, overall.new_leads_contacted);
 
   // ------------------------------------------------------------------ opened
   //
@@ -326,11 +302,18 @@ export default async function Overview({ searchParams }) {
   const proposalCount = scopedProposals.length;
   // Not rep-scoped — phone_calls has no campaign_id to scope by, same as /meetings.
   const callCount = (calls ?? []).length;
+  const openRate = trackedSent ? pct(uniqueOpens, trackedSent) : null;
+  const bounceRate = overallBounced == null || !overall.sent ? null : pct(overallBounced, overall.sent);
 
   // Every link carries the current window and rep through to the page behind it.
   const windowParams = w.range === "day" ? { d: w.from } : { range: w.range };
   const repParams = rep === "all" ? {} : { rep };
   const drill = (metric, extra = {}) => listHref({ metric, ...windowParams, ...repParams, ...extra });
+  // The same window and rep the tile counted, handed to the page behind it. If
+  // this ever stops matching `scope` above, the number and the list are two
+  // piles again — which is the bug this whole change exists to end.
+  const pileHref = (view) =>
+    `/replies?${new URLSearchParams({ view, ...windowParams, ...repParams })}`;
   const here = (params) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
@@ -401,57 +384,14 @@ export default async function Overview({ searchParams }) {
         />
         <Tile
           hero
-          label="Emails bounced"
-          value={overallBounced == null ? "—" : num(overallBounced)}
-          raw={overallBounced ?? undefined}
-          tone={
-            overallBounced == null ? "muted"
-            : pct(overallBounced, overall.sent) > 5 ? "bad"
-            : undefined
-          }
-          note={
-            overallBounced == null
-              ? "Not counted for this window yet — mailbox figures land on the 03:00 run"
-              : !overall.sent ? "—"
-              : bounceIsPartial
-                ? `${pct(overallBounced, overall.sent)}% of sent · Instantly counted to ${prettyDate(bounceThrough)}`
-                : rep !== "all" && instUnplaceable
-                  ? `${pct(overallBounced, overall.sent)}% of sent · a floor, some mailboxes serve two groups`
-                  : `${pct(overallBounced, overall.sent)}% of sent · stop above 5%`
-          }
-          href={overallBounced == null ? undefined : drill("bounced")}
-        />
-      </div>
-
-      <div className="grid g4" style={{ marginBottom: 34 }}>
-        <Tile
-          label="People who replied"
-          // No Instantly sending in this scope means no denominator and no
-          // repliers either — a 0 would read as "nobody wrote back", which is a
-          // different sentence from "this rate does not describe these
-          // campaigns". lemlist-only reps land here.
-          value={overall.new_leads_contacted ? num(responders) : "—"}
-          raw={overall.new_leads_contacted ? responders : undefined}
-          tone={overall.new_leads_contacted && responders ? undefined : "muted"}
-          note={
-            !overall.new_leads_contacted
-              ? "No rate here — lemlist never reported people reached"
-              : [
-                  `${responseRate}% of people reached`,
-                  funnel,
-                  unread ? `${num(unread)} unread — a ceiling until they are labelled` : null,
-                ].filter(Boolean).join(" · ")
-          }
-          href={unread ? "/replies?tag=unclassified" : "/replies"}
-        />
-        <Tile
           label="Emails opened"
-          // Nothing in this scope carries a pixel, so there is no rate to give.
-          // A 0 would say nobody opened; the truth is that nobody could be seen
-          // opening. lemlist-only reps land here — its opens exist but it never
-          // records a unique figure, so they cannot be divided by anything.
-          value={trackedSent ? num(uniqueOpens) : "—"}
-          raw={trackedSent ? uniqueOpens : undefined}
+          // Rate first, then the count. The two numbers do not share a pile with
+          // Emails sent: this is unique opens over Instantly campaigns that
+          // carry a tracking pixel, not over every send. Do not pass `raw` —
+          // the count-up tween would replace "6.3% / 225" with an integer.
+          value={
+            openRate == null ? "—" : <>{openRate}%<span className="pair"> / {num(uniqueOpens)}</span></>
+          }
           tone={trackedSent && uniqueOpens ? undefined : "muted"}
           note={
             !trackedSent
@@ -461,7 +401,83 @@ export default async function Overview({ searchParams }) {
                   blindSent ? `${num(blindSent)} sent with no pixel` : null,
                 ].filter(Boolean).join(" · ")
           }
-          href={drill("opened")}
+          href={trackedSent ? drill("opened") : undefined}
+        />
+      </div>
+
+      <div className="grid g5" style={{ marginBottom: 34 }}>
+        <Tile
+          label="Total responses"
+          // The em dash asks whether an Instantly campaign is in this view at
+          // all — NOT whether anyone was newly contacted in the window.
+          //
+          // Those two came apart on 4 Aug 2026 and the tile got it wrong: 1
+          // person answered, 0 first touches that day (the sends were
+          // follow-ups), and the old guard blanked a tile whose list held a
+          // real human. A count needs no denominator. The em dash is for a
+          // scope this pile cannot describe — a lemlist-only rep — where 0
+          // would say "nobody wrote back" instead of "not measured here".
+          value={scopeHasInstantly ? num(pile.responded) : "—"}
+          raw={scopeHasInstantly ? pile.responded ?? undefined : undefined}
+          tone={scopeHasInstantly && pile.responded ? undefined : "muted"}
+          note={
+            !scopeHasInstantly
+              ? "No Instantly campaign in this view — lemlist never reported who replied as people"
+              : [
+                  "People, not messages. Robots and out-of-office excluded",
+                  pile.needs_label ? `${num(pile.needs_label)} need a label` : null,
+                ].filter(Boolean).join(" · ")
+          }
+          href={pileHref("responded")}
+        />
+        <Tile
+          label="Interested"
+          // One percent on this tile, not two. "6.3% of 3,574" next to a count
+          // of a different pile is exactly how the opened tile came to read as
+          // though it disagreed with sends — the rate here is people who said
+          // yes over people we reached, and the count is the same people.
+          //
+          // The count survives a missing denominator; only the percent drops.
+          // Blanking the whole tile because a window had no first touches would
+          // be deleting a rate to avoid explaining it, which is the one thing
+          // TRUST_OPEN.md §7 says never to do.
+          value={
+            !scopeHasInstantly ? "—"
+              : interestedRate == null ? num(pile.interested)
+              : <>{num(pile.interested)}<span className="pair"> / {interestedRate}%</span></>
+          }
+          raw={scopeHasInstantly && interestedRate == null ? pile.interested ?? undefined : undefined}
+          tone={scopeHasInstantly && pile.interested ? undefined : "muted"}
+          note={
+            !scopeHasInstantly
+              ? "No Instantly campaign in this view"
+              : interestedRate == null
+                ? "No first touches in this window — these answer earlier sends, so there is no rate to give"
+                : `${interestedRate}% of ${num(overall.new_leads_contacted)} people reached`
+          }
+          href={pileHref("interested")}
+        />
+        <Tile
+          label="Bounce rate"
+          // Percent is the figure; the count lives in the note. Same `raw`
+          // omission as opened — a tween to "2" would look like two bounces.
+          value={bounceRate == null ? "—" : `${bounceRate}%`}
+          tone={
+            bounceRate == null ? "muted"
+            : bounceRate > 5 ? "bad"
+            : undefined
+          }
+          note={
+            overallBounced == null
+              ? "Not counted for this window yet — mailbox figures land on the 03:00 run"
+              : !overall.sent ? "—"
+              : bounceIsPartial
+                ? `${num(overallBounced)} of ${num(overall.sent)} sent · Instantly counted to ${prettyDate(bounceThrough)}`
+                : rep !== "all" && instUnplaceable
+                  ? `${num(overallBounced)} of ${num(overall.sent)} sent · a floor, some mailboxes serve two groups`
+                  : `${num(overallBounced)} of ${num(overall.sent)} sent · stop above 5%`
+          }
+          href={overallBounced == null ? undefined : drill("bounced")}
         />
         <Tile
           label="Calls logged"
