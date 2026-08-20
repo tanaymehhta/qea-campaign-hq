@@ -296,7 +296,7 @@ dialled. The fix is to lift the `shared_mailbox` CTE into `reached_people`.
 filters `!dnc`. No drift today — no DNC contact has a call — but retiring someone you have
 spoken to starts it.
 
-**D · `callsFor` does not page.** `callsFor` in `lib/calls.js`. PostgREST caps a response at 1,000
+**D · `callsFor` does not page.** PostgREST caps a response at 1,000
 rows and there is no `.range()` loop, unlike `contactsFor` right above it. Past the cap
 there is no error — the oldest calls simply stop arriving. 11 today.
 
