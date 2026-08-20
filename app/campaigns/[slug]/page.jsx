@@ -50,6 +50,10 @@ export default async function Group({ params, searchParams }) {
     return (b.sent ?? 0) - (a.sent ?? 0);
   });
 
+  // What the Meetings column below actually adds up to, which since 21 Aug is
+  // allowed to be less than the group's own total — see the note under the table.
+  const subMeetings = ranked.reduce((a, s) => a + Number(s.meetings ?? 0), 0);
+
   const overBounce = ranked.filter((s) => s.sent > 40 && pct(s.bounced, s.sent) > 5);
   const starved = ranked.filter((s) => s.status === "running" && s.daily_limit && s.daily_limit < 10);
 
@@ -145,6 +149,25 @@ export default async function Group({ params, searchParams }) {
           </tbody>
         </table>
       </div>
+
+      {/* Decided 20 Aug: the group tile counts a meeting logged against the
+          group itself, the sub-campaign rows do not — a group meeting names no
+          sub-campaign and pretending it belongs to one would be a guess. So the
+          Meetings column can legitimately add up to less than its own Total, and
+          a column that does not sum has to say why rather than look broken.
+          Derived, so it appears only when there is something to explain. */}
+      {Number(g.meetings) > subMeetings ? (
+        <p className="sub" style={{ marginTop: 10 }}>
+          The Meetings column adds up to {num(subMeetings)}, not {num(g.meetings)}
+          {": "}
+          {num(Number(g.meetings) - subMeetings)} of this group&rsquo;s meeting
+          {Number(g.meetings) - subMeetings === 1 ? " was" : "s were"} logged against{" "}
+          {g.display_name} itself rather than one of its sub-campaigns, so{" "}
+          {Number(g.meetings) - subMeetings === 1 ? "it counts" : "they count"} in the
+          total and on the tile but sit in no row above.{" "}
+          <a className="drilled" href={drill("meetings")}>See all {num(g.meetings)} &rarr;</a>
+        </p>
+      ) : null}
 
       <h2 id="people">Everyone in {g.display_name}</h2>
       <p className="sub">

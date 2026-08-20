@@ -1,4 +1,4 @@
-import { db, num, prettyDate, today, initials, repList, listHref } from "../../lib/db";
+import { db, num, prettyDate, today, initials, repList, listHref, meetingArgs } from "../../lib/db";
 import { Tile, Reps, Pill, PersonLink, Chev } from "../../components/ui";
 import { logMeeting } from "./actions";
 
@@ -7,15 +7,19 @@ export const dynamic = "force-dynamic";
 /**
  * The primary KPI, and the only thing on this dashboard no tool records.
  *
- * A meeting's rep is the owner of the group it sits in. `logged_by` records who
- * typed it in, which is often not the same person and is not what "whose meeting
- * is this" means — so it is a fallback, not the answer.
+ * This page used to answer "whose meeting is this?" in JavaScript, and it was
+ * the last of four readers to do so in its own way. On 20 Aug its rep strip read
+ * All 9 · Mark Vasu 7 · Justin 0 · Mark Dolan 1 — 8 against an all-reps total of
+ * 9, because a call logged with the rep box empty resolved to nobody here while
+ * the Overview found it through the call campaign's owner.
  *
- * It is the answer for exactly one case: a meeting created by logging a call.
- * The calls workspace is tied to no campaign and no group, so those rows have
- * neither, and grouping alone returns null. They used to disappear the moment
- * any rep filter was applied, which is why rep totals never summed to the
- * all-reps total. For those, whoever made the call is whose meeting it is.
+ * `meeting_rows` is now the only answer, for this page as well. It resolves the
+ * rep once, scopes on that single value and returns it, so a meeting belongs to
+ * exactly one rep and the strip sums by construction rather than by luck. Asked
+ * with status "all" because this page lists cancellations too — the KPI still
+ * counts booked + held, the same rule as everywhere else.
+ *
+ * Migration 20260821000000.
  */
 export default async function Meetings({ searchParams }) {
   const rep = searchParams?.rep ?? "all";
@@ -25,32 +29,31 @@ export default async function Meetings({ searchParams }) {
   const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }, { data: calls }, { data: callCamps }] = await Promise.all([
     repList(),
     db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, group_name, group_slug, status, leads, replied, source"),
-    db.from("meetings").select("*").order("meeting_date", { ascending: false }),
+    db.rpc("meeting_rows", meetingArgs({ status: "all" })),
     db.from("proposals").select("id, campaign_id"),
     db.from("phone_calls").select("*, call_contacts(id, call_campaign_id)").is("deleted_at", null).order("call_date", { ascending: false }),
     db.from("call_campaigns").select("id, slug, display_name, owner"),
   ]);
 
-  const groupById = new Map(groups.map((g) => [g.id, g]));
   const subById = new Map((subs ?? []).map((s) => [s.campaign_id, s]));
   const groupOfCampaign = (id) => subById.get(id)?.group_id ?? null;
-  const ownerOfGroup = (gid) => groupById.get(gid)?.owner ?? null;
-  // A meeting created by logging a call carries no campaign and no group — the
-  // calls workspace is not tied to either — so grouping alone returns null and
-  // the meeting vanished the moment any rep filter was applied. Rep totals could
-  // never sum to the all-reps total. Fall back to who logged it, which for a
-  // call-created meeting is the rep who made the call.
-  const ownerOfMeeting = (m) =>
-    ownerOfGroup(m.group_id ?? groupOfCampaign(m.campaign_id)) ?? m.logged_by ?? null;
 
   const known = reps.find((r) => r.id === rep);
   const myGroupIds = known ? new Set(known.groupIds) : null;
 
-  const allMeetings = meetings ?? [];
+  // `rep` comes off the row now — one value, resolved in Postgres, the same one
+  // the Overview and /list scope by. Filtering on a returned column is not a
+  // second definition of ownership; recomputing it here was.
+  //
+  // The function does not order its output, so the sort that used to live in
+  // the query lives here.
+  const allMeetings = [...(meetings ?? [])].sort((a, b) =>
+    (b.meeting_date ?? "").localeCompare(a.meeting_date ?? "")
+  );
   const mine = myGroupIds
     ? (subs ?? []).filter((s) => myGroupIds.has(s.group_id))
     : (subs ?? []);
-  const myMeetings = known ? allMeetings.filter((m) => ownerOfMeeting(m) === rep) : allMeetings;
+  const myMeetings = known ? allMeetings.filter((m) => m.rep === rep) : allMeetings;
   const myProposals = (proposals ?? []).filter(
     (p) => !myGroupIds || myGroupIds.has(groupOfCampaign(p.campaign_id))
   );
@@ -63,7 +66,7 @@ export default async function Meetings({ searchParams }) {
   const counted = (m) => m.status === "booked" || m.status === "held";
   const kpiMeetings = myMeetings.filter(counted);
   const countFor = (r) =>
-    (r.id === "all" ? allMeetings : allMeetings.filter((m) => ownerOfMeeting(m) === r.id))
+    (r.id === "all" ? allMeetings : allMeetings.filter((m) => m.rep === r.id))
       .filter(counted).length;
 
   const here = (id) => (id === "all" ? "/meetings" : `/meetings?rep=${encodeURIComponent(id)}`);
@@ -79,11 +82,12 @@ export default async function Meetings({ searchParams }) {
     if (v) q.set("calls", v);
     return `/meetings${q.size ? `?${q}` : ""}#calls`;
   };
-  // "Campaign" means the parent group; the sub-campaign label is a detail field.
-  const nameOf = (id) => {
-    const s = subById.get(id);
-    return s ? s.group_name || s.sub_campaign_label || s.name : null;
-  };
+  // "Campaign" means the parent group, and it now arrives on the row as
+  // `scope_label` — resolved from the group, else the campaign's group, else the
+  // call list it came off. Every hand-logged meeting used to read "campaign
+  // unknown" here because this page looked only at campaign_id, which the form
+  // never sets: the one field it asks you for was invisible the moment you
+  // saved it. The sub-campaign label below is still a detail field.
   const subLabelOf = (id) => {
     const s = subById.get(id);
     return s ? s.sub_campaign_label || s.name : null;
@@ -190,8 +194,8 @@ export default async function Meetings({ searchParams }) {
       ) : null}
 
       {myMeetings.map((m, i) => {
-        const campaign = nameOf(m.campaign_id);
-        const owner = ownerOfMeeting(m);
+        const campaign = m.scope_label;
+        const owner = m.rep;
         const tint = reps.find((r) => r.id === owner);
         const anonymous = !m.prospect_name;
         return (
@@ -239,10 +243,14 @@ export default async function Meetings({ searchParams }) {
                   </div></div>
                   <div><div className="k">Company</div><div className="v">{m.company || "—"}</div></div>
                   <div><div className="k">Email</div><div className="v">{m.prospect_email || "—"}</div></div>
+                  {/* `group_slug` is null for a meeting that came off a phone
+                      call — its label names a call list, which lives under
+                      /calls, so linking it here would send you to a page that
+                      does not exist. */}
                   <div><div className="k">Campaign</div><div className="v">
                     {campaign ? (
-                      subById.get(m.campaign_id)?.group_slug
-                        ? <a className="drilled" href={`/campaigns/${subById.get(m.campaign_id).group_slug}`}>{campaign}</a>
+                      m.group_slug
+                        ? <a className="drilled" href={`/campaigns/${m.group_slug}`}>{campaign}</a>
                         : campaign
                     ) : "—"}
                   </div></div>
