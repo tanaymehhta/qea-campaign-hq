@@ -521,3 +521,12 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
    and clickable through to the full image. */
 .shot{display:block;margin-top:12px;max-width:100%;max-height:340px;border-radius:10px;
   border:1px solid var(--border)}
+
+/* Two bare date boxes side by side in the call form were the call's date and
+   the callback's, and nothing on screen said which was which. Now there are
+   three — the meeting's own date arrived 20 Aug — so each one carries its
+   name above it. */
+.gapform label.datefield{display:flex;flex-direction:column;gap:3px;flex:0 1 auto}
+.gapform label.datefield > span{font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3)}
+.gapform label.datefield input{min-width:150px;flex:0 0 auto}

@@ -62,7 +62,7 @@ export default async function RepCalls({ params }) {
                 <div className="gstats">
                   <div><div className="k">Dialable</div><div className="v" data-count={dialable}>{num(dialable)}</div></div>
                   <div><div className="k">Calls</div><div className={s.callsMade ? "v" : "v dim"} data-count={s.callsMade}>{num(s.callsMade)}</div></div>
-                  <div><div className="k">Reached</div><div className={s.peopleReached ? "v" : "v dim"}>{num(s.peopleReached)}</div></div>
+                  <div><div className="k" title="A live conversation — not a voicemail or an email left instead. The Overview's People reached is a wider pile.">Spoke to</div><div className={s.peopleReached ? "v" : "v dim"}>{num(s.peopleReached)}</div></div>
                   <div><div className="k">Meetings</div><div className={s.meetingsBooked ? "v" : "v dim"}>{num(s.meetingsBooked)}</div></div>
                   <div><div className="k">Due</div><div className={s.followupsDue ? "v" : "v dim"}>{num(s.followupsDue)}</div></div>
                   <div><div className="k">Bldgs covered</div><div className={s.buildingsCovered ? "v" : "v dim"}>{num(s.buildingsCovered)}</div></div>

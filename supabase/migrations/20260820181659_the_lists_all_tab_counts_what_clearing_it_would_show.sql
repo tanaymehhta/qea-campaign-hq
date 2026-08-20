@@ -1,0 +1,93 @@
+-- ============================================================
+-- The list picker's "All" tab counts what clearing it would show.
+--
+-- Caught by following every chip on the page and comparing its number to the
+-- page it opens — 70 chips across four filter states. Four of the five "All"
+-- tabs already counted with the other filters still applied, which is what an
+-- All tab means: clicking it clears its OWN dimension and nothing else. The
+-- list picker's did not. It printed the page-wide total, so on
+-- /leads?reached=no it read 3,986 above a list of 1,570.
+--
+-- The same fault as every other one this week, one tab over: a number that is
+-- not the list it opens.
+-- ============================================================
+
+create or replace function public.lead_facets(
+  p_groups      uuid[]  default null,
+  p_calls       uuid[]  default null,
+  p_channel     text    default null,
+  p_status      text    default null,
+  p_reached     text    default null,
+  p_contactable boolean default false,
+  p_search      text    default null
+)
+returns table (facet text, key text, n bigint)
+language sql
+stable
+security invoker
+set search_path to 'public'
+as $function$
+  with f as materialized (
+    select
+      v.channel, v.status, v.contacted_at, v.contactable, v.calls,
+      v.group_id, v.call_campaign_id,
+      (p_channel is null or v.channel = p_channel)                            as m_ch,
+      (p_status  is null or v.status  = p_status)                             as m_st,
+      (p_reached is null
+        or (p_reached = 'yes') = (v.contacted_at is not null))                as m_rc,
+      (not coalesce(p_contactable, false) or v.contactable)                   as m_can,
+      (coalesce(array_length(p_groups, 1), 0) = 0
+         and coalesce(array_length(p_calls, 1), 0) = 0
+       or v.group_id = any (p_groups)
+       or v.call_campaign_id = any (p_calls))                                 as m_list,
+      (p_search is null
+        or v.name ilike '%' || p_search || '%'
+        or v.email ilike '%' || p_search || '%'
+        or v.company ilike '%' || p_search || '%'
+        or v.phone ilike '%' || p_search || '%')                              as m_q
+    from v_lead_people v
+  )
+  -- The whole page, unfiltered: what this page is a page of.
+  select 'total', 'all',           count(*)                                             from f
+  union all select 'total', 'email',  count(*) filter (where channel = 'email')          from f
+  union all select 'total', 'call',   count(*) filter (where channel = 'call')           from f
+  union all select 'total', 'both',   count(*) filter (where channel = 'both')           from f
+  union all select 'total', 'contacted', count(*) filter (where contacted_at is not null) from f
+  union all select 'total', 'never',  count(*) filter (where contacted_at is null)       from f
+  union all select 'total', 'unreachable', count(*) filter (where not contactable)       from f
+  union all select 'total', 'marked_sent', count(*) filter (where status = 'sent')       from f
+  union all select 'total', 'called', count(*) filter (where calls > 0)                  from f
+  -- The list on screen: every filter applied.
+  union all
+  select 'shown', 'all', count(*) from f
+   where m_ch and m_st and m_rc and m_can and m_list and m_q
+  -- Each tab, counted with every OTHER filter still on, because a tab's number
+  -- has to be what clicking it would show. Its own dimension is the one thing
+  -- left out — clicking "call list" replaces the channel filter, it does not
+  -- intersect with it.
+  union all
+  select 'channel', 'all', count(*) from f where m_st and m_rc and m_can and m_list and m_q
+  union all
+  select 'channel', channel, count(*) from f
+   where m_st and m_rc and m_can and m_list and m_q group by channel
+  union all
+  select 'reached', 'all', count(*) from f where m_ch and m_st and m_can and m_list and m_q
+  union all
+  select 'reached', case when contacted_at is not null then 'yes' else 'no' end, count(*)
+    from f where m_ch and m_st and m_can and m_list and m_q group by 2
+  union all
+  select 'status', 'all', count(*) from f where m_ch and m_rc and m_can and m_list and m_q
+  union all
+  select 'status', status, count(*) from f
+   where m_ch and m_rc and m_can and m_list and m_q and status is not null group by status
+  union all
+  select 'list', 'all', count(*) from f where m_ch and m_st and m_rc and m_can and m_q
+  union all
+  select 'list', coalesce(group_id, call_campaign_id)::text, count(*) from f
+   where m_ch and m_st and m_rc and m_can and m_q
+     and coalesce(group_id, call_campaign_id) is not null
+   group by 2
+$function$;
+
+grant execute on function public.lead_facets(uuid[], uuid[], text, text, text, boolean, text)
+  to anon, authenticated;

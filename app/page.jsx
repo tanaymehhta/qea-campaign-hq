@@ -1,6 +1,7 @@
 import {
   db, dailyRange, mailboxRange, today, shift, num, pct, windowFrom, prettyDate,
   EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
+  meetingCounts, meetingArgs,
 } from "../lib/db";
 import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
 
@@ -11,7 +12,7 @@ export default async function Overview({ searchParams }) {
   const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: meetings }, { data: proposals }, { data: calls }] =
+  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: proposals }, { data: calls }] =
     await Promise.all([
       // sender_emails is the edge that makes Instantly bounce placeable — see the
       // bounce section below. It is a text[] on the campaign, written by the sync.
@@ -19,13 +20,10 @@ export default async function Overview({ searchParams }) {
       repList(),
       dailyRange(w.from, w.to),
       mailboxRange(w.from, w.to),
-      // Meetings/proposals are hand-logged and can be booked for a future date;
-      // "all time" means every one ever logged, not capped at today like send
-      // activity. Only booked + held count — a cancelled meeting is not a KPI,
-      // and this is the rule v_campaign_summary already applies.
-      (w.range === "all"
-        ? db.from("meetings").select("id, campaign_id, group_id, meeting_date, logged_by").in("status", ["booked", "held"])
-        : db.from("meetings").select("id, campaign_id, group_id, meeting_date, logged_by").in("status", ["booked", "held"]).gte("meeting_date", w.from).lte("meeting_date", w.to)),
+      // Meetings moved to `meeting_rows` below — they need the rep's scope,
+      // which is not resolved until after the campaigns come back.
+      // Proposals are hand-logged and can be dated in the future; "all time"
+      // means every one ever logged, not capped at today like send activity.
       (w.range === "all"
         ? db.from("proposals").select("id, campaign_id, sent_date")
         : db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to)),
@@ -63,15 +61,6 @@ export default async function Overview({ searchParams }) {
     addInto(byGroup.get(gid), r);
   }
 
-  // A meeting can be logged against a group with no campaign, so scope on
-  // either — otherwise a rep's hand-logged meetings vanish from their own view.
-  // A call-created meeting has neither, because the calls workspace is tied to
-  // no campaign, so it also answers to whoever logged it. Without that last
-  // clause a rep's totals can never sum to the all-reps total.
-  const scopedMeetings = (meetings ?? []).filter(
-    (m) => !myGroupIds || myGroupIds.has(m.group_id) || myGroupIds.has(groupOf.get(m.campaign_id))
-      || (!m.group_id && !m.campaign_id && m.logged_by === rep)
-  );
   const scopedProposals = (proposals ?? []).filter((p) => inScope(p.campaign_id));
 
   // ---------------------------------------------------------------- response
@@ -132,8 +121,36 @@ export default async function Overview({ searchParams }) {
     // explaining it. So the count is both vendors, and the rate below changed
     // its denominator instead.
     source: null,
+    // Only the reached pile reads this (see reachedArgs). A person we have only
+    // phoned has no campaign to be scoped by, so without their rep's name they
+    // would land in the all-reps total and in nobody's own view.
+    rep,
   };
-  const pile = await responseCounts(scope);
+
+  // Meetings arrive through three doors — an email campaign, a rep's group, or
+  // a phone call — and until 20 Aug this page, /list and /meetings each decided
+  // whose a meeting was in their own way. /?rep=Mark Vasu said 5 and the tile's
+  // own href opened 4: a call-booked meeting has no campaign and no group, and
+  // /list could not see it. `meeting_rows` is now the only answer, and the
+  // number below is `meeting_counts` over the identical arguments — the same
+  // construction that keeps the reached and response tiles honest.
+  //
+  // The window means *booked in this window* now (`booked_on`), not *the
+  // meeting falls in this window*. A meeting agreed today for 3 September is a
+  // win today. Rows logged before the column existed have no booked_on and
+  // fall back to their meeting date, so nothing already on the board moves.
+  const meetingScope = {
+    from: scope.from, to: scope.to,
+    campaignIds: scopedIds,
+    groupIds: mine?.groupIds ?? null,
+    rep,
+  };
+  const [pile, meetingPile, { data: meetingList }] = await Promise.all([
+    responseCounts(scope),
+    meetingCounts(meetingScope),
+    db.rpc("meeting_rows", meetingArgs(meetingScope)),
+  ]);
+  const scopedMeetings = meetingList ?? [];
   // Total responses is exactly two things and nothing else: the people who said
   // yes and the people who said no. Robots are not a response and unread mail is
   // not an answer, so both sit outside this pair. That is what lets the tile
@@ -181,6 +198,10 @@ export default async function Overview({ searchParams }) {
         await reachedCounts({
           ...scope,
           campaignIds: (campaigns ?? []).filter((c) => groupOf.get(c.id) === g.id).map((c) => c.id),
+          // Deliberately dropped here. A group is a set of email campaigns; a
+          // phoned person is in none of them, and leaving the rep in would add
+          // the same 11 people to every one of that rep's group rows.
+          rep: null,
         }),
       ])
     )
@@ -342,7 +363,7 @@ export default async function Overview({ searchParams }) {
 
   const scopedCampaigns = (campaigns ?? []).filter((c) => inScope(c.id));
   const running = scopedCampaigns.filter((c) => c.status === "running").length;
-  const meetingCount = scopedMeetings.length;
+  const meetingCount = meetingPile.meetings;
   const proposalCount = scopedProposals.length;
   // Not rep-scoped — phone_calls has no campaign_id to scope by, same as /meetings.
   const callCount = (calls ?? []).length;
@@ -413,7 +434,14 @@ export default async function Overview({ searchParams }) {
           note={
             overall.sent > 50 && reached.people === 0
               ? "All sends are follow-ups — no new people entered"
-              : `First touches — ${num(reached.instantly)} Instantly · ${num(reached.lemlist)} lemlist`
+              /* Says which channels are inside it. Phoned people joined this
+                 pile on 20 Aug (Tanay: whatever the outcome — a voicemail is a
+                 reach), and a tile that grew by a channel without saying so is
+                 how "1,839" and "2,393" came to be two answers to one question.
+                 The calls part is only printed when there is one. */
+              : `First touches — ${num(reached.instantly)} Instantly · ${num(reached.lemlist)} lemlist${
+                  reached.calls ? ` · ${num(reached.calls)} phoned` : ""
+                }`
           }
           href={drill("contacted")}
         />
@@ -529,7 +557,18 @@ export default async function Overview({ searchParams }) {
           value={num(meetingCount)}
           raw={meetingCount}
           tone={meetingCount ? undefined : "muted"}
-          note="The primary KPI · logged by hand"
+          /* Says what it counts. Meetings, not people — two conversations with
+             one man are two meetings (decided 20 Aug) — so the headcount is
+             printed beside it rather than left for someone to discover in the
+             list. Both come from `meeting_counts`, one call, one definition. */
+          note={
+            meetingCount == null ? "Could not be read"
+              : `${meetingCount === meetingPile.people
+                    ? `${num(meetingCount)} meeting${meetingCount === 1 ? "" : "s"}`
+                    : `${num(meetingCount)} meetings · ${num(meetingPile.people)} people`}${
+                  meetingPile.from_calls ? ` · ${num(meetingPile.from_calls)} off the phone` : ""
+                } · counted from the day it was booked`
+          }
           href={drill("meetings")}
         />
       </div>
@@ -564,7 +603,7 @@ export default async function Overview({ searchParams }) {
               <th title="First time we emailed this person — not a follow-up">First touches</th>
               <th>Bounced</th>
               <th>Bounce %</th><th title="People who have opened at least once — a dash means no campaign in this group can register an open">Opened</th><th>Replies</th>
-              <th>Meetings</th><th>Proposals</th>
+              <th title="A meeting booked on a phone call belongs to no email group, so it is counted in the Total and in no row above it">Meetings</th><th>Proposals</th>
             </tr>
           </thead>
           <tbody>

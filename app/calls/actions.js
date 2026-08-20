@@ -55,6 +55,10 @@ export async function logCall(formData) {
   if (!outcomes.length) {
     return done(formData, new Error("pick at least one outcome"));
   }
+  // The meeting's own date rides along on every outcome and is used by exactly
+  // one of them. log_call refuses a booked_meeting without it — the date of the
+  // call is not the date of the meeting, and treating them as the same day is
+  // what put a meeting agreed on 4 August onto 4 August's board.
   for (const outcome of outcomes) {
     const { error } = await db.rpc("log_call", {
       p_contact: formData.get("contact_id"),
@@ -63,6 +67,7 @@ export async function logCall(formData) {
       p_outcome: outcome,
       p_note: formData.get("note") ?? "",
       p_callback: formData.get("callback_date") || null,
+      p_meeting_date: formData.get("meeting_date") || null,
     });
     if (error) return done(formData, error);
   }
@@ -78,6 +83,7 @@ export async function editCall(formData) {
     p_outcome: formData.get("outcome"),
     p_note: formData.get("note") ?? "",
     p_callback: formData.get("callback_date") || null,
+    p_meeting_date: formData.get("meeting_date") || null,
   });
   done(formData, error);
 }

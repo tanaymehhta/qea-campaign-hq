@@ -22,9 +22,16 @@ cold: read §1 and §2, then the `OPEN` and `DECIDED` entries. That is enough to
 6. [T3 · SHIPPED · Three answers, both vendors](#6-t3--shipped--three-answers-both-vendors)
 7. [T4 · SHIPPED · Homepage People reached](#7-t4--shipped--homepage-people-reached)
 8. [T5 · SHIPPED · Homepage People who opened](#8-t5--shipped--homepage-people-who-opened)
-9. [Reported, not yet written up](#9-reported-not-yet-written-up)
-10. [House rules for anything that lands here](#10-house-rules-for-anything-that-lands-here)
-11. [The queries behind this file](#11-the-queries-behind-this-file)
+9. [T6 · SHIPPED · Meetings booked — the tile, the click, and the date](#9-t6--shipped--meetings-booked--the-tile-the-click-and-the-date)
+10. [T7 · SHIPPED · People reached counts the phone](#10-t7--shipped--people-reached-counts-the-phone)
+11. [T8 · SHIPPED · Leads is one row per human](#11-t8--shipped--leads-is-one-row-per-human)
+12. [Reported, not yet written up](#12-reported-not-yet-written-up)
+13. [House rules for anything that lands here](#13-house-rules-for-anything-that-lands-here)
+14. [The queries behind this file](#14-the-queries-behind-this-file)
+
+**§9–§11 were all decided and shipped on 20 August 2026, in one session, after §7 and §8.
+Two of them reverse decisions the handoff had recorded the same day — both reversals are
+Tanay's, both are marked as such, and both say what they overturn.**
 
 ---
 
@@ -642,7 +649,214 @@ face — 8 Aug 12 is 323 people reached, all Roof Campaign, tracking off, and re
 
 ---
 
-## 9. Reported, not yet written up
+## 9. T6 · SHIPPED · Meetings booked — the tile, the click, and the date
+
+**Symptom** — Mark Vasu's Overview says `Meetings booked 5`. Clicking it opens four
+people. Nothing on either screen explains the fifth.
+
+**Measured** — 20 August 2026, by the method §7 of `NEXT_AGENT.md` prescribes: read the
+tile's number and the tile's own `href`, follow it, count the rows.
+
+```
+/?rep=Mark Vasu     Meetings booked  5
+its href            /list?metric=meetings&range=all&rep=Mark+Vasu
+rows behind it      4
+```
+
+The missing row is Baris Acar, the only meeting on the board that came from a phone call.
+
+**Why it is wrong** — a call-created meeting carries `campaign_id = null` **and**
+`group_id = null`, because the calls workspace belongs to no email campaign. Three files
+each answered "is this meeting this rep's?" in their own way:
+
+| file | rule |
+|---|---|
+| `app/page.jsx:71` | group OR campaign's group OR *(no scope AND `logged_by` = rep)* |
+| `app/list/page.jsx:164` | group OR campaign — **cannot see a call meeting at all** |
+| `app/meetings/page.jsx:44` | owner of group ?? owner of campaign's group ?? `logged_by` |
+
+F2 with a different table under it. One meeting hides today; the moment a second rep runs
+a second phone list, every meeting they book hides.
+
+**Second fault, found while fixing the first: there was nowhere to write the meeting's own
+date.** `phone_calls` holds `call_date` and `callback_date` and nothing else, and
+`log_call` wrote `meeting_date := p_call_date`. A meeting agreed on the phone today for
+3 September was recorded as a meeting **today**. Both date boxes on the call form were the
+call's own dates and neither was the meeting's — and they were unlabelled, so nothing on
+screen said which was which.
+
+**Decision** — Tanay, 20 August 2026:
+
+- `meeting_rows` / `meeting_counts` in Postgres, one definition of "a meeting in this
+  scope", resolving all three doors — campaign, group, and the call (via
+  `source_call_id → phone_calls.rep`, or the owner of the call campaign). Every reader
+  asks it. The `logged_by` special case in `page.jsx` is deleted.
+- `meetings.booked_on` — the day it was agreed, separate from the day it happens.
+- **A `booked_meeting` outcome requires a meeting date.** The database refuses the write
+  and says so in a sentence, the way a do-not-call without a reason already does.
+- **The Overview window means *booked* in the window**, not *held* in it. A meeting agreed
+  today for September is a win today. Rows logged before the column existed have no
+  `booked_on` and fall back to `meeting_date`, so nothing already on the board moved.
+- **"Meetings booked" counts MEETINGS, not people** — two conversations with Jeffrey
+  Hohenstein are two meetings. `meeting_counts` returns the headcount alongside, so the
+  tile prints `5 meetings · 4 people` without a second definition of either.
+- The calls workspace's own Meetings tile counted *calls whose outcome was booked_meeting*.
+  It now counts the same `meetings` rows the Overview counts.
+
+Migration `20260820174533`.
+
+**Verify**
+
+```bash
+# 27 scopes: 3 reps x 4 windows, 12 single days, group and campaign drill-downs.
+# Read the tile's data-count AND its href; follow the href; count the rows.
+```
+
+Result 20 Aug: **27 tile/click pairs, 0 mismatches.** The write path was exercised inside a
+transaction and rolled back: the no-date guard raised, a call logged 20 Aug for a 3 Sep
+meeting appeared in the 20 Aug window and **not** in the 3 Sep one, and `meetings` was left
+untouched.
+
+**Still open, and not touched by this** — Baris Acar's `meeting_date` reads 4 August because
+that was the call date, and the note says "interested in demo, setting up Teams call". The
+real date is unknown. `meetings` is hand-kept, so this migration set only `booked_on`,
+which the call itself proves. **Ask Tanay for the real date.**
+
+---
+
+## 10. T7 · SHIPPED · People reached counts the phone
+
+**Symptom** — none. This is a change of meaning Tanay asked for, recorded here because it
+**reverses §10.2 of `NEXT_AGENT.md`**, written the same day, which said this tile stays the
+email pile and "do not widen it without asking again."
+
+He was asked again, and widened it: *"which is then reached out the no of people to whom
+phone calls have been made no matter what the outcome is."*
+
+**The rule** — we reached a person if we emailed them **or** if we rang them, whatever
+happened on the call. A voicemail counts. A no-answer counts. The dial is the reach.
+
+**Measured** — 20 August 2026:
+
+```
+email pile (reached_people)                     2,402 people
+people with at least one live phone_calls row      11
+of those 11, already in the email pile              0
+                                                -----
+after                                           2,413
+```
+
+(The email side keeps moving as the sync runs — it read 2,399 that morning and 2,405 by
+evening. The **+11** is the change; the base is whatever the tools have written.)
+
+The 11 are 8 rows in `call_contacts` plus 3 calls from 16 July that predate the call
+workspace and have no contact record at all — Levon Shaginyan, Mark Ellis, Raffaele
+Albanese. They are still people we rang.
+
+**Three things this could have broken, and how each is held**
+
+1. **The open rate.** `opened ÷ trackable`, where trackable means "their mail could carry
+   a pixel". A person we only phoned was never sent mail, so `can_open` is false for them.
+   Verified: 351 / 1,491 before and after, unmoved.
+2. **Identity.** Same human = same email address, lowercased, where both sides have one.
+   Never a name match. Zero overlap today; the rule is for when it starts.
+3. **A rep's numbers summing to everyone's.** A called person has no `campaign_id`, so a
+   campaign-only scope would drop all 11 from every rep view while leaving them in the
+   all-reps total — the same hole T6 fixed for meetings. Hence `p_rep`, which defaults to
+   null so no existing caller changes behaviour.
+
+**A naming collision this created, and how it was resolved** — the calls workspace already
+had a tile called "People reached", meaning the *narrower* fact: a human picked up, not a
+voicemail. Two definitions one click apart under one name is the whole bug. **The name
+moved, not the meaning**: that tile now reads **"Spoke to someone"**.
+
+Migration `20260820175821`.
+
+**Verify** — 28 tile/click pairs across reps, windows and single days: 0 mismatches. Every
+page of the two largest lists was walked and the rows served counted:
+`contacted` says 2,416 and serves 2,416; `opened` says 351 and serves 351.
+
+---
+
+## 11. T8 · SHIPPED · Leads is one row per human
+
+**Symptom** — `/leads` said "2,780 people" and meant 2,780 **rows**. It also had never
+heard of the call list, so a name Mark was about to dial for the first time looked, on this
+page, like a stranger.
+
+**This reverses §10.1 of `NEXT_AGENT.md`**, which said to put only the 11 people anyone had
+actually rung on this page and keep the 1,252-name call list off it, on the grounds that
+2,780 rows buried under uncontactable names is worse than what was there. Tanay reversed it
+the same day, and his reason is the page's job: he checks this page **before** he contacts
+somebody, and a name it does not hold is a name that gets chased twice.
+
+**Measured** — 20 August 2026:
+
+```
+v_leads rows                                    2,780
+distinct humans in them                         2,731   <- the 49 are one person, two campaigns
+people spanning two campaign GROUPS                 0   <- so group tabs lose nothing
+call list                                       1,252
++ rung before call_contacts existed                 3
+overlap with the email side, by email                0
+overlap by NAME only                                1
+                                                -----
+people                                          3,986
+```
+
+The one name-only overlap is **Michael Murphy** — WEILL CORNELL MEDICINE on the call list,
+Cushman & Wakefield on the email side, no email on the call row. Two people who share a
+common name, almost certainly. It is surfaced on the page as "possible duplicate" and
+merged by nothing, which is the §10.3 rule doing its job.
+
+**A second identity fault, found by verifying the first** — three `info@` addresses were
+each attached to several different named people on the call list:
+`info@midtownpreservation.com` to five, `info@randpc.com` to four,
+`info@ctaarchitects.com` to two. Eleven humans were collapsing into three rows. "Same email
+= same human" is only true of an address a human owns. An address now stops being an
+identity if **more than one call contact uses it** (measured, so unknown shared addresses
+are caught) **or** its local part is a role word (`info`, `office`, `sales`, `estimating`, …,
+so a shared mailbox with only one contact today cannot merge onto a real person tomorrow).
+Those contacts key on their contact id instead. The address is still shown, flagged
+`email_is_shared` — it is still where you write, it is just not proof of who you are
+writing to.
+
+**What the page is now** — a directory you look someone up in, not a spreadsheet mirror.
+One row per human; both channels on the row; two independent questions never derived from
+each other:
+
+- **Contacted** — what Instantly, lemlist and the call log actually did.
+- **Status** — a column typed on a source spreadsheet. 49 people carry `sent` with no send
+  in either tool; 906 with a real send do not carry it. It is labelled as a spreadsheet
+  column and the filters cross, so the disagreement is one click.
+
+`Marked sent` reads **1,487**, not 1,536, for the same reason the total moved: it is now
+people, not rows.
+
+**Every number comes from `lead_facets`; every row comes from `lead_rows`; both take the
+same seven arguments.** The page holds no filter logic at all. That is deliberate — the
+predicate written twice, once in SQL for the counts and once in JavaScript for the table,
+is precisely how the homepage came to say "3" over a list of 193.
+
+Migrations `20260820180517`, `20260820180640`, `20260820181400`, `20260820181426`,
+`20260820181659`, `20260820181909`.
+
+**Two faults the verification caught, both now fixed**
+
+- The list picker's **All** tab printed the page-wide total instead of counting with the
+  other filters still on, so `/leads?reached=no` showed `All (3,986)` above a list of 1,570.
+- The **No way to contact** tile read 1,162 and its own click opened all 3,986. Its filter
+  argument was a two-state boolean with no way to express "only the unreachable" — a tile
+  whose click cannot say its own number lies by construction. Three states now.
+
+**Verify** — 138 filter chips followed across eight filter states, 0 mismatches. Six lists
+walked page by page with the rows served counted against the headline: 3,986 / 1,255 /
+1,570 / 1,487 / 1,252 / 2,824, all exact. Page load 9.6s → 0.37s, because twenty-five
+head-counts over a 95ms view became one pass.
+
+---
+
+## 12. Reported, not yet written up
 
 Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it is worked.
 
@@ -694,7 +908,7 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
 
 ---
 
-## 10. House rules for anything that lands here
+## 13. House rules for anything that lands here
 
 Earned from the entries above, not asserted.
 
@@ -719,7 +933,7 @@ Earned from the entries above, not asserted.
 
 ---
 
-## 11. The queries behind this file
+## 14. The queries behind this file
 
 Run against `yfnqszwlyoyfhuwfmcyl`. Do not take this file's word for anything.
 

@@ -1,5 +1,5 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
-import { contactsFor, callsFor, callStats } from "../../../../lib/calls";
+import { contactsFor, callsFor, callStats, meetingsForCalls } from "../../../../lib/calls";
 import { Tile, Pill, Chev } from "../../../../components/ui";
 import { logCall, editCall, deleteCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
 
@@ -165,7 +165,8 @@ export default async function CallWorkspace({ params, searchParams }) {
   if (!camp) return <p className="empty">No call campaign called &ldquo;{params.campaign}&rdquo;.</p>;
 
   const [contacts, calls] = await Promise.all([contactsFor(camp.id), callsFor(camp.id)]);
-  const s = callStats(contacts, calls);
+  const meetingOf = await meetingsForCalls(calls);
+  const s = callStats(contacts, calls, meetingOf);
   const t = today();
 
   const base = `/calls/${encodeURIComponent(rep)}/${camp.slug}`;
@@ -245,10 +246,15 @@ export default async function CallWorkspace({ params, searchParams }) {
       <div className="grid g4">
         <Tile hero label="Calls made" value={num(s.callsMade)} raw={s.callsMade}
           tone={s.callsMade ? undefined : "muted"} note="every dial, logged below" href={here("called")} />
-        <Tile hero label="People reached" value={num(s.peopleReached)} raw={s.peopleReached}
-          tone={s.peopleReached ? undefined : "muted"} note="distinct people, no-answers excluded" href={here("reached")} />
+        {/* Was "People reached", which is now the Overview's name for a wider
+            pile — anyone we emailed or dialled, whatever happened (20 Aug).
+            This one has always meant the narrower fact: a human picked up. Two
+            definitions one click apart under one name is the whole bug, so the
+            name moved rather than the meaning. */}
+        <Tile hero label="Spoke to someone" value={num(s.peopleReached)} raw={s.peopleReached}
+          tone={s.peopleReached ? undefined : "muted"} note="a live conversation — voicemails and emails left don't count" href={here("reached")} />
         <Tile hero label="Meetings booked" value={num(s.meetingsBooked)} raw={s.meetingsBooked}
-          tone={s.meetingsBooked ? undefined : "muted"} note="from calls on this list" href={here("meetings")} />
+          tone={s.meetingsBooked ? undefined : "muted"} note="the same rows the Overview counts" href={here("meetings")} />
         <Tile hero label="Follow-ups due" value={num(s.followupsDue)} raw={s.followupsDue}
           tone={s.followupsDue ? undefined : "muted"} note="callback today or overdue" href={here("due")} />
       </div>
@@ -336,11 +342,20 @@ export default async function CallWorkspace({ params, searchParams }) {
                         </div>
 
                         <h2>Log the call</h2>
+                        {/* Three dates, and they are three different facts: the
+                            day you dialled, the day the meeting happens, and the
+                            day to ring back. Two of them used to sit here as
+                            bare unlabelled boxes and the third did not exist —
+                            so a booked meeting was silently dated to the day of
+                            the call. log_call now refuses that. */}
                         <form action={logCall} className="gapform">
                           <input type="hidden" name="contact_id" value={ct.id} />
                           <input type="hidden" name="rep" value={rep} />
                           <input type="hidden" name="path" value={base} />
-                          <input type="date" name="call_date" defaultValue={t} required />
+                          <label className="datefield">
+                            <span>Call date</span>
+                            <input type="date" name="call_date" defaultValue={t} required />
+                          </label>
                           <span className="outcomes">
                             {OUTCOMES.map(([k, l]) => (
                               <label key={k} className="outcome">
@@ -350,7 +365,15 @@ export default async function CallWorkspace({ params, searchParams }) {
                             ))}
                           </span>
                           <input name="note" placeholder="What happened? Notes go here." style={{ flex: 2, minWidth: 220 }} />
-                          <input type="date" name="callback_date" title="Callback date, if any" />
+                          <label className="datefield">
+                            <span>Meeting on</span>
+                            <input type="date" name="meeting_date"
+                              title="The day the meeting actually happens. Required if you tick Booked a meeting — this is the date the Overview counts." />
+                          </label>
+                          <label className="datefield">
+                            <span>Call back</span>
+                            <input type="date" name="callback_date" title="Ring this person again on" />
+                          </label>
                           <button className="choice" type="submit">Log call</button>
                         </form>
                         {history.length ? (
@@ -358,7 +381,9 @@ export default async function CallWorkspace({ params, searchParams }) {
                             <table>
                               <thead><tr>
                                 <th>Date</th><th>Outcome</th><th>Rep</th>
-                                <th style={{ textAlign: "left" }}>Note</th><th>Callback</th><th></th>
+                                <th style={{ textAlign: "left" }}>Note</th>
+                                <th title="The meeting this call booked — the same row the Overview counts">Meeting</th>
+                                <th>Callback</th><th></th>
                               </tr></thead>
                               <tbody>
                                 {history.map((c) => (
@@ -367,20 +392,37 @@ export default async function CallWorkspace({ params, searchParams }) {
                                       {/* One cell holding the whole form — a <form> can't
                                           wrap a <tr> without the browser fostering it out
                                           of the table, so it lives inside a single <td>. */}
-                                      <td colSpan={6}>
+                                      <td colSpan={7}>
                                         <form action={editCall} className="gapform">
                                           <input type="hidden" name="call_id" value={c.id} />
                                           <input type="hidden" name="contact_id" value={ct.id} />
                                           <input type="hidden" name="rep" value={rep} />
                                           <input type="hidden" name="path" value={base} />
-                                          <input type="date" name="call_date" defaultValue={c.call_date} required />
+                                          <label className="datefield">
+                                            <span>Call date</span>
+                                            <input type="date" name="call_date" defaultValue={c.call_date} required />
+                                          </label>
                                           <select name="outcome" defaultValue={c.outcome} required>
                                             {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                                           </select>
                                           <input name="note" defaultValue={c.note ?? ""} placeholder="Note"
                                             style={{ flex: 2, minWidth: 200 }} />
-                                          <input type="date" name="callback_date" defaultValue={c.callback_date ?? ""}
-                                            title="Callback date, if any" />
+                                          {/* Prefilled from the meeting this call
+                                              made, so moving a meeting is editing
+                                              the call that booked it — the one
+                                              place that already keeps both rows
+                                              in step (edit_call). */}
+                                          <label className="datefield">
+                                            <span>Meeting on</span>
+                                            <input type="date" name="meeting_date"
+                                              defaultValue={meetingOf.get(c.id)?.meeting_date ?? ""}
+                                              title="The day the meeting actually happens. Required for a booked meeting." />
+                                          </label>
+                                          <label className="datefield">
+                                            <span>Call back</span>
+                                            <input type="date" name="callback_date" defaultValue={c.callback_date ?? ""}
+                                              title="Ring this person again on" />
+                                          </label>
                                           <button className="choice" type="submit">Save</button>
                                           <a className="choice" href={rowHref(ct, null)}>Cancel</a>
                                         </form>
@@ -392,6 +434,14 @@ export default async function CallWorkspace({ params, searchParams }) {
                                       <td><Pill status={c.outcome} /></td>
                                       <td>{c.rep || "—"}</td>
                                       <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
+                                      {/* Reads the meetings row itself, not a
+                                          copy of its date kept here — there is
+                                          one meeting and one place it lives. */}
+                                      <td className="dim">
+                                        {meetingOf.get(c.id)
+                                          ? <a className="drilled" href="/meetings">{prettyDate(meetingOf.get(c.id).meeting_date)}</a>
+                                          : "—"}
+                                      </td>
                                       <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
                                       <td className="rowactions">
                                         <a className="choice" href={rowHref(ct, c.id)}>Edit</a>
