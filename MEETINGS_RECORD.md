@@ -388,9 +388,38 @@ row behind; a real prospect's record is the last place to skip it. Where a live
 row genuinely must be written, `remove_meeting` is not cleanup — it is a
 soft delete that leaves the row in the bin. Deleting by marker is cleanup.
 
-### Still outstanding, deliberately not touched
+### The matching call, deleted on the same instruction
 
-`phone_calls` holds one soft-deleted row noted `AUDIT TEST cb2` (Nicholas
-Ferrara, deleted 20 Aug 19:09). It is soft-deleted, so it counts nowhere and
-every call reader already honours `deleted_at`. Left alone rather than swept up
-without being asked — the same rule §5 followed.
+`phone_calls` held one soft-deleted row noted `AUDIT TEST cb2` (Nicholas
+Ferrara, `not_reached`, 20 Aug). Created and soft-deleted at the same
+microsecond — `19:09:22.803457` for both — which is the signature of a probe
+that was never a call. Tanay asked for it gone too.
+
+Checked before deleting, because a hard delete of a call is not reversible and
+`phone_calls` is the evidence behind the Calls tile:
+
+```
+meetings referencing it            0
+its contact's callback_date        null
+other live calls for that contact  0
+```
+
+**The other eight soft-deleted calls stay, and it matters that they do.** Five
+— Krepcio, Galassi, Chan, Sze, Monroe — are real 4 Aug dials collapsed by
+`20260820185706`, the migration that made sixteen rows into eleven calls; they
+are the evidence for that decision. The three Bashkim Caci rows are the ones
+`PLAN.md` and `TRUST.md` argue over, including the stray `booked_meeting`
+withdrawn within the hour. Sweeping by "is it soft-deleted" would have taken all
+eight. The key was the note and the identical timestamps, not the flag.
+
+After:
+
+```
+meetings 5 · counted 5 · removed 0
+phone_calls 19 total · 11 live · 8 soft-deleted
+test leftovers anywhere: 0
+```
+
+Overview unchanged: Calls logged 11, Meetings booked 5. Parity 230 green.
+Nicholas Ferrara's contact row is untouched — he is a real prospect on the NYC
+LL11 list and still appears in the call workspace.
