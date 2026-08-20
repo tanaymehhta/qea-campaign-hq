@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
  * Names only. Clicking a name is how you say who you are — the same
  * no-login contract as the ?rep= picker on Overview and Meetings.
  */
-export default async function Calls() {
+export default async function Calls({ searchParams }) {
   const [{ reps, campaigns }, { data: calls }, { count: orphans }] = await Promise.all([
     callRepList(),
     db.from("phone_calls").select("rep, outcome").is("deleted_at", null),
@@ -26,6 +26,17 @@ export default async function Calls() {
         <h1>Calls</h1>
         <p className="sub">Who&rsquo;s calling? Pick your name to open your call lists.</p>
       </div>
+
+      {/* Somebody arrived under a name that owns nothing — usually the
+          /calls/all/… link /meetings builds for a call with no rep. */}
+      {searchParams?.unknown ? (
+        <div className="card" style={{ marginBottom: 18, borderColor: "var(--warn-ink)" }}>
+          <p style={{ margin: 0 }}>
+            <b>Nobody here is called &ldquo;{searchParams.unknown}&rdquo;.</b> Every call is filed
+            under the name in the address bar, so pick yours below.
+          </p>
+        </div>
+      ) : null}
 
       <div className="reps big">
         {reps.map((r, i) => {

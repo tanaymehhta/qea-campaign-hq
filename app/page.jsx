@@ -1,7 +1,7 @@
 import {
   db, dailyRange, mailboxRange, today, shift, num, pct, windowFrom, prettyDate,
   EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
-  meetingCounts, meetingArgs,
+  meetingCounts, meetingArgs, everyRow,
 } from "../lib/db";
 import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
 
@@ -155,12 +155,14 @@ export default async function Overview({ searchParams }) {
     groupIds: mine?.groupIds ?? null,
     rep,
   };
-  const [pile, meetingPile, { data: meetingList }] = await Promise.all([
+  const [pile, meetingPile, scopedMeetings] = await Promise.all([
     responseCounts(scope),
     meetingCounts(meetingScope),
-    db.rpc("meeting_rows", meetingArgs(meetingScope)),
+    // Paged: the group table below counts these rows itself, and PostgREST
+    // stops at 1,000 with no error — the tile would go on reading the true
+    // number while the rows beneath it quietly stopped summing to it.
+    everyRow(() => db.rpc("meeting_rows", meetingArgs(meetingScope)).order("id")),
   ]);
-  const scopedMeetings = meetingList ?? [];
   // Total responses is exactly two things and nothing else: the people who said
   // yes and the people who said no. Robots are not a response and unread mail is
   // not an answer, so both sit outside this pair. That is what lets the tile

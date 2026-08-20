@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { db, num, prettyDate } from "../../../lib/db";
 import { callRepList, contactsFor, callsFor, callStats, meetingsForCalls } from "../../../lib/calls";
 import { Pill, Chev } from "../../../components/ui";
@@ -10,7 +11,11 @@ export const dynamic = "force-dynamic";
  */
 export default async function RepCalls({ params }) {
   const rep = decodeURIComponent(params.rep);
-  const { campaigns } = await callRepList();
+  const { campaigns, reps } = await callRepList();
+  // A name that owns nothing renders every list under "others" and titles the
+  // page after somebody who does not exist. Send it back to the picker, which
+  // says so rather than silently landing you somewhere plausible.
+  if (!reps.some((r) => r.id === rep)) redirect(`/calls?unknown=${encodeURIComponent(rep)}`, "replace");
 
   const mine = campaigns.filter((c) => c.owner?.trim() === rep);
   const others = campaigns.filter((c) => c.owner?.trim() !== rep);

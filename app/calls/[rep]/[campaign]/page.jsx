@@ -1,5 +1,5 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
-import { contactsFor, callsFor, callStats, meetingsForCalls } from "../../../../lib/calls";
+import { callRepList, contactsFor, callsFor, callStats, meetingsForCalls } from "../../../../lib/calls";
 import { Tile, Pill, Chev } from "../../../../components/ui";
 import { logCall, editCall, deleteCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
 
@@ -162,6 +162,46 @@ export default async function CallWorkspace({ params, searchParams }) {
   const { data: camp } = await db
     .from("call_campaigns").select("*").eq("slug", params.campaign).single();
   if (!camp) return <p className="empty">No call campaign called &ldquo;{params.campaign}&rdquo;.</p>;
+
+  // The segment is checked before anything on this page can post it.
+  //
+  // Every form below carries `rep` as a hidden field and log_call writes it to
+  // phone_calls.rep, which is where meeting_rows resolves a meeting's owner
+  // from. /calls/all/nyc-ll11-safe is a URL /meetings generates itself for a
+  // call with no rep whose list has no owner, so an unchecked segment was one
+  // click from a meeting owned by a rep named "all".
+  //
+  // A name nobody answers to is worse than no name: the totals still sum, to
+  // the wrong person. So this asks who you are and keeps the list you came for
+  // — the click from /meetings still lands somewhere useful.
+  const { reps: roster } = await callRepList();
+  if (!roster.some((r) => r.id === rep)) {
+    return (
+      <>
+        <div className="rise">
+          <h1>{camp.display_name}</h1>
+          <p className="sub">
+            Nobody here is called &ldquo;{rep}&rdquo;. Every call logged on this page is filed
+            under the name in the address bar, so it needs to be yours.
+          </p>
+        </div>
+        <div className="reps big">
+          {roster.map((r) => (
+            <a key={r.id} href={`/calls/${encodeURIComponent(r.id)}/${camp.slug}`}>
+              <span className="glyph" style={{ background: r.tint, color: r.ink }}>{r.initials}</span>
+              <span className="who">
+                {r.name.split(" ")[0]}<br />{r.name.split(" ").slice(1).join(" ")}
+              </span>
+              <span className="role">{r.role}</span>
+            </a>
+          ))}
+        </div>
+        <div className="range" style={{ marginTop: 18 }}>
+          <a href="/calls">&larr; All reps</a>
+        </div>
+      </>
+    );
+  }
 
   const [contacts, calls] = await Promise.all([contactsFor(camp.id), callsFor(camp.id)]);
   const meetingOf = await meetingsForCalls(calls);

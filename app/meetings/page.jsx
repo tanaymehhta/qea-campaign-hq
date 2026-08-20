@@ -1,4 +1,4 @@
-import { db, num, prettyDate, today, initials, repList, listHref, meetingArgs } from "../../lib/db";
+import { db, num, prettyDate, today, initials, repList, listHref, meetingArgs, everyRow } from "../../lib/db";
 import { Tile, Reps, Pill, PersonLink, Chev } from "../../components/ui";
 import { logMeeting, editMeeting, setMeetingStatus, removeMeeting, restoreMeeting } from "./actions";
 
@@ -35,14 +35,30 @@ export default async function Meetings({ searchParams }) {
   // Two reads of the same function, because the bin must not empty the tiles.
   // The live pile always feeds the KPI and the rep strip; the removed pile is
   // fetched only when the bin is open and is only ever rendered as a list.
-  const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }, { data: calls }, { data: callCamps }, { data: removedRows }] = await Promise.all([
+  // Paged, not because 7 rows need it but because PostgREST stops at 1,000
+  // whatever is asked for, and past that there is no error — the rows at one
+  // end simply stop arriving and every number on this page gets quietly
+  // smaller. The tiles above are computed from these three piles. `everyRow`
+  // needs a deterministic order to page safely, and `meeting_rows` returns
+  // none of its own, so both reads ask for one; the display sort still happens
+  // below.
+  const [{ groups, reps }, { data: subs }, meetings, { data: proposals }, calls, { data: callCamps }, removedRows] = await Promise.all([
     repList(),
     db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, group_name, group_slug, status, leads, replied, source"),
-    db.rpc("meeting_rows", meetingArgs({ status: "all" })),
+    everyRow(() => db.rpc("meeting_rows", meetingArgs({ status: "all" })).order("id")),
     db.from("proposals").select("id, campaign_id"),
-    db.from("phone_calls").select("*, call_contacts(id, call_campaign_id)").is("deleted_at", null).order("call_date", { ascending: false }),
+    // `org_name` on the contact is the company. phone_calls has no such column
+    // of its own, so the Company cell on every call row below read "—" whatever
+    // the contact said.
+    everyRow(() =>
+      db.from("phone_calls")
+        .select("*, call_contacts(id, call_campaign_id, org_name)")
+        .is("deleted_at", null)
+        .order("call_date", { ascending: false })
+        .order("id")
+    ),
     db.from("call_campaigns").select("id, slug, display_name, owner"),
-    db.rpc("meeting_rows", meetingArgs({ status: "removed" })),
+    everyRow(() => db.rpc("meeting_rows", meetingArgs({ status: "removed" })).order("id")),
   ]);
 
   const subById = new Map((subs ?? []).map((s) => [s.campaign_id, s]));
@@ -57,14 +73,14 @@ export default async function Meetings({ searchParams }) {
   //
   // The function does not order its output, so the sort that used to live in
   // the query lives here.
-  const allMeetings = [...(meetings ?? [])].sort((a, b) =>
+  const allMeetings = [...meetings].sort((a, b) =>
     (b.meeting_date ?? "").localeCompare(a.meeting_date ?? "")
   );
   const mine = myGroupIds
     ? (subs ?? []).filter((s) => myGroupIds.has(s.group_id))
     : (subs ?? []);
   const myMeetings = known ? allMeetings.filter((m) => m.rep === rep) : allMeetings;
-  const removed = [...(removedRows ?? [])]
+  const removed = [...removedRows]
     .filter((m) => !known || m.rep === rep)
     .sort((a, b) => (b.deleted_at ?? "").localeCompare(a.deleted_at ?? ""));
   // What the list below renders. The tiles above never read this.
@@ -93,11 +109,15 @@ export default async function Meetings({ searchParams }) {
     return `/meetings${q.size ? `?${q}` : ""}`;
   };
 
-  // A phone call's campaign lives on its contact, not the call row itself.
+  // A phone call's campaign lives on its contact, not the call row itself —
+  // and so does the company. `phone_calls.company` has never existed, so every
+  // Company cell on the call rows below read "—" no matter what the contact
+  // said.
+  const org = (c) => c.call_contacts?.org_name || null;
   const callCampById = new Map((callCamps ?? []).map((c) => [c.id, c]));
   const campOfCall = (c) => callCampById.get(c.call_contacts?.call_campaign_id) ?? null;
-  const bookedCalls = (calls ?? []).filter((c) => c.outcome === "booked_meeting");
-  const shownCalls = showAllCalls ? calls ?? [] : bookedCalls;
+  const bookedCalls = calls.filter((c) => c.outcome === "booked_meeting");
+  const shownCalls = showAllCalls ? calls : bookedCalls;
   const callToggle = (v) => {
     const q = new URLSearchParams();
     if (known) q.set("rep", rep);
@@ -256,7 +276,18 @@ export default async function Meetings({ searchParams }) {
               <option value="crm">in the CRM</option>
               <option value="chat">said in chat</option>
             </select>
-            <input name="logged_by" placeholder="Logged by" defaultValue={known ? rep : ""} style={{ minWidth: 120 }} />
+            {/* A typo here files the meeting under a rep who does not exist:
+                it counts in the all-reps total and appears in nobody's column,
+                and the parity gate only finds it afterwards. A datalist offers
+                the names without refusing a new one — the stance set_group_owner
+                takes, and for the same reason: there is no rep table, and the
+                first meeting a new rep books should not be the thing that
+                stops. */}
+            <input name="logged_by" placeholder="Logged by" list="known-reps"
+              defaultValue={known ? rep : ""} style={{ minWidth: 120 }} />
+            <datalist id="known-reps">
+              {reps.map((r) => <option key={r.id} value={r.id} />)}
+            </datalist>
             <input name="note" placeholder="Note" style={{ flex: 2, minWidth: 200 }} />
             <button className="choice" type="submit">Log it</button>
           </form>
@@ -509,7 +540,7 @@ export default async function Meetings({ searchParams }) {
         <span className="note">
           {showAllCalls
             ? `${num(shownCalls.length)} calls logged, every outcome.`
-            : `${num(bookedCalls.length)} booked a meeting · ${num((calls ?? []).length - bookedCalls.length)} other outcomes hidden.`}
+            : `${num(bookedCalls.length)} booked a meeting · ${num(calls.length - bookedCalls.length)} other outcomes hidden.`}
         </span>
         <a className="choice" href={callToggle(showAllCalls ? null : "all")}>
           {showAllCalls ? "Booked meetings only" : "Show all outcomes"}
@@ -530,7 +561,7 @@ export default async function Meetings({ searchParams }) {
               </span>
               <span className="meat">
                 <span className="who">{c.prospect_name}</span>
-                <span className="line">{[c.company, label].filter(Boolean).join(" — ")}</span>
+                <span className="line">{[org(c), label].filter(Boolean).join(" — ")}</span>
               </span>
               <Pill status={c.outcome} />
               <span className="when">{prettyDate(c.call_date)}</span>
@@ -539,7 +570,7 @@ export default async function Meetings({ searchParams }) {
             <div className="mbody">
               <div className="inner">
                 <div className="meta">
-                  <div><div className="k">Company</div><div className="v">{c.company || "—"}</div></div>
+                  <div><div className="k">Company</div><div className="v">{org(c) || "—"}</div></div>
                   <div><div className="k">Campaign</div><div className="v">{label}</div></div>
                   <div><div className="k">Rep</div><div className="v">{c.rep || "—"}</div></div>
                   <div><div className="k">Date</div><div className="v">{prettyDate(c.call_date)}</div></div>
