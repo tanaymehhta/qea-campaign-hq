@@ -115,6 +115,22 @@ export default async function Meetings({ searchParams }) {
     return s ? s.sub_campaign_label || s.name : null;
   };
 
+  // A meeting that arrives from /replies or a person page brings the name, the
+  // address and the campaign with it. Retyping those is precisely how the
+  // duplicates in the audit were made — one row said "1287 East 19th
+  // Condominium" and the next said "Condo". Nothing here is written from the
+  // URL: it fills boxes that a human still reads and presses a button on, and
+  // log_meeting validates every one of them either way.
+  const pre = {
+    name: searchParams?.name ?? "",
+    email: searchParams?.email ?? "",
+    company: searchParams?.company ?? "",
+  };
+  const preGroup = searchParams?.campaign
+    ? subById.get(searchParams.campaign)?.group_id ?? null
+    : null;
+  const prefilled = !!(pre.name || pre.email || pre.company);
+
   return (
     <>
       <div className="rise">
@@ -190,12 +206,14 @@ export default async function Meetings({ searchParams }) {
         </div>
       ) : null}
 
-      <details className="mrow" style={{ marginBottom: 22 }} open={!!searchParams?.err}>
+      <details className="mrow" style={{ marginBottom: 22 }} open={!!searchParams?.err || prefilled}>
         <summary>
           <span className="meat">
             <span className="who">Log a meeting</span>
             <span className="line">
-              The one thing no tool records — booked over email, phone or anywhere else.
+              {prefilled
+                ? `Filled in from ${pre.name || pre.email} — check it and press Log it.`
+                : "The one thing no tool records — booked over email, phone or anywhere else."}
             </span>
           </span>
           <Chev />
@@ -203,9 +221,12 @@ export default async function Meetings({ searchParams }) {
         <div className="mbody"><div className="inner">
           <form action={logMeeting} className="gapform">
             <input type="hidden" name="rep" value={known ? rep : ""} />
-            <input name="name" placeholder="Prospect name *" required style={{ minWidth: 180 }} />
-            <input name="email" type="email" placeholder="Email" style={{ minWidth: 200 }} />
-            <input name="company" placeholder="Company" style={{ minWidth: 160 }} />
+            <input name="name" placeholder="Prospect name *" required
+              defaultValue={pre.name} style={{ minWidth: 180 }} />
+            <input name="email" type="email" placeholder="Email"
+              defaultValue={pre.email} style={{ minWidth: 200 }} />
+            <input name="company" placeholder="Company"
+              defaultValue={pre.company} style={{ minWidth: 160 }} />
             {/* Two dates, and the difference between them is the whole point.
                 "Happens on" is when you will be in the room; "agreed on" is
                 when the win landed, and it is what every date window counts by.
@@ -221,7 +242,9 @@ export default async function Meetings({ searchParams }) {
               <span>Agreed on</span>
               <input type="date" name="booked_on" defaultValue={today()} max={today()} required />
             </label>
-            <select name="group" defaultValue={known ? (groups.find((g) => g.owner === rep)?.id ?? "") : ""}>
+            {/* The campaign the click came from wins over the rep's own
+                group: it names the list this person is actually on. */}
+            <select name="group" defaultValue={preGroup ?? (known ? (groups.find((g) => g.owner === rep)?.id ?? "") : "")}>
               <option value="">No campaign</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>{g.display_name}</option>

@@ -1,6 +1,7 @@
 import {
   db, num, prettyWhen, prettyDate, initials, today, shift,
   windowFrom, repList, campaignIdsForRep, responseCounts, responsePeople,
+  logMeetingHref,
 } from "../../lib/db";
 import { PersonLink, Pill, Chev, Reps, RangePicker } from "../../components/ui";
 import { classifyReply } from "../conflicts/actions";
@@ -285,6 +286,23 @@ export default async function Replies({ searchParams }) {
                     </form>
                   </div>
                 ))}
+
+                {/* The end of a reply worth having is a meeting, and the only
+                    place that gets recorded is a form on another page. Carry
+                    the name, the address and the campaign into it: the audit's
+                    duplicates were made by retyping them. */}
+                <div className="range" style={{ marginTop: 14 }}>
+                  <a
+                    href={logMeetingHref({
+                      name: p.lead_name,
+                      email: p.lead_email,
+                      company: p.company,
+                      campaign: rows[0]?.campaign_id,
+                    })}
+                  >
+                    Log a meeting with {(p.lead_name || p.lead_email || "them").split(" ")[0]} &rarr;
+                  </a>
+                </div>
               </div>
             </div>
           </details>

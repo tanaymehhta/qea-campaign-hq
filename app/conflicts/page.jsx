@@ -1,6 +1,6 @@
 import { db, num, prettyDate, prettyWhen } from "../../lib/db";
 import { Pill, PersonLink } from "../../components/ui";
-import { classifyReply, recordMeetingDetail } from "./actions";
+import { classifyReply, recordMeetingDetail, mergeMeetings } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +46,22 @@ export default async function Conflicts({ searchParams }) {
   }
 
   const meetingGaps = list.filter((c) => c.kind === "meeting_detail");
+
+  // Two rows for one conversation. The view names the pair and nothing else —
+  // deciding which to keep needs both rows in front of somebody, so fetch them.
+  // A direct read, like the two others in this codebase: this is a lookup of
+  // named rows, not a count, and nothing here feeds a tile.
+  const dupes = list.filter((c) => c.kind === "duplicate_meeting");
+  let dupeRows = [];
+  if (dupes.length) {
+    const ids = [...new Set(dupes.flatMap((c) => [c.subject_id, c.partner_id]).filter(Boolean))];
+    const { data } = await db
+      .from("meetings")
+      .select("id, prospect_name, prospect_email, company, meeting_date, booked_on, status, evidence, note, origin, logged_by, campaign_id, group_id")
+      .in("id", ids);
+    dupeRows = data ?? [];
+  }
+  const meetingById = new Map(dupeRows.map((m) => [m.id, m]));
 
   // A reply that never trips reply_split (Instantly's count can already agree
   // with ours) and never gets classified just sits — including, once, a
@@ -159,6 +175,62 @@ export default async function Conflicts({ searchParams }) {
           </form>
         </div>
       ))}
+
+      {dupes.map((c) => {
+        const pair = [c.subject_id, c.partner_id].map((id) => meetingById.get(id)).filter(Boolean);
+        if (pair.length < 2) return null;
+        return (
+          <div className="card" key={`${c.subject_id}-${c.partner_id}`}>
+            <div style={{ marginBottom: 4, fontWeight: 600 }}>{c.title}</div>
+            <div className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
+              {nameOf.get(c.campaign_id) ?? "No campaign recorded"} · {c.detail}
+            </div>
+
+            {pair.map((m, n) => {
+              const other = pair[n === 0 ? 1 : 0];
+              return (
+                <div className="msg" key={m.id}>
+                  <div className="msg-head">
+                    <div>
+                      <span className="who">
+                        <PersonLink email={m.prospect_email} name={m.prospect_name} fallback="No name recorded" />
+                      </span>
+                      {m.prospect_email ? <span className="dim"> · {m.prospect_email}</span> : null}
+                    </div>
+                    <div className="msg-meta">
+                      <Pill status={m.status} />
+                      <span className="dim">· {prettyDate(m.meeting_date)}</span>
+                    </div>
+                  </div>
+                  <div className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>
+                    {[
+                      m.company,
+                      // Where it came from is the whole basis for choosing. A
+                      // call's meeting is the call's record of the conversation
+                      // and merge_meetings will not drop it.
+                      m.origin === "call"
+                        ? "from a phone call"
+                        : `typed in by ${m.logged_by || "somebody"}`,
+                      m.prospect_email ? null : "no email recorded",
+                      m.booked_on ? `agreed on ${prettyDate(m.booked_on)}` : null,
+                      m.evidence,
+                    ].filter(Boolean).join(" · ")}
+                  </div>
+                  {m.note ? <div className="msg-body">{m.note}</div> : null}
+                  <form action={mergeMeetings} className="choices">
+                    <span className="choices-label">
+                      {m.origin === "call" ? "The call's own record" : "Hand-typed"}
+                    </span>
+                    <input type="hidden" name="keep" value={m.id} />
+                    <input type="hidden" name="drop" value={other.id} />
+                    <button className="choice">Keep this one</button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
 
       {reviewMessages.map((m) => (
         <div className="card" key={m.id}>

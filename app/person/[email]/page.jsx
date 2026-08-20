@@ -1,4 +1,4 @@
-import { db, num, prettyDate, prettyWhen } from "../../../lib/db";
+import { db, num, prettyDate, prettyWhen, logMeetingHref } from "../../../lib/db";
 import { Pill, Tile } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -374,9 +374,23 @@ export default async function Person({ params }) {
         </p>
       )}
 
+      <h2>Meetings</h2>
+      {/* The one thing on this dashboard no tool records, and this page knows
+          everything the form asks for. Decision 0.6 — a meeting logged from
+          here carries the address, so it lands on this person rather than
+          beside them under a slightly different spelling. */}
+      <div className="range" style={{ marginBottom: met.length ? 14 : 0 }}>
+        <a href={logMeetingHref({
+          name,
+          email,
+          company,
+          campaign: who.campaign_id ?? inbound[0]?.campaign_id ?? met[0]?.campaign_id,
+        })}>
+          Log a meeting with {(name || email || "them").split(" ")[0]} &rarr;
+        </a>
+      </div>
       {met.length ? (
         <>
-          <h2>Meetings</h2>
           <div className="card tw">
             <table>
               <thead>

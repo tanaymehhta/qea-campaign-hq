@@ -62,3 +62,23 @@ export async function recordMeetingDetail(formData) {
   });
   done(error, ["/conflicts", "/list"]);
 }
+
+/**
+ * Two rows for one conversation, settled in a click.
+ *
+ * The button says which one is right; the other leaves by `deleted_at` with its
+ * note carried across, because a duplicate was never a meeting that came off —
+ * it was a meeting that was never there (decision 0.1). `merge_meetings`
+ * refuses to drop a meeting that came from a phone call, so the two directions
+ * are not symmetrical and the database is the one that says so.
+ *
+ * Every number that counted the loser moves, so the Overview and the campaign
+ * pages are revalidated alongside this one.
+ */
+export async function mergeMeetings(formData) {
+  const { error } = await db.rpc("merge_meetings", {
+    p_keep: formData.get("keep"),
+    p_drop: formData.get("drop"),
+  });
+  done(error, ["/conflicts", "/meetings", "/list", "/campaigns", "/"]);
+}
