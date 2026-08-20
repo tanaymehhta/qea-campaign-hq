@@ -25,6 +25,7 @@ from reading code.
 | Parity gate | 230 checks, PASS, before and after every change |
 | Baseline at start | 7 meetings · 5 counted · 0 removed · 11 live calls |
 | Baseline at end | 5 meetings · 5 counted · 0 removed · 11 live calls |
+| Corrected after the fact | one more leftover row found and deleted — see §11 |
 
 The meetings figure fell by two because two rows were deleted on Tanay's
 instruction. Both were cancelled, so **the counted KPI did not move**: 5 before,
@@ -337,3 +338,59 @@ HTML, so a rendered string appears in the page source twice — once as markup a
 once as JSON. Stripping everything before the first `<script>` does not isolate
 the markup either; Next puts scripts first. Strip `<script>…</script>` blocks
 with a non-greedy match, then read what is left.
+
+---
+
+## 11 · One more leftover, found by auditing this record against the table
+
+Added 21 Aug, after §10, by an audit that re-read every claim in these three
+documents against the live database rather than against the code.
+
+The table did not match the baseline recorded in §6. It held **six** rows, not
+five, and one of them was in the removed bin:
+
+```
+Ken Day · kenday@irvcon.com · Irvcon Limited
+meeting 20 Aug, status booked, origin manual, campaign resolved to
+Roof Campaign — Mark Dolan
+created  21:54:30
+removed  21:55:03   removed_reason: "test"
+```
+
+Created thirty-three seconds before it was removed, nineteen minutes after the
+last migration of the session, and with `removed_reason` reading `test`. It was
+the new "Log a meeting" flow from `/replies` being exercised — and it worked;
+the campaign it resolved is proof that decision 0.6's person lookup does what it
+was built to do.
+
+**Ken Day is a real prospect**, not a fictional name: he is in `people` and in
+`replies`, and he has an Irvcon Limited reply on the board. So this was a live
+record with the word "test" attached to it, sitting in the bin of the company's
+primary KPI.
+
+Nothing counted moved — it was soft-removed the moment it was made, so the
+Overview read `5 meetings · 4 people · 1 off the phone` throughout, and the
+parity gate was green with it in place. Deleted on Tanay's instruction, the same
+way and for the same reason as the two rows in §5.
+
+`§6` and `MEETINGS_HANDOFF.md §7.3` state the baseline as
+`5 meetings · 5 counted · 0 removed · 11 live calls`. That is true again, and
+measured after the delete:
+
+```
+meetings 5 · counted 5 · removed 0 · phone_calls 20 total, 11 live
+test leftovers in meetings: 0
+```
+
+**The lesson is the one §10 already gives, and it was not followed here.** The
+staged-write trick exists precisely so a flow can be proved without leaving a
+row behind; a real prospect's record is the last place to skip it. Where a live
+row genuinely must be written, `remove_meeting` is not cleanup — it is a
+soft delete that leaves the row in the bin. Deleting by marker is cleanup.
+
+### Still outstanding, deliberately not touched
+
+`phone_calls` holds one soft-deleted row noted `AUDIT TEST cb2` (Nicholas
+Ferrara, deleted 20 Aug 19:09). It is soft-deleted, so it counts nowhere and
+every call reader already honours `deleted_at`. Left alone rather than swept up
+without being asked — the same rule §5 followed.
