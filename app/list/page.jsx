@@ -1,6 +1,6 @@
 import {
   db, num, prettyDate, prettyWhen, windowFrom, shift, today,
-  METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, campaignIdsForRep, listHref,
+  METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, campaignIdsForRep, listHref, pileArgs,
 } from "../../lib/db";
 import { RangePicker, Pill, Seg, PersonLink, ShareDonut, tally } from "../../components/ui";
 
@@ -57,7 +57,7 @@ export default async function List({ searchParams }) {
 
   // The lifetime tables carry no usable per-event date, so a window would
   // silently drop people who really are in the number. Say it instead.
-  const windowed = m.table !== "people" || !!m.dateField;
+  const windowed = m.rpc != null || m.table !== "people" || !!m.dateField;
   const ignoresWindow = !windowed && w.range !== "all";
 
   let rows = [], count = 0;
@@ -68,6 +68,30 @@ export default async function List({ searchParams }) {
   // twenty-five rows you happen to be looking at.
   const build = (cols, forBreakdown = false) => {
     let q;
+    if (m.rpc) {
+      // The one metric backed by a function instead of a table. The tile on the
+      // Overview counts `reached_counts`, which is a wrapper over this exact
+      // call, so the number and this list are the same pile by construction
+      // rather than by two people remembering to write the same predicate.
+      //
+      // Two PostgREST facts, both measured 20 Aug, both cheap to fall into:
+      // the `Range` header is ignored on POST /rpc (`.range()` sends
+      // limit/offset params, so it is fine), and ordering by a column that is
+      // not in `select` fails on a set-returning function — which is why the
+      // breakdown query asks for its ordering column too.
+      q = db.rpc(m.rpc, pileArgs({
+        from: w.range === "all" ? null : w.from,
+        to: w.range === "all" ? null : w.to,
+        campaignIds: scopeIds,
+        source: null,
+      }), { count: "exact" });
+      if (cols) q = q.select(`${cols}, last_contacted_at`);
+      q = q.order("last_contacted_at", { ascending: false, nullsFirst: false });
+      // Scope is an argument to the function, not a filter on its output, so
+      // a person in two campaigns is still found by the campaign that is not
+      // the one they were first reached through.
+      return q;
+    }
     if (m.table === "activities") {
       q = db.from("activities")
         .select(cols ?? "id, campaign_id, source, event_type, occurred_at, email, name, company", { count: "exact" })

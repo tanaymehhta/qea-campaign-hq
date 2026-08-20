@@ -1,8 +1,8 @@
 # Handoff — Overview dashboard, the response→meeting funnel
 
-Written 20 August 2026, end of session. Everything below is measured against the live
-Supabase project `yfnqszwlyoyfhuwfmcyl`, not inferred from code. `main` is at `275aff9`,
-pushed, and deployed to https://qea-campaign-hq.vercel.app.
+Written 20 August 2026, end of session; **amended the same evening** — see §2 and §5b,
+where "People reached" stopped being Instantly-only. Everything below is measured against
+the live Supabase project `yfnqszwlyoyfhuwfmcyl`, not inferred from code.
 
 Read this, then `TRUST_OPEN.md` (live decision register) and `RESPONSE_PILE.md` (how the
 response pile was built). `TRUST.md` is a frozen 18 August snapshot — architecture, not
@@ -34,18 +34,29 @@ that one definition. Not in a React render, where a second page cannot call it.
 | `bbfdb96` | lemlist's inbox rescued before the subscription ended; 135 replies read and labelled by Tanay; five answer categories collapsed to three. |
 | `e247272` | QEA Resellers + LBER reassigned from Tanay to Mark Vasu. Four reps → three. |
 | `275aff9` | docs |
+| *(this session)* | `reached_people` / `reached_counts` — People reached becomes a headcount of humans across **both** tools. The tile said 1,839 and its own click opened 2,393. T4 in `TRUST_OPEN.md`. |
 
 Migrations: `20260820120000` (the definition), `20260820160000` (the lemlist rescue),
-`20260820180000` (the rep move).
+`20260820180000` (the rep move), `20260820200000` (people reached, both tools).
 
-**Live numbers, all time, all reps:**
+**Live numbers, all time, all reps, scraped from the tiles:**
 
 ```
-People reached  1,839
-Total responses    31   =  15 interested + 16 not interested
-Interested         15   =  48.4% of the 31 who replied
-Meetings booked     5
+People reached  2,393   =  1,839 Instantly + 554 lemlist
+Total responses    32   =  16 interested + 16 not interested
+Interested         16   =  50% of the 32 who replied
+Meetings booked     5   (4 distinct people — still unfixed, §5a)
 ```
+
+Two of those moved after the body of this handoff was written and neither is a bug in the
+code:
+
+- **People reached 1,839 → 2,393.** The 554 are lemlist, they were always in `people`, and
+  the click had been opening them the whole time. §5b and `TRUST_OPEN.md` §7.
+- **Responses 31 → 32, interested 15 → 16.** Tanay labelled Ken Day (Irvcon, "Re:
+  Retirement") **interested** at 15:32 on 20 Aug, where §5c below had proposed Automatic.
+  Worth a second look — the message is a retirement notice — but it is a human label and
+  nothing may overwrite it without asking him.
 
 ### The vocabulary, settled by Tanay after reading all 135 replies himself
 
@@ -71,6 +82,12 @@ summing to the whole. Preserve that property.
 ## 3. The API you will build on
 
 ```sql
+reached_people(p_from date, p_to date, p_campaigns uuid[], p_source text)
+-- one row per person ever emailed: id, campaign_id, source, email, name, company,
+--   status, sent_count, opened_count, clicked_count, replied_count, bounced,
+--   first_contacted_at (corrected — see below), last_contacted_at
+reached_counts(same args)      -- people, instantly, lemlist
+
 response_people(p_from date, p_to date, p_campaigns uuid[], p_source text)
 -- one row per person: lead_email, lead_name, company, sources[], labels[], msgs,
 --   first_at, last_at, responded, interested, needs_label, robot_only
@@ -79,7 +96,15 @@ response_counts(same args) -- people, responded, interested, needs_label, robot_
 
 - `p_from`/`p_to` are **inclusive New York calendar dates**; NULL = unbounded. They match
   `v_daily_facts.metric_date`, which is why the window boundaries are not UTC.
-- `p_source`: `'instantly'`, `'lemlist'`, or NULL for both. **Both tiles use NULL now.**
+- `p_source`: `'instantly'`, `'lemlist'`, or NULL for both. **Every tile uses NULL now.**
+  It defaults to `'instantly'` on the response pair and to NULL on the reached pair: the
+  Instantly default existed to protect a rate's denominator, and `reached_people` **is**
+  that denominator.
+- `reached_people` dates a person by `least(stored first contact, earliest surviving send)`.
+  Instantly's API never exposes first-touch — the sync writes `timestamp_last_contact` —
+  so before the 6 Aug trigger a July person could be stored as 4 August. The `least` cuts
+  the misdated cohort from 1,171 people to 423. All-time totals are exact either way;
+  lemlist's dates were always exact. Full measurement in `TRUST_OPEN.md` §7.
 - `p_campaigns`: NULL = everything the anon key can see. A rep's scope is resolved to
   campaign ids first — `campaignIdsForRep()` in `lib/db.js` is the only thing that should
   know a rep owns groups rather than campaigns.
@@ -90,10 +115,16 @@ response_counts(same args) -- people, responded, interested, needs_label, robot_
 Call them **only** through `lib/db.js`:
 
 ```js
+reachedCounts(scope)                     // -> {people, instantly, lemlist}
 responseCounts(scope)                    // -> {people, responded, interested, needs_label, robot_only}
 responsePeople(scope, {pile, limit, offset, tag, search})
 PILES                                    // responded | interested | not_interested | needs_label | all
+pileArgs(scope)                          // the four RPC args, so /list builds them the same way
 ```
+
+There is deliberately **no** `reachedPeople()` helper: `/list?metric=contacted` calls the
+RPC itself through `pileArgs`, because it needs the exact count and the status breakdown
+too, and two ways into one function is how two definitions start.
 
 `responseCounts` returns **nulls on error, never zeros** — `num(null)` renders an em dash,
 so a failed read reaches the screen as "—" rather than as "nobody wrote back". Keep that
@@ -115,6 +146,7 @@ pattern in anything you add.
 | file | why it matters |
 |---|---|
 | `app/page.jsx` | Overview. Tiles ~line 400. `scope` object ~line 110 — the four args the tile counts with. `pileHref()` carries window+rep into the URL. |
+| `app/list/page.jsx` | Every drill-down. `build()` has one `m.rpc` branch — the only metric whose list is a function, `contacted`. Chain `.select()` **before** `.order()` there. |
 | `app/replies/page.jsx` | One row per **person**, messages nested inside. `VIEWS` = the piles. Buttons are per **message** (see §6). |
 | `lib/db.js` | `windowFrom`, `repList`, `campaignIdsForRep`, `everyRow`, `dailyRange`, `PILES`, `responseCounts`, `responsePeople`, `METRICS`, `listHref`. |
 | `components/ui.jsx` | `Tile` (`raw` → `data-count`), `Reps`, `RangePicker`, `Pill`. |
@@ -166,33 +198,50 @@ before adding them — `meetings` is hand-kept and its accuracy is the point of 
 This is the shape Tanay is after. Today it is four tiles that do not visibly relate:
 
 ```
-People reached 1,839  →  Total responses 31  →  Interested 15  →  Meetings 5
+People reached 2,393  →  Total responses 32  →  Interested 16  →  Meetings 5
 ```
+
+Each of those four is now a headcount of humans from both tools, and each one opens onto
+exactly the people it counted. That was not true of the first tile this morning and is
+still not true of the last one (§5a).
 
 **Two things are true about that chain and both need handling honestly:**
 
 1. **It is not a strict funnel.** 2 of the 5 meetings (Krishnan Gowri, Baris Acar) have **no
    reply row at all** — they came from calls or channels outside the sequence. So
    "meetings ⊂ interested" is false, and a funnel chart drawn as nested subsets would lie.
-2. **`People reached` is Instantly-only.** lemlist never wrote `new_leads_contacted` — 0
-   across all 234 of its campaign-days. Responses are now **both vendors**. So
-   `31 ÷ 1,839` is not a rate; its numerator and denominator are different populations.
-   This is the single most repeated fault in `TRUST_OPEN.md` §1 — do not compute it.
+2. **~~`People reached` is Instantly-only.~~ FIXED this session — and the reason it was
+   ever true is worth keeping.** lemlist never wrote `new_leads_contacted`: 0 across all
+   234 of its campaign-days, which is why every document here says "lemlist never reported
+   people reached". That sentence is true of the **daily notebook** and false of the
+   **per-person table**, where lemlist's 554 have been sitting since June, dated from its
+   own activity stream. Nobody had drawn the distinction, so the front of the funnel stayed
+   one vendor short of the responses beside it — and the tile's own click had been opening
+   all 2,393 the whole time.
 
-   This is exactly why the Interested tile divides by **responses**, not by people reached:
-   `15 of the 31 who replied`. One pile on both sides.
+   `reached_counts` now answers it for both tools, and the two lemlist groups that used to
+   read **zero** — QEA Resellers 472, LBER 82, both Mark Vasu's — read their real numbers.
 
-So: a response→interested→meeting progression is honest **within** the responses pile. A
-reached→response rate is not, while lemlist is in the count. If Tanay wants that top rate,
-the options are (a) an Instantly-only sub-view where the denominator exists, or (b) show
-reached as context, not as a denominator. Recommend, don't silently pick.
+   **So a top-of-funnel rate is now computable, and it is still not free.** 32 ÷ 2,393 is
+   1.3%, but **2 of the 32 responders are not in the reached pile**: Ben Myers (a LinkedIn
+   connection accept — lemlist multichannel, never emailed) and John Forester (replied from
+   an address `people` has never held). Both are real answers from real humans. So the
+   honest sentence is "32 people wrote back, 30 of them from the 2,393 we emailed", not a
+   clean percentage. Decide that wording with Tanay before printing a rate; the Interested
+   tile's `16 of the 32 who replied` remains exact because both sides are one pile.
 
-### 5c. One click of housekeeping
+So: a response→interested→meeting progression is honest **within** the responses pile, and
+reached→response is now honest to within two named people who came in off-channel — the
+same shape as the two meetings that came from calls. A funnel drawn as nested subsets would
+still lie at both ends; a funnel that names its leaks would not.
 
-`1 still to read` on the live tile — **Ken Day, Irvcon Limited**, arrived 15:10 UTC on
-20 Aug via the Roof Campaign. It is a retirement notice ("as of April 30, 2025, I am
-retiring"). `looksAutomatic()` missed it because the subject carries no out-of-office
-signal. Answer is **Automatic**, one click on `/replies?view=needs_label`.
+### 5c. ~~One click of housekeeping~~ — done, differently
+
+`1 still to read` was **Ken Day, Irvcon Limited**, 15:10 UTC on 20 Aug via the Roof
+Campaign, a retirement notice ("as of April 30, 2025, I am retiring"). This section
+proposed **Automatic**. Tanay clicked **Interested** at 15:32, which is why Total responses
+reads 32 and Interested 16. `needs_label` is 0 either way. Flagged in §2 for a second look
+and left alone: it is a human label.
 
 Do **not** "fix" `looksAutomatic()` to catch retirement notices without asking. A regex
 guessing harder is how 109 lemlist replies became unreadable robots in the first place. One
@@ -248,6 +297,9 @@ Useful SQL lives in `TRUST_OPEN.md` §9 (Q6 is the response definition, by hand)
 
 ## 8. Still open, ranked
 
+0. **Nothing from this session is half-finished.** T4 shipped whole: definition, tile,
+   per-group column, drill-down, docs, 19 scopes and 12 group cells verified. The next
+   thing on the Overview is §5a, Meetings.
 1. **T1 · `/campaigns` "Reply %"** — the last known-wrong number on the site. Renders
    `pct(replied, leads)` in three places including the sort comparator; `leads` is imported
    list size, and sends-per-lead swings 5× between groups (Chicago 3.8, Mark Dolan 0.7).
@@ -263,10 +315,16 @@ Useful SQL lives in `TRUST_OPEN.md` §9 (Q6 is the response definition, by hand)
    truncated body. Nobody counted how many. **The API is gone, so this can no longer be
    measured** — it is now a known unknown, recorded here so it is not mistaken for
    completeness.
-5. **Two "Mark" chips.** `components/ui.jsx:67` renders `r.name.split(" ")[0]`, so Mark Vasu
+5. **`/leads` says "SENT 1,536 · Confirmed in Instantly/lemlist".** It is the human
+   `status` column off the source spreadsheets, not vendor confirmation — the tools say
+   2,393. 49 rows marked `sent` have no send in either tool; 906 people with a real send
+   are not marked `sent`; and the three tiles sum to 1,970 against a total of 2,780 because
+   810 people were never on a spreadsheet at all. Q7 in `TRUST_OPEN.md` §8. Same family as
+   T4, one page over, and the next-largest lie on the site now.
+6. **Two "Mark" chips.** `components/ui.jsx:67` renders `r.name.split(" ")[0]`, so Mark Vasu
    and Mark Dolan both read "Mark", separated only by avatar initials and subtitle. More
    confusing now that one owns three of five groups. ~15 minutes.
-6. `OUTCOME_PRIORITY` in `app/calls/actions.js:43` contradicts its own comment — see
+7. `OUTCOME_PRIORITY` in `app/calls/actions.js:43` contradicts its own comment — see
    `PROGRESS.md`.
 
 ---

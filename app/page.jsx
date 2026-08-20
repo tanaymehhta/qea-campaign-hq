@@ -1,6 +1,6 @@
 import {
   db, dailyRange, mailboxRange, today, shift, num, pct, windowFrom, prettyDate,
-  EMPTY, addInto, listHref, repList, responseCounts,
+  EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
 } from "../lib/db";
 import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
 
@@ -146,6 +146,44 @@ export default async function Overview({ searchParams }) {
   // mix of vendors is in scope, which is the whole reason for the swap.
   const interestedRate =
     pile.interested == null || !pile.responded ? null : pct(pile.interested, pile.responded);
+
+  // ----------------------------------------------------------------- reached
+  //
+  // The front of the same funnel, and until today the same fault one tile over.
+  //
+  // This tile read `overall.new_leads_contacted` — the daily notebook — while
+  // its own href opened `/list?metric=contacted`, which reads `people`. The
+  // notebook is Instantly-only, because lemlist never wrote that column; the
+  // people table has both vendors. So the tile said 1,839 and the click opened
+  // 2,393, and the 554 in between were every lemlist human we have ever
+  // emailed. Measured 20 Aug by scraping the tile and following its own link.
+  //
+  // "lemlist never reported people reached" is written in every document here
+  // and it is only half true: not in the notebook, yes in the per-person table,
+  // where its dates were rebuilt from the activity stream. Nobody had drawn the
+  // distinction, so the number stayed one vendor short of the responses it
+  // sits next to.
+  //
+  // `reached_counts` is a wrapper over `reached_people`, which is what the list
+  // behind this tile now calls. Same scope object as the response pile above,
+  // so both ends of the funnel are windowed, scoped and vendored identically.
+  const reached = await reachedCounts(scope);
+  // The same question per group, asked of the same function. A column that
+  // summed a different definition from the tile above it is exactly how a page
+  // ends up disagreeing with itself.
+  const reachedByGroup = new Map(
+    await Promise.all(
+      shownGroups.map(async (g) => [
+        g.id,
+        (
+          await reachedCounts({
+            ...scope,
+            campaignIds: (campaigns ?? []).filter((c) => groupOf.get(c.id) === g.id).map((c) => c.id),
+          })
+        ).people,
+      ])
+    )
+  );
 
   // ------------------------------------------------------------------ opened
   //
@@ -380,13 +418,13 @@ export default async function Overview({ searchParams }) {
         <Tile
           hero
           label="People reached"
-          value={num(overall.new_leads_contacted)}
-          raw={overall.new_leads_contacted}
-          tone={overall.sent > 50 && overall.new_leads_contacted === 0 ? "bad" : undefined}
+          value={num(reached.people)}
+          raw={reached.people ?? undefined}
+          tone={overall.sent > 50 && reached.people === 0 ? "bad" : undefined}
           note={
-            overall.sent > 50 && overall.new_leads_contacted === 0
+            overall.sent > 50 && reached.people === 0
               ? "All sends are follow-ups — no new people entered"
-              : "First touches, not follow-ups"
+              : `First touches — ${num(reached.instantly)} Instantly · ${num(reached.lemlist)} lemlist`
           }
           href={drill("contacted")}
         />
@@ -563,7 +601,7 @@ export default async function Overview({ searchParams }) {
                   <td className="name"><a className="drilled" href={`/campaigns/${g.slug}`}>{g.display_name}</a></td>
                   <td><span className={`pill p-${status}`}>{status.replace(/_/g, " ")}</span></td>
                   <DrillCell v={m.sent} href={drill("sent", { group: g.slug })} />
-                  <DrillCell v={m.new_leads_contacted} href={drill("contacted", { group: g.slug })} />
+                  <DrillCell v={reachedByGroup.get(g.id) ?? null} href={drill("contacted", { group: g.slug })} />
                   <DrillCell v={gBounced} href={drill("bounced", { group: g.slug })} />
                   <BounceCell bounced={gBounced} base={m.sent} />
                   <DrillCell v={opensByGroup.get(g.id) ?? null} href={drill("opened", { group: g.slug })} />
@@ -576,7 +614,7 @@ export default async function Overview({ searchParams }) {
             <tr className="tot">
               <td>Total</td><td />
               <td>{num(overall.sent)}</td>
-              <td>{num(overall.new_leads_contacted)}</td>
+              <td>{num(reached.people)}</td>
               <td>{overallBounced == null ? "—" : num(overallBounced)}</td>
               <td>{overallBounced != null && overall.sent ? `${pct(overallBounced, overall.sent)}%` : "—"}</td>
               <td>{trackedSent ? num(uniqueOpens) : "\u2014"}</td>

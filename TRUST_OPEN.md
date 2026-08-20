@@ -20,9 +20,10 @@ cold: read §1 and §2, then the `OPEN` and `DECIDED` entries. That is enough to
 4. [T1 · OPEN · `/campaigns` "Reply %"](#4-t1--open--campaigns-reply-)
 5. [T2 · SHIPPED · Homepage Total responses + Interested](#5-t2--shipped--homepage-total-responses--interested)
 6. [T3 · SHIPPED · Three answers, both vendors](#6-t3--shipped--three-answers-both-vendors)
-7. [Reported, not yet written up](#7-reported-not-yet-written-up)
-8. [House rules for anything that lands here](#8-house-rules-for-anything-that-lands-here)
-9. [The queries behind this file](#9-the-queries-behind-this-file)
+7. [T4 · SHIPPED · Homepage People reached](#7-t4--shipped--homepage-people-reached)
+8. [Reported, not yet written up](#8-reported-not-yet-written-up)
+9. [House rules for anything that lands here](#9-house-rules-for-anything-that-lands-here)
+10. [The queries behind this file](#10-the-queries-behind-this-file)
 
 ---
 
@@ -214,7 +215,7 @@ tile exactly, and is the whole company's measured interest. There are 26 lemlist
 all count as replies, correctly. They move the **interest** number, not this one. See
 Q5 below.
 
-**Verify.** Query 3 in §8.
+**Verify.** Query 3 in §10.
 
 ---
 
@@ -243,7 +244,7 @@ email. The sync guesses robots from subject/body (`looksAutomatic` in
 interest field is currently ignored. Treating those five words as vendor truth would
 rebuild the lie in a new place.
 
-**Measured.** Not re-counted for this write-up; the live split is Query 6 in §8. The
+**Measured.** Not re-counted for this write-up; the live split is Query 6 in §10. The
 shape, already known:
 
 - Homepage tile = distinct Instantly people after dropping `auto_reply` and
@@ -384,7 +385,7 @@ So:
    Instantly person (`lower(lead_email)`) with `bool_or` on the labels, scoped by
    `received_at` and campaign membership so date and rep filters are real. The per-person
    rollup is what catches two messages from one human, and what lets one `interested` win.
-   Query 6 in §8 is the all-time, all-reps version.
+   Query 6 in §10 is the all-time, all-reps version.
 2. **Homepage asks for counts.** `/replies` asks for those same people, paged. Both call
    the same helper. If the tile says 12, the list is those 12. The number, the click, and
    the list are one pile.
@@ -430,7 +431,7 @@ explains why. His 28 Jul message is already `interested`, so he is already in In
   and a different rule on unclassified.
 - Invent a `replies_totals` table.
 
-**Verify.** Query 6 in §8. Then click each tile and count the rows. If the list does not
+**Verify.** Query 6 in §10. Then click each tile and count the rows. If the list does not
 match the tile, it is not done.
 
 ---
@@ -478,12 +479,100 @@ the `/replies` filter both, so the parts cannot stop summing to the whole.
 **What this made visible.** `rep=Tanay` read an em dash before this and now reads **22
 responses, 12 interested**. He owns the lemlist groups. His work was not being counted.
 
-**Verify.** Query 6 in §8, with `p_source` null. Then click each tile and count the rows —
+**Verify.** Query 6 in §10, with `p_source` null. Then click each tile and count the rows —
 18 scopes checked, all matching.
 
 ---
 
-## 7. Reported, not yet written up
+## 7. T4 · SHIPPED · Homepage People reached
+
+**Symptom.** The first tile of the funnel said **1,839**. Clicking it opened **2,393**
+people. Nobody had noticed, because both numbers are true answers to different questions
+and neither page shows the other's.
+
+**Measured, 20 August 2026**, by the §7 method in `NEXT_AGENT.md` — scrape the tile's
+number *and its own href*, follow the href, count the rows:
+
+```
+tile  "People reached"  1,839    href  /list?metric=contacted&range=all
+click                   2,393 people        gap 554, every one of them lemlist
+```
+
+| | Instantly | lemlist | both |
+|---|---:|---:|---:|
+| People with a first contact, all time | 1,839 | 554 | **2,393** |
+| `sum(new_leads_contacted)`, all 525 campaign-days | 1,839 | **0** | 1,839 |
+
+**Why it is wrong.** The number came from the daily notebook and the list came from
+`people`. lemlist writes one and not the other. Every document in this repo records that as
+*"lemlist never reported people reached"* — which is true of `new_leads_contacted` and
+false of `people.first_contacted_at`, where lemlist's 554 have been sitting since June,
+dated from its own activity stream. The distinction had never been written down, so the
+denominator of the whole funnel stayed one vendor short of the responses beside it.
+
+**Options.**
+
+- **A · Move the click to the notebook.** Impossible, and worth stating so nobody retries
+  it: `new_leads_contacted` is a count per campaign-day with no names in it. A tile fed by
+  it can never open onto the people it counted.
+- **B · Move the number to `people`.** The pile that can be listed decides, which is the
+  one-pile rule. Taken.
+- **C · Leave it, show a vendor split.** Rejected: it explains a broken tile instead of
+  fixing it.
+
+**The dating problem inside option B, and Tanay's choice.** Instantly's API never exposes
+first-touch. The sync writes `timestamp_last_contact` into `first_contacted_at`, and until
+the trigger in `20260806185524` it was overwritten every 30 minutes — so someone first
+emailed on 21 July who got a follow-up on 4 August is stored as 4 August. All time is
+unharmed. A window is not.
+
+| dating rule | Instantly people misdated | where they land |
+|---|---:|---|
+| stored date, raw | 1,171 of 1,839 | smeared onto 3–6 Aug, from all of July |
+| **`least(stored, earliest surviving send)`** | **423** | ~6 days late, same July fortnight |
+| refuse a window, lifetime only | 0 | throws away lemlist's exact dates too |
+
+Chosen 20 August: **`least`**. Not exact and not claimed to be — Instantly's activity feed
+also keeps only a lead's most recent send, which is why 423 survive; they sit on 27–28 July
+against a notebook that says 20–21 July, and the two errors cancel to the row. lemlist and
+post-6-Aug Instantly are exact and do not move.
+
+**Decision — SHIPPED 20 August 2026**, migration `20260820200000`. `reached_people` /
+`reached_counts`, the same four arguments as the response pair, `security invoker` for the
+same reason. The Overview tile, the per-group *First touches* column and
+`/list?metric=contacted` all call it. One row per **person**, not per (person, campaign) —
+the grain the Meetings tile still gets wrong.
+
+**What it does to the numbers**
+
+| | before | after |
+|---|---:|---:|
+| People reached, all time | 1,839 | **2,393** |
+| Chicago Retrofit | 937 | 937 |
+| **QEA Resellers** | **0** | **472** |
+| **LBER — Boston** | **0** | **82** |
+| Roof Campaign — Mark Dolan | 498 | 498 |
+| Canada — Justin's list | 404 | 404 |
+| 4 Aug, single day | 0 | 0 |
+
+The two groups that moved are the two that ran on lemlist, and both of them read **zero**.
+937 + 498 + 404 = 1,839 exactly: the old tile was not undercounting lemlist, it could not
+see it at all. Mark Vasu owns both — the same rep whose responses were invisible until
+`bbfdb96`, now the rep whose 554 emailed people were invisible too.
+
+**Verify.** Query 7 in §10. Then the scrape: 19 window/rep scopes and 12 group cells
+checked on 20 August, tile equals click in every one, and the group cells sum to the tile
+exactly (2,393 all time, 2,028 last 30 days, 366 on 28 July). Reps sum too:
+1,491 + 498 + 404 = 2,393.
+
+**What this does not fix.** `/leads` still says **SENT 1,536 · "Confirmed in
+Instantly/lemlist"**. That is the human `status` column typed on the source spreadsheets,
+not vendor confirmation — 49 of those rows have no send in either tool and 906 people with
+a real send are not marked `sent`. Same family, one page over. Q7 in §8.
+
+---
+
+## 8. Reported, not yet written up
 
 Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it is worked.
 
@@ -507,6 +596,12 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
   The bodies can only be pulled via `get_inbox_conversation`; the `/activities` feed the
   sync uses carries `messagePreview` only. Not an engineering task, and the highest-value
   item on this page.
+- **Q7 · `/leads` "SENT 1,536 · Confirmed in Instantly/lemlist" is not vendor
+  confirmation.** It is the human `status` column typed on the source spreadsheets. The
+  tools say **2,393** (T4). Measured 20 Aug: 49 rows marked `sent` have no send in either
+  tool, and 906 people with a real send are not marked `sent`. The three status tiles also
+  do not sum to Total people — 1,536 + 420 + 14 + **810 with no status at all** = 2,780 —
+  which is honest but reads as arithmetic that failed. Same family as T4, one page over.
 - **Q6 · `unclassified` carries two meanings.** "Read it, genuinely cannot tell" (Bharat's
   two, per `20260818205745`) and "never read, the body was a 60-char preview" (all 26
   lemlist). Both correctly count as replies under C′, so this blocks nothing today — but
@@ -514,7 +609,7 @@ Raised, real, not yet measured or decided. Each becomes a `T<n>` entry when it i
 
 ---
 
-## 8. House rules for anything that lands here
+## 9. House rules for anything that lands here
 
 Earned from the entries above, not asserted.
 
@@ -539,7 +634,7 @@ Earned from the entries above, not asserted.
 
 ---
 
-## 9. The queries behind this file
+## 10. The queries behind this file
 
 Run against `yfnqszwlyoyfhuwfmcyl`. Do not take this file's word for anything.
 
@@ -639,3 +734,33 @@ select
   count(*) filter (where only_robot)        as robots_only
 from p;
 ```
+
+**Q7 — T4 people reached, by hand, without the function.** The point of writing it out is
+that the tile must not be the only thing that can answer this. Two columns, and the second
+is the one lemlist can populate.
+
+```sql
+-- the notebook: what the tile used to read. lemlist's half is structurally 0.
+select c.source, sum(d.new_leads_contacted) as notebook
+from daily_metrics d join campaigns c on c.id = d.campaign_id and not c.hidden
+group by 1;
+
+-- the people: what it reads now, dated the way reached_people dates them.
+with first_send as (
+  select a.source as src, lower(a.email) as em, min(a.occurred_at) as sent_at
+  from activities a where a.event_type = 'sent' and a.email is not null
+  group by 1,2
+)
+select p.source, count(distinct lower(p.email)) as people
+from people p
+join campaigns c on c.id = p.campaign_id and not c.hidden
+left join first_send f on f.em = lower(p.email) and f.src = p.source
+where p.first_contacted_at is not null
+  -- and least(p.first_contacted_at, coalesce(f.sent_at, p.first_contacted_at))
+  --     >= '2026-07-22'::timestamp at time zone 'America/New_York'   -- for a window
+group by 1;
+```
+
+Expect `instantly 1,839 / lemlist 0` from the first and `instantly 1,839 / lemlist 554`
+from the second. The 1,839 appearing on both sides is what says the two are the same
+population differently dated, rather than two populations that happen to be close.
