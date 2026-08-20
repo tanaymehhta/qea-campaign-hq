@@ -63,32 +63,31 @@ function ContextSections({ text }) {
 const GLYPH_TINT = {
   booked_meeting: ["var(--tint-3)", "var(--good)"],
   follow_up: ["var(--tint-1)", "var(--s1)"],
-  left_voicemail: ["var(--tint-1)", "var(--s1)"],
-  left_email: ["var(--tint-1)", "var(--s1)"],
 };
 
-// Just the checkbox row's reading order. logCall decides insert order (and
-// so which outcome wins the row's status pill) from its own priority list,
-// not from this — this list used to double as both, which put "Booked a
-// meeting" right next to the Log call button and made it a one-click
-// misclick away from every voicemail drop.
+// The four. One call ends one way, so these are radio buttons: pick one, press
+// Log call, that is one call on the Overview — and if it is the first one,
+// one meeting too.
+//
+// There were seven until 20 Aug 2026, and three of them ("No answer", "Left
+// voicemail", "Left email") were one fact written three ways. Whether you left
+// a message is a sentence in the note, not a category the dashboard counts.
+// "Booked a meeting" is last so it is not one misclick from the Log call
+// button, which is where it sat when it was a checkbox.
 const OUTCOMES = [
-  ["booked_meeting", "Booked a meeting"],
+  ["not_reached", "Didn't reach them"],
   ["follow_up", "Follow up"],
   ["not_interested", "Not interested"],
-  ["no_answer", "No answer"],
-  ["left_voicemail", "Left voicemail"],
-  ["left_email", "Left email"],
-  ["other", "Other"],
+  ["booked_meeting", "Booked a meeting"],
 ];
 
 const FILTERS = {
   called: "with at least one call",
-  reached: "reached — a live conversation, not just a voicemail or email",
+  reached: "you got through to",
   meetings: "with a meeting booked",
   due: "with a follow-up due",
   never: "never called",
-  noanswer: "called but never reached",
+  notreached: "called but never reached",
   notint: "not interested",
   dnc: "do-not-call",
 };
@@ -245,14 +244,14 @@ export default async function CallWorkspace({ params, searchParams }) {
       {/* Data summary — every tile filters the list beneath it. */}
       <div className="grid g4">
         <Tile hero label="Calls made" value={num(s.callsMade)} raw={s.callsMade}
-          tone={s.callsMade ? undefined : "muted"} note="every dial, logged below" href={here("called")} />
+          tone={s.callsMade ? undefined : "muted"} note="one per call logged, whatever the outcome" href={here("called")} />
         {/* Was "People reached", which is now the Overview's name for a wider
             pile — anyone we emailed or dialled, whatever happened (20 Aug).
             This one has always meant the narrower fact: a human picked up. Two
             definitions one click apart under one name is the whole bug, so the
             name moved rather than the meaning. */}
         <Tile hero label="Spoke to someone" value={num(s.peopleReached)} raw={s.peopleReached}
-          tone={s.peopleReached ? undefined : "muted"} note="a live conversation — voicemails and emails left don't count" href={here("reached")} />
+          tone={s.peopleReached ? undefined : "muted"} note="the three outcomes that aren't &ldquo;didn't reach them&rdquo;" href={here("reached")} />
         <Tile hero label="Meetings booked" value={num(s.meetingsBooked)} raw={s.meetingsBooked}
           tone={s.meetingsBooked ? undefined : "muted"} note="the same rows the Overview counts" href={here("meetings")} />
         <Tile hero label="Follow-ups due" value={num(s.followupsDue)} raw={s.followupsDue}
@@ -260,8 +259,11 @@ export default async function CallWorkspace({ params, searchParams }) {
       </div>
       <div className="grid g5" style={{ marginBottom: 30 }}>
         <Tile label="Never called" value={num(s.neverCalled)} raw={s.neverCalled} href={here("never")} />
-        <Tile label="No answer" value={num(s.noAnswer)} raw={s.noAnswer}
-          tone={s.noAnswer ? undefined : "muted"} note="called, never reached" href={here("noanswer")} />
+        {/* Named after what it counts. It was "No answer" over a pile that
+            also held every voicemail and every email left instead — 6 people,
+            and not one call in this database has ever been a no-answer. */}
+        <Tile label="Didn&rsquo;t reach them" value={num(s.notReached)} raw={s.notReached}
+          tone={s.notReached ? undefined : "muted"} note="called, never got through" href={here("notreached")} />
         <Tile label="Not interested" value={num(s.notInterested)} raw={s.notInterested}
           tone={s.notInterested ? undefined : "muted"} href={here("notint")} />
         <Tile label="Buildings covered" value={num(s.buildingsCovered)} raw={s.buildingsCovered}
@@ -342,7 +344,11 @@ export default async function CallWorkspace({ params, searchParams }) {
                         </div>
 
                         <h2>Log the call</h2>
-                        {/* Three dates, and they are three different facts: the
+                        {/* One call, one outcome, one row. Radios, not
+                            checkboxes: ticking three of them used to post three
+                            rows and count as three calls.
+
+                            Three dates, and they are three different facts: the
                             day you dialled, the day the meeting happens, and the
                             day to ring back. Two of them used to sit here as
                             bare unlabelled boxes and the third did not exist —
@@ -359,7 +365,7 @@ export default async function CallWorkspace({ params, searchParams }) {
                           <span className="outcomes">
                             {OUTCOMES.map(([k, l]) => (
                               <label key={k} className="outcome">
-                                <input type="checkbox" name="outcome" value={k} />
+                                <input type="radio" name="outcome" value={k} required />
                                 {l}
                               </label>
                             ))}

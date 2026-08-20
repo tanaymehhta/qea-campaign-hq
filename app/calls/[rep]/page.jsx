@@ -1,5 +1,5 @@
 import { db, num, prettyDate } from "../../../lib/db";
-import { callRepList, contactsFor, callsFor, callStats } from "../../../lib/calls";
+import { callRepList, contactsFor, callsFor, callStats, meetingsForCalls } from "../../../lib/calls";
 import { Pill, Chev } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,12 @@ export default async function RepCalls({ params }) {
   const enriched = await Promise.all(
     ordered.map(async (c) => {
       const [contacts, calls] = await Promise.all([contactsFor(c.id), callsFor(c.id)]);
-      return { ...c, contacts, stats: callStats(contacts, calls) };
+      // The meetings, so this card counts the same rows the campaign page and
+      // the Overview do. Without them callStats falls back to counting
+      // booked_meeting calls, and a second call confirming one meeting read as
+      // two — the card said 3 where the page behind it said 2.
+      const meetingOf = await meetingsForCalls(calls);
+      return { ...c, contacts, stats: callStats(contacts, calls, meetingOf) };
     })
   );
 

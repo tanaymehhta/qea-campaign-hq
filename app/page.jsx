@@ -3,7 +3,6 @@ import {
   EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
   meetingCounts, meetingArgs,
 } from "../lib/db";
-import { dialCount } from "../lib/calls";
 import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
 
 // A dial needs its person and its day; the campaign behind the contact is the
@@ -376,9 +375,9 @@ export default async function Overview({ searchParams }) {
   const running = scopedCampaigns.filter((c) => c.status === "running").length;
   const meetingCount = meetingPile.meetings;
   const proposalCount = scopedProposals.length;
-  // Dials, not rows: logCall writes one row per ticked outcome, so `.length`
-  // here read 16 for 11 calls. `dialCount` is the same rule the calls workspace
-  // counts with, imported rather than re-stated.
+  // One row per call since 20 Aug: the form posts one outcome, so pressing Add
+  // is what this counts. It used to be one row per ticked checkbox and read 16
+  // for 11 calls.
   //
   // Scoped to the rep who dialled, or to the owner of the call list the contact
   // sits on — `meeting_rows`'s two doors, in the same order. The three July
@@ -387,7 +386,7 @@ export default async function Overview({ searchParams }) {
   const callOwnerOf = (c) =>
     c.rep ?? callCampOwner.get(c.call_contacts?.call_campaign_id) ?? null;
   const scopedCalls = rep === "all" ? (calls ?? []) : (calls ?? []).filter((c) => callOwnerOf(c) === rep);
-  const callCount = dialCount(scopedCalls);
+  const callCount = scopedCalls.length;
   const orphanCalls = (calls ?? []).filter((c) => !c.contact_id).length;
   const bounceRate = overallBounced == null || !overall.sent ? null : pct(overallBounced, overall.sent);
 
@@ -571,9 +570,9 @@ export default async function Overview({ searchParams }) {
           value={num(callCount)}
           raw={callCount}
           tone={callCount ? undefined : "muted"}
-          /* Dials, not outcomes — one call that ended "no answer, left a
-             voicemail" is one number here and two rows in the log below it. */
-          note={`Hand-logged dials, not outcomes${
+          /* One logged call, whatever the outcome. Booked a meeting, follow
+             up, not interested, didn't reach them — all four land here. */
+          note={`Hand-logged, one per call${
             rep === "all" && orphanCalls
               ? ` · ${num(orphanCalls)} on no list yet`
               : ""

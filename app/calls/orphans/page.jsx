@@ -1,5 +1,5 @@
 import { db, num, prettyDate } from "../../../lib/db";
-import { callRepList, dialCount } from "../../../lib/calls";
+import { callRepList } from "../../../lib/calls";
 import { Tile, Pill } from "../../../components/ui";
 import { adoptOrphanCall } from "../actions";
 
@@ -62,11 +62,9 @@ export default async function OrphanCalls({ searchParams }) {
         </div>
       ) : null}
 
-      <div className="grid g4" style={{ marginBottom: 30 }}>
+      <div className="grid g3" style={{ marginBottom: 30 }}>
         <Tile label="Calls with no contact" value={num(orphans.length)} raw={orphans.length}
           tone={orphans.length ? "bad" : "muted"} note="counted on the Overview, on no campaign page" />
-        <Tile label="Dials behind them" value={num(dialCount(orphans))} raw={dialCount(orphans)}
-          tone={orphans.length ? undefined : "muted"} note="one person on one day" />
         <Tile label="With no rep" value={num(orphans.filter((c) => !c.rep).length)}
           raw={orphans.filter((c) => !c.rep).length} tone="muted" note="in nobody's numbers" />
         <Tile label="Call lists to choose from" value={num(lists.length)} raw={lists.length}

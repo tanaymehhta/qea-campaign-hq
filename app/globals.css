@@ -294,8 +294,7 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .p-interested{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
 .p-referral,.p-open{color:var(--warn-ink);border-color:var(--warn-soft)}
 .p-unclassified,.p-auto_reply{color:var(--ink-3);border-style:dashed}
-.p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now,.p-never_called,.p-no_answer,.p-dnc{color:var(--ink-3);border-style:dashed}
-.p-left_voicemail,.p-left_email{color:var(--s1);border-color:color-mix(in srgb,var(--s1) 40%,transparent);border-style:dashed}
+.p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now,.p-never_called,.p-not_reached,.p-dnc{color:var(--ink-3);border-style:dashed}
 
 /* ---- campaign group cards ---- */
 .gcard{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;

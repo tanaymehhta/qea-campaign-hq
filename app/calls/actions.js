@@ -35,46 +35,33 @@ function done(formData, error) {
   redirect(`${path}?${q}${contact ? `#c-${contact}` : ""}`, "replace");
 }
 
-// The order calls go in matters: log_call inserts one row per outcome, and
-// statusOf (the row's pill) reads the newest one — so whichever outcome
-// goes in last wins the display. That has to be a fixed priority, not
-// "whatever order the checkboxes happen to render in" — a voicemail with
-// a stray "booked meeting" click should still show as a voicemail.
-const OUTCOME_PRIORITY = [
-  "left_email", "left_voicemail", "no_answer",
-  "other", "not_interested", "follow_up", "booked_meeting",
-];
-
-// A single dial can end more than one way — "no answer, left a voicemail"
-// is two outcomes, not one. The checkboxes post one row per outcome,
-// sharing the same date/note/callback; log_call's dedup guard keys on
-// outcome too, so this can't double-log any one of them.
+/**
+ * One call in, one row out.
+ *
+ * This used to read `formData.getAll("outcome")` and insert once per ticked
+ * checkbox, so a dial that ended "no answer, left a voicemail, sent the email"
+ * was three rows and counted as three calls — 16 rows for 11 calls. The form
+ * posts a single radio now and there are four of them to choose from.
+ *
+ * The meeting date rides along and is used by exactly one outcome. log_call
+ * refuses a booked_meeting without it — the date of the call is not the date of
+ * the meeting, and treating them as the same day is what put a meeting agreed
+ * on 4 August onto 4 August's board.
+ */
 export async function logCall(formData) {
-  const outcomes = formData.getAll("outcome")
-    .sort((a, b) => OUTCOME_PRIORITY.indexOf(a) - OUTCOME_PRIORITY.indexOf(b));
-  if (!outcomes.length) {
-    return done(formData, new Error("pick at least one outcome"));
-  }
-  // The meeting's own date rides along on every outcome and is used by exactly
-  // one of them. log_call refuses a booked_meeting without it — the date of the
-  // call is not the date of the meeting, and treating them as the same day is
-  // what put a meeting agreed on 4 August onto 4 August's board.
-  for (const outcome of outcomes) {
-    const { error } = await db.rpc("log_call", {
-      p_contact: formData.get("contact_id"),
-      p_rep: formData.get("rep") ?? "",
-      p_call_date: formData.get("call_date"),
-      p_outcome: outcome,
-      p_note: formData.get("note") ?? "",
-      p_callback: formData.get("callback_date") || null,
-      p_meeting_date: formData.get("meeting_date") || null,
-    });
-    if (error) return done(formData, error);
-  }
-  done(formData, null);
+  const { error } = await db.rpc("log_call", {
+    p_contact: formData.get("contact_id"),
+    p_rep: formData.get("rep") ?? "",
+    p_call_date: formData.get("call_date"),
+    p_outcome: formData.get("outcome"),
+    p_note: formData.get("note") ?? "",
+    p_callback: formData.get("callback_date") || null,
+    p_meeting_date: formData.get("meeting_date") || null,
+  });
+  done(formData, error);
 }
 
-/** Fixing a logged call — one row, so one outcome, unlike logCall's checkboxes. */
+/** Fixing a logged call. Same shape as logging one — one row, one outcome. */
 export async function editCall(formData) {
   const { error } = await db.rpc("edit_call", {
     p_call: formData.get("call_id"),
