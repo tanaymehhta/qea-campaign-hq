@@ -2,6 +2,11 @@
 
 Written 10 Aug 2026, to be checked against the next campaign launch.
 
+> Updated 20 Aug 2026: the owner-null problem now has a canary
+> (`v_groups_without_an_owner`, read by `/health`) and a proposal for deriving
+> the owner from the sending mailbox. Both in `ACTIVE_CAMPAIGNS.md`, which also
+> corrects the stale owner names in the table below.
+
 What happens to the dashboard when a campaign is created in Instantly that this
 system has never heard of. Short answer: it arrives on its own within 30
 minutes, and one field — the owner — has to be typed by a person, once.
