@@ -7,6 +7,8 @@ built and what was deliberately left; there is no open work in it.
 
 Companion documents:
 - `MEETINGS_PLAN.md` — the six-phase plan and the six settled decisions.
+- `MEETINGS_RECORD.md` — what was actually done, in order, with every number
+  that was measured while doing it. Read that one to check a claim made here.
 - Migration headers `20260821000000`, `20260821010000`, `20260821020000`,
   `20260821030000`, `20260821040000`, `20260821050000` — the reasoning, in the
   repo's usual place. The last of them carries all six settled decisions.
