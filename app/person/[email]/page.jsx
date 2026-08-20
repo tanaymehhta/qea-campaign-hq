@@ -71,9 +71,13 @@ export default async function Person({ params }) {
       .select("id, campaign_id, source, lead_name, company, subject, body, sentiment, classified_by, received_at")
       .eq("lead_email", email)
       .order("received_at", { ascending: false }),
+    // One of the four readers that has to honour `deleted_at` — a meeting
+    // somebody removed as never having happened must not reappear on the
+    // person's own timeline. Migration 20260821020000.
     db.from("meetings")
       .select("id, campaign_id, prospect_name, company, meeting_date, status, evidence, note")
       .eq("prospect_email", email)
+      .is("deleted_at", null)
       .order("meeting_date", { ascending: false }),
   ]);
 

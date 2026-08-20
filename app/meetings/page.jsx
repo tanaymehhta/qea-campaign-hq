@@ -1,6 +1,8 @@
 import { db, num, prettyDate, today, initials, repList, listHref, meetingArgs } from "../../lib/db";
 import { Tile, Reps, Pill, PersonLink, Chev } from "../../components/ui";
-import { logMeeting } from "./actions";
+import { logMeeting, editMeeting, setMeetingStatus, removeMeeting, restoreMeeting } from "./actions";
+
+const STATUSES = ["booked", "held", "no_show", "cancelled"];
 
 export const dynamic = "force-dynamic";
 
@@ -25,14 +27,22 @@ export default async function Meetings({ searchParams }) {
   const rep = searchParams?.rep ?? "all";
 
   const showAllCalls = searchParams?.calls === "all";
+  // The bin. `meeting_rows` with status "removed" is the only way to see a
+  // removed meeting at all — every other reader filters them out — so this is
+  // a deliberate trip rather than something you can wander into.
+  const showRemoved = !!searchParams?.removed;
 
-  const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }, { data: calls }, { data: callCamps }] = await Promise.all([
+  // Two reads of the same function, because the bin must not empty the tiles.
+  // The live pile always feeds the KPI and the rep strip; the removed pile is
+  // fetched only when the bin is open and is only ever rendered as a list.
+  const [{ groups, reps }, { data: subs }, { data: meetings }, { data: proposals }, { data: calls }, { data: callCamps }, { data: removedRows }] = await Promise.all([
     repList(),
     db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, group_name, group_slug, status, leads, replied, source"),
     db.rpc("meeting_rows", meetingArgs({ status: "all" })),
     db.from("proposals").select("id, campaign_id"),
     db.from("phone_calls").select("*, call_contacts(id, call_campaign_id)").is("deleted_at", null).order("call_date", { ascending: false }),
     db.from("call_campaigns").select("id, slug, display_name, owner"),
+    db.rpc("meeting_rows", meetingArgs({ status: "removed" })),
   ]);
 
   const subById = new Map((subs ?? []).map((s) => [s.campaign_id, s]));
@@ -54,6 +64,11 @@ export default async function Meetings({ searchParams }) {
     ? (subs ?? []).filter((s) => myGroupIds.has(s.group_id))
     : (subs ?? []);
   const myMeetings = known ? allMeetings.filter((m) => m.rep === rep) : allMeetings;
+  const removed = [...(removedRows ?? [])]
+    .filter((m) => !known || m.rep === rep)
+    .sort((a, b) => (b.deleted_at ?? "").localeCompare(a.deleted_at ?? ""));
+  // What the list below renders. The tiles above never read this.
+  const listed = showRemoved ? removed : myMeetings;
   const myProposals = (proposals ?? []).filter(
     (p) => !myGroupIds || myGroupIds.has(groupOfCampaign(p.campaign_id))
   );
@@ -70,6 +85,13 @@ export default async function Meetings({ searchParams }) {
       .filter(counted).length;
 
   const here = (id) => (id === "all" ? "/meetings" : `/meetings?rep=${encodeURIComponent(id)}`);
+  // The bin link, keeping whichever rep is selected.
+  const listHere = (bin) => {
+    const q = new URLSearchParams();
+    if (known) q.set("rep", rep);
+    if (bin) q.set("removed", "1");
+    return `/meetings${q.size ? `?${q}` : ""}`;
+  };
 
   // A phone call's campaign lives on its contact, not the call row itself.
   const callCampById = new Map((callCamps ?? []).map((c) => [c.id, c]));
@@ -142,6 +164,31 @@ export default async function Meetings({ searchParams }) {
           </p>
         </div>
       ) : null}
+      {searchParams?.saved ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <p style={{ margin: 0 }}>
+            Saved. Every number that counts this meeting has moved with it.{" "}
+            <a href={listHere(showRemoved)}>dismiss</a>
+          </p>
+        </div>
+      ) : null}
+      {searchParams?.removed_one ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <p style={{ margin: 0 }}>
+            Removed. It counts nowhere now, and the row is kept with your reason —{" "}
+            <a href={listHere(true)}>see what has been removed</a>, or{" "}
+            <a href={listHere(showRemoved)}>dismiss</a>.
+          </p>
+        </div>
+      ) : null}
+      {searchParams?.restored ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <p style={{ margin: 0 }}>
+            Put back, at the status it had when it was removed.{" "}
+            <a href={listHere(showRemoved)}>dismiss</a>
+          </p>
+        </div>
+      ) : null}
 
       <details className="mrow" style={{ marginBottom: 22 }} open={!!searchParams?.err}>
         <summary>
@@ -194,20 +241,46 @@ export default async function Meetings({ searchParams }) {
       </details>
 
       <h2 style={{ marginTop: 0 }}>
-        {known ? `Meetings booked by ${rep}` : `All meetings — ${num(allMeetings.filter(counted).length)} booked or held, ever`}
+        {showRemoved
+          ? "Removed — meetings that were never meetings"
+          : known ? `Meetings booked by ${rep}` : `All meetings — ${num(allMeetings.filter(counted).length)} booked or held, ever`}
       </h2>
-      {myMeetings.length > kpiMeetings.length ? (
+      {showRemoved ? (
+        <p className="sub" style={{ marginTop: -6 }}>
+          Taken off the board as mistakes, not as cancellations — a meeting that was
+          real and came off is cancelled instead, and stays in the list above. Nothing
+          here counts anywhere. Put one back and it returns to the status it had.
+        </p>
+      ) : myMeetings.length > kpiMeetings.length ? (
         <p className="sub" style={{ marginTop: -6 }}>
           {num(myMeetings.length - kpiMeetings.length)} cancelled or no-show meeting
           {myMeetings.length - kpiMeetings.length === 1 ? " is" : "s are"} listed below but not counted.
         </p>
       ) : null}
 
-      {!myMeetings.length ? (
-        <div className="card"><p className="empty" style={{ padding: 0 }}>No meetings logged against this rep yet.</p></div>
+      {/* The bin is a deliberate trip: no other reader can see a removed
+          meeting, so the only way in is this link, and it only appears when
+          there is something behind it. */}
+      {removed.length || showRemoved ? (
+        <div className="segrow">
+          <span className="note">
+            {showRemoved
+              ? `${num(removed.length)} removed.`
+              : `${num(removed.length)} meeting${removed.length === 1 ? " has" : "s have"} been removed as mistakes.`}
+          </span>
+          <a className="choice" href={listHere(!showRemoved)}>
+            {showRemoved ? "Back to the board" : "Show removed"}
+          </a>
+        </div>
       ) : null}
 
-      {myMeetings.map((m, i) => {
+      {!listed.length ? (
+        <div className="card"><p className="empty" style={{ padding: 0 }}>
+          {showRemoved ? "Nothing has been removed." : "No meetings logged against this rep yet."}
+        </p></div>
+      ) : null}
+
+      {listed.map((m, i) => {
         const campaign = m.scope_label;
         const owner = m.rep;
         const tint = reps.find((r) => r.id === owner);
@@ -274,7 +347,13 @@ export default async function Meetings({ searchParams }) {
                       : "—"}
                   </div></div>
                   <div><div className="k">Evidence</div><div className="v">{m.evidence}</div></div>
-                  <div><div className="k">Date</div><div className="v">{prettyDate(m.meeting_date)}</div></div>
+                  <div><div className="k">Happens on</div><div className="v">{prettyDate(m.meeting_date)}</div></div>
+                  {/* Null on the four rows logged before the column existed.
+                      "Not recorded" rather than a date invented from created_at,
+                      which would be a guess — see migration 20260821010000. */}
+                  <div><div className="k">Agreed on</div><div className="v">
+                    {m.booked_on ? prettyDate(m.booked_on) : <span className="dim">not recorded</span>}
+                  </div></div>
                   <div><div className="k">Owner</div><div className="v">{owner ?? "—"}</div></div>
                   <div><div className="k">Logged by</div><div className="v">{m.logged_by || "—"}</div></div>
                   <div><div className="k">Status</div><div className="v">{m.status.replace(/_/g, " ")}</div></div>
@@ -289,6 +368,111 @@ export default async function Meetings({ searchParams }) {
                     <a className="drilled" href="/conflicts">Fill the name in on Conflicts</a>.
                   </div>
                 ) : null}
+
+                {/* --------------------------------------------------------
+                    The rest of the lifecycle. Until 21 Aug a hand-typed
+                    meeting was write-once and the only remedy was SQL.
+
+                    A meeting that came from a call gets no edit and no remove:
+                    it belongs to the call, which already keeps it in step in
+                    both directions. Offering the controls and letting the
+                    database refuse would be a worse interface than not
+                    offering them and saying where to go.
+                   -------------------------------------------------------- */}
+                {showRemoved ? (
+                  <>
+                    <div className="warnbox plain">
+                      <b>Removed.</b> {m.removed_reason || "No reason recorded."}
+                    </div>
+                    <form action={restoreMeeting} className="gapform">
+                      <input type="hidden" name="id" value={m.id} />
+                      <input type="hidden" name="rep" value={known ? rep : ""} />
+                      <input type="hidden" name="removed" value="1" />
+                      <button className="choice" type="submit">Put it back</button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <div className="choices">
+                      <span className="choices-label">Status</span>
+                      {STATUSES.map((s) => (
+                        <form action={setMeetingStatus} key={s}>
+                          <input type="hidden" name="id" value={m.id} />
+                          <input type="hidden" name="rep" value={known ? rep : ""} />
+                          <button
+                            className={m.status === s ? "choice on" : "choice"}
+                            type="submit" name="status" value={s}
+                            disabled={m.status === s}
+                          >
+                            {s.replace(/_/g, " ")}
+                          </button>
+                        </form>
+                      ))}
+                    </div>
+
+                    {m.origin === "call" ? (
+                      <p style={{ marginBottom: 0 }}>
+                        This meeting came from a call on {prettyDate(m.call_date)}, so its dates and
+                        note are the call&rsquo;s — change them there and the two cannot disagree.{" "}
+                        <a className="drilled" href="/meetings#calls">Find the call below &rarr;</a>
+                      </p>
+                    ) : (
+                      <>
+                        <div className="choices">
+                          <span className="choices-label">Fix a detail</span>
+                          <form action={editMeeting} className="gapform">
+                            <input type="hidden" name="id" value={m.id} />
+                            <input type="hidden" name="rep" value={known ? rep : ""} />
+                            <input name="name" defaultValue={m.prospect_name ?? ""}
+                              placeholder="Prospect name *" required style={{ minWidth: 170 }} />
+                            <input name="email" type="email" defaultValue={m.prospect_email ?? ""}
+                              placeholder="Email" style={{ minWidth: 190 }} />
+                            <input name="company" defaultValue={m.company ?? ""}
+                              placeholder="Company" style={{ minWidth: 150 }} />
+                            <label className="datefield">
+                              <span>Happens on</span>
+                              <input type="date" name="date" defaultValue={m.meeting_date ?? ""} required />
+                            </label>
+                            <label className="datefield">
+                              <span>Agreed on</span>
+                              <input type="date" name="booked_on" defaultValue={m.booked_on ?? ""} />
+                            </label>
+                            <select name="group" defaultValue={m.group_id ?? ""}>
+                              <option value="">No campaign</option>
+                              {groups.map((g) => (
+                                <option key={g.id} value={g.id}>{g.display_name}</option>
+                              ))}
+                            </select>
+                            <select name="evidence" defaultValue={m.evidence}>
+                              <option value="calendar">calendar invite</option>
+                              <option value="tool">in the tool</option>
+                              <option value="crm">in the CRM</option>
+                              <option value="chat">said in chat</option>
+                            </select>
+                            <input name="note" defaultValue={m.note ?? ""} placeholder="Note"
+                              style={{ flex: 2, minWidth: 190 }} />
+                            <button className="choice" type="submit">Save</button>
+                          </form>
+                        </div>
+
+                        {/* Cancel is for a meeting that was real. This is for
+                            one that never was, so it asks why — the row is kept
+                            as evidence, and evidence with no explanation is
+                            just an absence. */}
+                        <div className="choices">
+                          <span className="choices-label">Remove</span>
+                          <form action={removeMeeting} className="gapform">
+                            <input type="hidden" name="id" value={m.id} />
+                            <input type="hidden" name="rep" value={known ? rep : ""} />
+                            <input name="reason" required style={{ minWidth: 240 }}
+                              placeholder="Why? e.g. duplicate of the call-logged one" />
+                            <button className="choice" type="submit">Remove it</button>
+                          </form>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </details>
