@@ -1,8 +1,11 @@
 # Handoff — Overview dashboard, the response→meeting funnel
 
-Written 20 August 2026, end of session; **amended the same evening** — see §2 and §5b,
-where "People reached" stopped being Instantly-only. Everything below is measured against
-the live Supabase project `yfnqszwlyoyfhuwfmcyl`, not inferred from code.
+Written 20 August 2026 and **rewritten the same evening**, twice, as three tiles were
+fixed and the next piece of work changed shape. Everything below is measured against the
+live Supabase project `yfnqszwlyoyfhuwfmcyl`, not inferred from code. `main` is at
+`167f484`, pushed, deployed.
+
+**The next session's work is §10 — the Leads revamp.** Read §1, §2, §5a, §7, §10.
 
 Read this, then `TRUST_OPEN.md` (live decision register) and `RESPONSE_PILE.md` (how the
 response pile was built). `TRUST.md` is a frozen 18 August snapshot — architecture, not
@@ -351,3 +354,87 @@ Useful SQL lives in `TRUST_OPEN.md` §9 (Q6 is the response definition, by hand)
 | `LEMLIST_RESCUE.md` | The rescued message bodies — the only surviving copy of text lemlist will not serve again — plus how Tanay's decisions differed from the proposals. |
 | `PROGRESS.md` | Long-running project log. |
 | `HOMEPAGE_REVAMP.pdf` | Superseded. A prior agent's plan; its execution order was rejected for good reason (`RESPONSE_PILE.md` §1). Read only for history. |
+
+---
+
+## 10. The next piece of work: `/leads`, revamped
+
+Decided by Tanay on 20 August, at the end of the session that fixed reached and opened.
+
+### What is decided
+
+1. **Leads becomes multi-channel, but narrowly.** A person we have **called** belongs on
+   that page. The *call list* does not. `call_contacts` holds **1,252** names against
+   **74** phone numbers, and **11** people have actually been called (16 calls, one
+   `call_campaigns` row: *NYC LL11 — SAFE / Reliable owners*, owner Mark Vasu, and zero
+   email overlap with `people`). Adding 1,252 names to a page of 2,780 would bury the
+   list under people nobody has contacted or can contact. **Add the 11, not the 1,252** —
+   the rule is "a `phone_calls` row exists", not "is on a call list".
+
+2. **`People reached` does not change.** It stays the email pile: 2,399 people, the
+   `reached_people` definition shipped today. Calls are a Leads-page fact, not a funnel
+   fact. This overrides the recommendation made earlier in the session — it was argued
+   that a called person has been "reached", and Tanay decided the tile keeps its current
+   meaning. Do not widen it without asking again.
+
+3. **Identity is the email address**, lowercased, where both sides have one. Never merge
+   on name alone. Zero of the 80 call contacts with an email match anyone in `people`
+   today, so nothing merges on day one; the rule is for when it starts. A name-only match
+   should surface as "possible same person" for a human, never as a silent join.
+
+4. **A meeting booked on a call already has a home.** `meetings.source_call_id` exists and
+   one of the five uses it (Baris Acar, `20260818201204`). The tile counts every
+   `booked`/`held` row whatever its origin, so a call-created meeting lands there
+   automatically. What is missing is a button on the call row, not a mechanism.
+
+### What is NOT decided — this is the design question
+
+**Tanay: "the leads page has to be revamped, I'm not sure how."** So the shape is open.
+The facts that should drive it:
+
+- The page has four numbers about 2,780 rows and until today only one of them came from
+  the tools. `Marked sent` (1,536) is a column typed on a spreadsheet: **49** rows carry
+  it with no send in either tool, **906** people with a real send do not carry it.
+- 810 of the 2,780 were never on a spreadsheet and have no status at all, which is why
+  1,536 + 420 + 14 does not reach the total.
+- 2,780 is **rows** — person × campaign. 2,731 distinct humans.
+- 381 rows have never been emailed: **309** are Roof Campaign's live queue and will be
+  emailed on their own, **49** are in hidden campaigns and should not be on the page at
+  all (Q9), **24** only ever existed on a spreadsheet, **3** are stranded in paused lemlist
+  batches that will never send because lemlist is retired.
+- The `Reached out?` column and filter shipped today and cross-filters with status, so
+  "marked sent but never actually emailed" is one click and lists 49 people.
+
+Open questions worth putting to Tanay before building: does a row mean a person or a
+person-in-a-campaign; does the human `status` column survive at all now that the tools
+answer the same question better; and what the page is *for* — a worklist, an audit, or a
+directory. It behaves like all three today.
+
+---
+
+## 11. Everything else still open, in one place
+
+| | what | where |
+|---|---|---|
+| **Meetings 5 vs 4** | Tile counts rows; Jeffrey Hohenstein appears twice. Decide, say it on the tile, make the click match. | §5a |
+| **Two missing meetings** | Younes Amermouch and Sherry Chen — `interested`, offered or confirmed times, no `meetings` row. Hand-kept table: **ask before adding**. | `LEMLIST_RESCUE.md` |
+| **Donut says 1,000** | `/list` builds its breakdown from `.limit(5000)`, which PostgREST caps at **1,000** — so the ring is the first 1,000 rows while its caption reads "across all 2,399". Count it in the database or say "first 1,000". | `app/list/page.jsx` |
+| **Replies column** | The by-campaign `REPLIES` column is the vendors' daily counter: 40 total, against 137 messages held, 117 people who wrote back and 32 human answers. **Chicago Retrofit reads 0 and its click opens 10.** Same tile-vs-click fault, now in the table. | `app/page.jsx` |
+| **Q9 · `v_leads` leaks** | Security-definer view: hands anon 2,780 rows where `people` gives 2,707. The 49 extra are hidden campaigns. Fix is `alter view v_leads set (security_invoker = on)` and it moves the Leads total to 2,731 — a visible number, so it is an ask. | `TRUST_OPEN.md` §9 |
+| **Q10 · ungrouped campaigns** | Nothing warns when a campaign belongs to no group. A new campaign syncs into every total within 30 minutes but appears in no group row and no rep view, so the table stops summing to the tile. `/health` checks ownerless *groups* only. | `TRUST_OPEN.md` §9 |
+| **T1 · `/campaigns` Reply %** | The last known-wrong number. Decision written, awaiting go. | `TRUST_OPEN.md` §4 |
+| **Q1 half-open** | `/campaigns` still prints `0` opened where tracking is off. The Overview was fixed today. | `TRUST_OPEN.md` §9 |
+
+### Live numbers, all time, all reps — 20 August 2026, evening
+
+```
+Leads rows        2,780   (2,731 people · 381 rows never emailed)
+People reached    2,399   1,845 Instantly + 554 lemlist
+People opened       351   23.5% of the 1,491 who could register one
+Emails sent       7,644   messages · we hold 6,888 individual send records
+Total responses      32   16 interested + 16 not interested · 0 unread
+Meetings booked       5   rows — 4 distinct people
+Calls logged         16   11 distinct people · 1 became a meeting
+```
+
+Every one of those except **Meetings** now opens onto exactly the people it counts.
