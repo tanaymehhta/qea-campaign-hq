@@ -159,7 +159,21 @@ export default async function Meetings({ searchParams }) {
             <input name="name" placeholder="Prospect name *" required style={{ minWidth: 180 }} />
             <input name="email" type="email" placeholder="Email" style={{ minWidth: 200 }} />
             <input name="company" placeholder="Company" style={{ minWidth: 160 }} />
-            <input type="date" name="date" defaultValue={today()} required />
+            {/* Two dates, and the difference between them is the whole point.
+                "Happens on" is when you will be in the room; "agreed on" is
+                when the win landed, and it is what every date window counts by.
+                A meeting booked today for September is a win today — dating it
+                by the meeting would empty a rep's best week and fill one a
+                fortnight out. Labelled, because two bare date boxes side by
+                side are a coin toss. */}
+            <label className="datefield">
+              <span>Happens on</span>
+              <input type="date" name="date" defaultValue={today()} required />
+            </label>
+            <label className="datefield">
+              <span>Agreed on</span>
+              <input type="date" name="booked_on" defaultValue={today()} max={today()} required />
+            </label>
             <select name="group" defaultValue={known ? (groups.find((g) => g.owner === rep)?.id ?? "") : ""}>
               <option value="">No campaign</option>
               {groups.map((g) => (

@@ -18,6 +18,11 @@ export async function logMeeting(formData) {
     p_email: formData.get("email") ?? "",
     p_company: formData.get("company") ?? "",
     p_date: formData.get("date"),
+    // The day it was agreed, which is not the day it happens — and is what
+    // every date window on the dashboard counts by. Null is refused in the
+    // database rather than defaulted here, so the sentence a rep reads comes
+    // from the one place that knows the rule. See migration 20260821010000.
+    p_booked_on: formData.get("booked_on") || null,
     p_group: formData.get("group") || null,
     p_evidence: formData.get("evidence") ?? "chat",
     p_note: formData.get("note") ?? "",
