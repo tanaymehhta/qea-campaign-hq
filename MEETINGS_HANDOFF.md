@@ -1,12 +1,15 @@
 # Meetings — the complete handoff
 
-Written 21 Aug 2026. Everything about the Meetings feature: what was wrong, what
-has been fixed, exactly how, what is left, and every trap between here and done.
+Written 21 Aug 2026, and finished the same day. Everything about the Meetings
+feature: what was wrong, what has been fixed, exactly how, and every trap
+between here and done. **All six phases have shipped.** Part 6 records what was
+built and what was deliberately left; there is no open work in it.
 
 Companion documents:
 - `MEETINGS_PLAN.md` — the six-phase plan and the six settled decisions.
-- Migration headers `20260821000000`, `20260821010000`, `20260821020000` — the
-  reasoning, in the repo's usual place.
+- Migration headers `20260821000000`, `20260821010000`, `20260821020000`,
+  `20260821030000`, `20260821040000`, `20260821050000` — the reasoning, in the
+  repo's usual place. The last of them carries all six settled decisions.
 
 **Every number in this document was measured live** against the production
 database (`yfnqszwlyoyfhuwfmcyl`) and the running dev server. None is inferred
@@ -107,14 +110,14 @@ Ten faults. Reproduced here in full because several are still open.
 |---|---|---|
 | 1 | No delete, no edit, no cancel for a hand-logged meeting | **FIXED** Phase 3 |
 | 2 | A meeting logged today counts on no date window | **FIXED** Phase 2 |
-| 3 | Cross-door duplicates — 3 meetings for one conversation | **OPEN** Phase 4 |
+| 3 | Cross-door duplicates — 3 meetings for one conversation | **FIXED** Phase 4 |
 | 4 | Campaign pages undercount; tile 1 vs its own click 2 | **FIXED** Phase 1 |
 | 5 | `/meetings` had its own rep rule; totals didn't sum | **FIXED** Phase 1 |
 | 6 | "campaign unknown" on every form-logged meeting | **FIXED** Phase 1 |
 | 7 | `held` / `no_show` unreachable from anywhere | **FIXED** Phase 3 |
 | 8 | `meeting_rows` could count one meeting for two reps | **FIXED** Phase 1 |
-| 9 | `/calls/[rep]` doesn't validate its URL segment | **OPEN** Phase 5 |
-| 10 | Misc: `c.company`, unbounded select, refusal message | **OPEN** Phase 5 |
+| 9 | `/calls/[rep]` doesn't validate its URL segment | **FIXED** Phase 5 |
+| 10 | Misc: `c.company`, unbounded select, refusal message | **FIXED** Phase 5 |
 
 ## 2.1 The measurements, verbatim
 
@@ -184,16 +187,21 @@ a name by hand is exactly how they get made.
 
 # PART 4 · WHAT HAS BEEN DONE
 
-Three commits, all on `main`, all pushed to `origin/main`.
+Six commits on `main`.
 
 ```
 8ff676c  Seven plus none plus one, against a total of nine        (Phase 1)
 e8b6bca  Booked today for September, and the tile said nothing…   (Phase 2)
 a6a5df1  A meeting could be written once and never again          (Phase 3)
+1c343db  Three meetings, three people, one conversation           (Phase 4)
+09d970b  A rep named "all", and a company column that was…        (Phase 5)
+429b1f9  The gate stops being something somebody remembers to run (Phase 6)
 ```
 
 `fd7f4ed "Four filter bars become one rail that never moves"` sits between
 e8b6bca and a6a5df1 and is **another agent's work**, not part of this.
+
+Phases 4–6 are summarised in Part 6, which used to be the to-do list.
 
 ## 4.1 Phase 1 — one definition of scope
 
@@ -300,9 +308,15 @@ meeting_rows(p_from date, p_to date, p_campaigns uuid[], p_groups uuid[],
              p_rep text, p_status text)                    security INVOKER
 meeting_counts(same six)                                   security INVOKER
 
+meeting_clash(p_date date, p_email text, p_except uuid)    security definer
+    The one answer to "is this the same meeting". Returns the name already on
+    the board for that day, or null. NOT granted to anon — write-path only.
+    p_email must arrive lowered and trimmed; both callers do that anyway.
+
 log_meeting(p_name text, p_email text, p_company text, p_date date,
             p_group uuid, p_evidence text, p_note text, p_logged_by text,
             p_booked_on date)                              security definer
+merge_meetings(p_keep uuid, p_drop uuid)                   security definer
 edit_meeting(p_meeting uuid, p_name text, p_email text, p_company text,
              p_date date, p_booked_on date, p_group uuid,
              p_evidence text, p_note text)                 security definer
@@ -352,12 +366,11 @@ filters on. **The function does not ORDER its output** — callers sort.
 
 ## 5.3 The live data, right now
 
-7 rows, 5 counted, 0 removed, 11 live calls.
+5 rows, 5 counted, 0 removed, 11 live calls. Every row is real; there is no
+test data in this table.
 
 | Prospect | Date | booked_on | Status | Origin | Scope |
 |---|---|---|---|---|---|
-| Nicholas Ferrara | 10 Sep | 20 Aug | cancelled | call | — |
-| Nicholas Ferrara | 20 Aug | 20 Aug | cancelled | call | — |
 | Baris Acar | 4 Aug | 4 Aug | booked | call | — |
 | Jeffrey Hohenstein | 30 Jul | null | booked | manual | group + campaign |
 | Mark Attard | 28 Jul | null | held | manual | group + campaign |
@@ -367,12 +380,12 @@ filters on. **The function does not ORDER its output** — callers sort.
 Group tiles: chicago-retrofit 2, qea-resellers 2, others 0.
 Reps: Mark Vasu 5, Justin 0, Mark Dolan 0.
 
-**The first row is leftover test data** — its note literally reads
-`AUDIT TEST cb`, from a session before this one. It is `cancelled` so it counts
-nowhere, but it is visible in the list. It is `origin = 'call'`, so
-`remove_meeting` refuses it; the honest fix is to delete its phone_call, or to
-delete the row directly with the service role. **Ask Tanay before doing either
-— this table is hand-kept and its accuracy is the whole point of it.**
+**The two Nicholas Ferrara rows are gone.** Both were leftovers from the audit
+session of 20 Aug — created three minutes apart that evening, both `cancelled`,
+both from calls that had already been soft-deleted, one of them noted
+`AUDIT TEST cb`. Tanay's call, 21 Aug: delete both, and their two calls with
+them. Nothing counted moved — they were cancelled, so the KPI read 5 before and
+after. `phone_calls` went from 13 rows to 11, all of them live.
 
 ## 5.4 The parity gate
 
@@ -389,7 +402,9 @@ over 3 reps × 5 groups × 35 sub-campaigns × 5 windows:
 3. **AGREEMENT** — `v_group_summary.meetings` equals `meeting_rows` for that group.
 
 **Currently: 230 checks, PASS.** Run it before and after every change to this
-feature. It has been proved to fail when it should — fed a meeting whose
+feature. Two of its three invariants are also live rows in `v_invariants`,
+rendered on `/health` — see 6.3 — so a drift is now reported rather than
+waiting for somebody to remember the script. It has been proved to fail when it should — fed a meeting whose
 `logged_by` was a name nobody owns, it reported:
 
 ```
@@ -400,98 +415,139 @@ FAIL — 1 of 230 checks disagree:
 
 ---
 
-# PART 6 · WHAT IS LEFT
+# PART 6 · WHAT WAS BUILT, AND WHAT WAS NOT
 
-## 6.1 Phase 4 — stop making the duplicates  (~1.5 days, the biggest remaining)
+This part was the to-do list. It is now the record. Nothing in it is open.
 
-This is the one that closes fault 3 and delivers decision 0.6.
+## 6.1 Phase 4 — the duplicates  ·  `1c343db`
 
-**a. A derived `duplicate_meeting` conflict.**
+Migration `20260821030000_one_conversation_written_down_twice.sql`.
 
-`v_conflicts` is a `UNION ALL` of three kinds (`reply_split`, `meeting_detail`,
-`needs_review`) with columns
-`kind, campaign_id, conflict_date, subject_id, title, detail, items`. Add a
-fourth branch. Two live counted meetings are candidates when they share a
-`meeting_date` and either:
-- the same lowered `prospect_email`, or
-- the same normalised `prospect_name` where either email is null.
+- **`v_conflicts` gained a fourth kind and one column.** `duplicate_meeting`
+  pairs two live counted meetings sharing a date and either the same lowered
+  email, or the same normalised name where either email is missing. `partner_id`
+  carries the second id and is null on the three older kinds — a duplicate is
+  the first conflict about a *pair*, and the page cannot offer "keep this one"
+  without both. Derived, never stored. One row per pair, the call's meeting
+  named first because `merge_meetings` will not drop it.
+- **`merge_meetings(p_keep, p_drop)`** removes the loser through `deleted_at`
+  with its note carried across and nothing on the keeper overwritten — a
+  missing email, company or name is filled from the row leaving, which is
+  usually why there were two. Refuses the same row twice, a row already
+  removed, and dropping a meeting that came from a call.
+- **The duplicate guard is re-keyed, and looser.** `meeting_clash` is the one
+  answer for both write paths. The address is identity: the same email on the
+  same day is refused, and so is that address on the *call contact* behind an
+  existing call meeting. A name-only match is **inserted** and surfaced as a
+  conflict, because refusing it would block a genuine second meeting with the
+  same person — which this table has recorded twice.
+- **The person lookup.** An email matching somebody in `people` sets the
+  meeting's `campaign_id` too, so a hand-logged meeting lands on the
+  sub-campaign as well as the group. The rep's own choice of group wins.
+- **Pre-filled "Log a meeting"** on `/replies` and `/person/[email]`, through
+  `logMeetingHref()` in `lib/db.js`. Nothing is written from the URL — it fills
+  boxes a human still presses a button on.
 
-Derived, never stored — it disappears the moment it is resolved, which is the
-philosophy `/conflicts` already states in its own header comment.
+Two smaller faults went with it, because they are the same fault: `log_call`'s
+duplicate guard never learned `deleted_at` (Phase 3's header says both guards
+did; only `log_meeting`'s was rewritten), and neither did the `meeting_detail`
+branch of `v_conflicts`.
 
-**b. `merge_meetings(p_keep uuid, p_drop uuid)`** — soft-removes the loser via
-the same `deleted_at` path, carrying its note across. Must refuse when the two
-are the same row, and must refuse to drop a `origin = 'call'` row (that one is
-the call's — keep the call's and drop the manual one).
+## 6.2 Phase 5 — the edges  ·  `09d970b`
 
-**c. Re-key `log_meeting`'s duplicate guard.** Today it is
-`lower(name) AND lower(email) AND date`. Make it:
-1. email, when both rows have one;
-2. the call contact, when there is a `source_call_id`;
-3. normalised name, only as a last resort.
+Migration `20260821040000_a_call_belongs_to_whoever_made_it.sql`, plus code.
 
-And on a *near* match, **insert and let the conflict surface it** rather than
-refusing. Refusing on a fuzzy match would block a genuine second meeting with
-the same person, which has already happened twice in this table (Jeffrey
-Hohenstein).
+1. **`/calls/[rep]` validates its segment** against the roster. The workspace
+   keeps the list you came for and asks who you are; the list-of-lists sends you
+   back to `/calls`, which says why.
+2. **`log_call` refuses a blank rep.** All 11 calls on file already carry one.
+3. **"Logged by" is a datalist** of known reps that still accepts a new name.
+   The gate proved the case mid-session: a test row logged by "Justin Levine"
+   failed the partition, because the owner on file is "Justin".
+4. **Company on the phone-call rows** now reads the contact's `org_name`.
+   `phone_calls` has no company column, so that cell had read "—" always.
+5. **`everyRow()`** on the three unbounded reads that feed a count — both
+   `meeting_rows` reads on `/meetings` and the one on the Overview, which the
+   group table counts itself. Each asks for an order, because paging an
+   unordered set can return a row twice and miss another.
+6. **The refusal echoes the stored name**, not the lowered input — it came with
+   `meeting_clash` in Phase 4.
+7. **The two Nicholas Ferrara rows are deleted**, with their two calls. Tanay's
+   call, 21 Aug. See 5.3.
 
-**d. The person lookup on the form**, resolving an email against `people` and
-setting `campaign_id` from it — which also shrinks the 0.3 consequence note.
+## 6.3 Phase 6 — locked  ·  `429b1f9`
 
-**e. A pre-filled "Log a meeting" button** on `/replies` and
-`/person/[email]`, carrying name, email, company and campaign into the form.
+Migration `20260821050000_the_six_decisions_and_the_gate_that_keeps_them.sql`.
 
-## 6.2 Phase 5 — the edges  (~2 hours, independently shippable)
+Its header is the permanent record of all six decisions, with reasons and what
+was built for each — in the place somebody trips over while asking why the
+schema is like this, rather than in a plan document they have to decide to read.
 
-1. **`/calls/[rep]/` does not validate its segment.** `params.rep` is
-   `decodeURIComponent`'d and posted straight into `log_call` as `p_rep`, which
-   becomes the meeting's `logged_by`. `/calls/all/nyc-ll11-safe` — a URL
-   `/meetings` generates itself when a call has no rep — would create a meeting
-   owned by a rep named "all". Validate against `repList()`.
-2. **`log_call` should refuse a blank rep.** A call with no rep produced a
-   meeting that belonged to nobody; that is how the totals were caught not
-   summing.
-3. **The "Logged by" box on the meetings form is free text.** A typo orphans a
-   meeting from the rep strip. The parity gate catches it after the fact; make
-   it a datalist of known reps that still accepts a new name (the same stance
-   `set_group_owner` takes, and for the same reason — there is no rep table).
-4. **`c.company` on the phone-call rows of `/meetings`** — `phone_calls` has no
-   such column, so Company always reads "—". Join the contact.
-5. **`everyRow()` on the meetings reads.** Unbounded `select` is fine at 7 rows
-   and silently wrong at 1,001 (PostgREST caps at 1,000).
-6. **The duplicate refusal echoes the lowercased input**, not the stored name.
-7. **The `AUDIT TEST cb` row** — see 5.3, ask first.
+Its body puts two of the parity script's three invariants into `v_invariants`,
+which `/health` already renders under "Things that must never be true":
 
-## 6.3 Phase 6 — lock it  (~2 hours)
+- `meeting_belongs_to_no_rep` — a counted meeting whose resolved rep owns no
+  campaign group is in the all-reps total and in nobody's column. That is the
+  8-vs-9, and it is the one hole left in the partition.
+- `group_tile_disagrees_with_its_own_click` — `v_group_summary.meetings`
+  against `meeting_rows` for that group.
 
-1. Make the parity script a `/health` row so the next drift is reported rather
-   than discovered. `app/health/` already has the shape for this.
-2. One migration header recording all six Phase 0 decisions with dates and
-   reasons, in the style this repo uses, so they stop being re-asked.
+TILE=CLICK is deliberately absent: `meeting_counts` is literally `count(*)` over
+`meeting_rows` with the same arguments, and a rule that cannot fail is a green
+light that means nothing.
 
-## 6.4 Bookkeeping debt — do this first, it is five minutes
+Both return nothing today, and the first was proved to go red — a meeting staged
+with `logged_by = 'Nobody At All'`, inside a block that then raised.
 
-`supabase/README.md` states that `supabase/migrations/` **is exported from**
-`supabase_migrations.schema_migrations`, so the table is the source of truth and
-the folder mirrors it.
+## 6.4 The bookkeeping — what actually happened
 
-Phase 1 and Phase 2 were applied with the MCP `execute_sql` tool, which **does
-not write that table**. Phase 3 was applied with `apply_migration`, which does.
-So right now:
+The instruction was to re-apply `20260821000000` and `20260821010000` through
+`apply_migration`, on the grounds that they are idempotent. **They are not, and
+they were not re-applied.** Checked before running anything:
 
-```
-20260821000000  file in git   NOT in schema_migrations
-20260821010000  file in git   NOT in schema_migrations
-20260821020000  file in git   in schema_migrations  ✓
-```
+- `20260821000000` recreates `meeting_rows` with its pre-Phase-3 return type, so
+  `create or replace function` would have raised *cannot change return type*;
+  and its `v_group_summary` has no `deleted_at` filter, which `create or replace
+  view` would have accepted silently.
+- `20260821010000` recreates `log_meeting` with the duplicate guard that reads
+  removed rows — the exact fault Phase 3 §3 fixed.
 
-Both missing migrations are idempotent (`drop ... if exists`,
-`create or replace`, `add column if not exists`), so re-applying them through
-`apply_migration` reconciles the table harmlessly. **Do that before Phase 4.**
+So the ledger was reconciled instead: both rows inserted into
+`supabase_migrations.schema_migrations` with their real apply times
+(`20260820194551`, `20260820194757`), which puts them before Phase 3's
+`20260820195224` — so replaying the ledger in version order now lands on the
+current schema. `md5(statements[1])` was checked byte-for-byte against each file.
 
-**Rule going forward: apply DDL with `apply_migration`, never `execute_sql`.**
+Note that ledger versions are apply timestamps and the filenames in
+`supabase/migrations/` are hand-chosen; they have never matched, for any recent
+migration. The names do.
 
----
+**The rule holds: apply DDL with `apply_migration`, never `execute_sql`.** Every
+migration since is in the ledger, each verified byte-identical to its file.
+
+## 6.5 Known, and deliberately not done
+
+- **A renamed duplicate is not caught.** "1287 East 19th Condo" against "1287
+  East 19th Condominium" — row 3 of the audit — needs a fuzzy key, and a fuzzy
+  key on a company KPI pairs two different people at one firm on one day and
+  invites somebody to merge them. `pg_trgm` is not installed and this is not the
+  reason to install it.
+- **`edit_call` still inserts a meeting unconditionally** when the call has none,
+  while `log_call` skips on an exact name + email + date match. So the two doors
+  do not agree about cross-door duplicates, and editing a call whose meeting was
+  hand-logged first will make a second one. It is now visible on `/conflicts` and
+  one click from merged, which is why it was left — but it is the next thing to
+  look at.
+- **`adopt_orphan_call` does not validate its rep.** Deliberate: it exists to
+  give the three 16 July calls a person and a list from somebody's memory, and a
+  rep may honestly be one of the things nobody remembers.
+- **`/meetings` still generates `/calls/all/…`** for a call with no rep whose
+  list has no owner. The chooser catches it now; the link was not changed.
+- **`everyRow` was not applied** to the `proposals` and `v_campaign_summary`
+  reads on `/meetings` — 0 and 35 rows, both bounded by things that grow slowly.
+- **The two direct reads of `meetings`** in `app/person/[email]/page.jsx` and
+  `lib/calls.js` are still direct, by design — they are per-person lookups, not
+  counts. See 1.5.
 
 # PART 7 · HOW TO WORK ON THIS
 
@@ -533,7 +589,7 @@ assuming attribute order will silently find zero.
 This table is the company's primary KPI and it is hand-kept. Every test in this
 work followed the same loop:
 
-1. Record the baseline: `7 meetings, 5 counted, 11 live calls`.
+1. Record the baseline: `5 meetings, 5 counted, 11 live calls`.
 2. Write test rows with a **greppable marker in the note** (`AUDIT TEST`,
    `P3 TEST`, `BIN TEST`).
 3. Test.
@@ -541,8 +597,17 @@ work followed the same loop:
 5. Re-assert the baseline.
 6. Re-run the parity gate.
 
-A previous session skipped step 4 and left the `AUDIT TEST cb` row that is
-still sitting in the table. Do not add to it.
+A session on 20 Aug skipped step 4 and left two rows in the table, which sat
+there for a day before Tanay was asked and said to delete them. That is the cost
+of skipping it: not a wrong number — they were cancelled — but two lines in the
+company's primary KPI that nobody could vouch for, and a day of somebody else's
+time to establish that.
+
+Three of the checks in this session could not be made without writing to a live
+table at all, and were staged inside a `do $$ … raise exception $$` block
+instead: the transaction aborts, so the write never commits. That is how the
+cross-door duplicate guard, the blank-rep refusal and the new `/health` rule
+were all proved without leaving a row behind. Use it where you can.
 
 ## 7.4 House style for this repo
 
@@ -563,65 +628,19 @@ still sitting in the table. Do not add to it.
 
 ---
 
-# PART 8 · THE PROMPT FOR THE NEXT AGENT
+# PART 8 · IF YOU ARE PICKING THIS UP
 
-Copy everything between the lines.
+The six phases are done and the audit is closed. Read Parts 1 and 5 for how the
+system works, 6.5 for what was left, and 7 for the working discipline — which is
+not optional here, and is why these faults were found in the first place.
 
----
+Three rules survive this work and apply to anything that touches meetings:
 
-You are picking up the Meetings repair in the QEA Campaign HQ dashboard
-(`/Users/tanaymehta/Desktop/QEA Tech/Growth and Marketing/qea-campaign-hq`).
-
-**Read `MEETINGS_HANDOFF.md` first, all of it, then `MEETINGS_PLAN.md`.** Between
-them they contain the full audit, the six decisions Tanay has already settled,
-what three completed phases changed, and exactly what is left. Do not
-re-litigate the settled decisions — implement them.
-
-Then read the three migration headers `20260821000000`, `20260821010000` and
-`20260821020000` to pick up the house style before you write any SQL.
-
-Your work, in this order:
-
-1. **Bookkeeping first (5 min).** Re-apply migrations `20260821000000` and
-   `20260821010000` using the Supabase MCP `apply_migration` tool so they land
-   in `supabase_migrations.schema_migrations`. They are idempotent. From then
-   on, apply DDL with `apply_migration` and never with `execute_sql` — see
-   §6.4.
-
-2. **Phase 4 — stop making the duplicates.** §6.1 has the full spec: a derived
-   `duplicate_meeting` conflict in `v_conflicts`, a `merge_meetings` function, a
-   re-keyed duplicate guard in `log_meeting` that inserts-and-surfaces on a near
-   match rather than refusing, a person lookup on the meetings form, and a
-   pre-filled "Log a meeting" button on `/replies` and `/person/[email]`. This
-   closes the last open fault from the audit and delivers decision 0.6.
-
-3. **Phase 5 — the edges.** §6.2, seven items, about two hours. Item 7 (the
-   leftover `AUDIT TEST cb` row) needs Tanay's say-so before you touch it.
-
-4. **Phase 6 — lock it.** §6.3.
-
-Hard rules:
-
-- **`node scripts/meetings-parity.mjs` must pass before and after every
-  change.** It is currently 230 checks green. If your change makes it fail, the
-  change is wrong, not the gate.
-- **Read §5.2 before touching `meeting_rows`.** `p_rep`, when given, is the
-  whole scope, and the reason is subtle. Do not "fix" it by intersecting rep
-  with the campaign/group doors — that makes call-booked meetings vanish from
-  every rep view, which is the exact bug Phase 1 removed.
-- **Never run `next build`** — it wipes the running dev server's cache. Verify
-  against `http://localhost:3100`.
-- **Clean up every test row you write**, by a greppable marker in the note, and
-  re-assert the baseline (7 meetings, 5 counted, 11 live calls) plus the parity
-  gate afterwards. This table is the company's primary KPI and it is kept by
-  hand.
-- **Another agent may be working in this tree.** Check `git status` before you
-  stage, and never `git add -A` blindly.
-- Ask Tanay before inventing any data in the `meetings` table. Its accuracy is
-  the entire point of it; a guess in there is worse than a gap.
-
-Work in small steps, verify each against the running app rather than against
-your reading of the code, and commit each phase separately with a message in the
-style of `git log`.
-
----
+- **`node scripts/meetings-parity.mjs` must pass before and after every change.**
+  230 checks. If your change makes it fail, the change is wrong, not the gate.
+- **`p_rep`, when given, is the whole scope.** Read 5.2 before touching
+  `meeting_rows`, and do not intersect the rep with the campaign/group doors.
+- **Ask before inventing any data in `meetings`.** It is the company's primary
+  KPI, no tool records it, and a guess in it is worse than a gap. Clean up every
+  test row by a greppable marker and re-assert the baseline: 5 meetings, 5
+  counted, 11 live calls.

@@ -1,5 +1,10 @@
 # Meetings — the whole thing, in order
 
+**All six phases shipped, 20–21 Aug 2026** — `8ff676c`, `e8b6bca`, `a6a5df1`,
+`1c343db`, `09d970b`, `429b1f9`. This is the plan they were built from and is
+kept as written; `MEETINGS_HANDOFF.md` Part 6 records what was actually built,
+and 6.5 what was deliberately left.
+
 Written 20 Aug 2026, from the audit of the same evening. Every number quoted
 below was measured live against the production database and the running dev
 server, not inferred from the code.
