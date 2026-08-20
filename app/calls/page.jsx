@@ -1,5 +1,5 @@
 import { db, num } from "../../lib/db";
-import { callRepList } from "../../lib/calls";
+import { callRepList, dialCount } from "../../lib/calls";
 
 export const dynamic = "force-dynamic";
 
@@ -8,9 +8,15 @@ export const dynamic = "force-dynamic";
  * no-login contract as the ?rep= picker on Overview and Meetings.
  */
 export default async function Calls() {
-  const [{ reps, campaigns }, { data: calls }] = await Promise.all([
+  const [{ reps, campaigns }, { data: calls }, { count: orphans }] = await Promise.all([
     callRepList(),
-    db.from("phone_calls").select("rep, outcome").is("deleted_at", null),
+    // contact_id + call_date, because a dial is one person on one day: logCall
+    // writes a row per ticked outcome and `.length` counted those instead.
+    db.from("phone_calls").select("rep, outcome, contact_id, prospect_name, call_date").is("deleted_at", null),
+    // Calls with no contact row belong to no list and no rep, so the chips
+    // below cannot add up to the Overview's tile while one exists.
+    db.from("phone_calls").select("id", { count: "exact", head: true })
+      .is("deleted_at", null).is("contact_id", null),
   ]);
 
   const campaignsOf = (name) => campaigns.filter((c) => c.owner?.trim() === name).length;
@@ -39,13 +45,25 @@ export default async function Calls() {
               </span>
               <span className="role">
                 {num(campaignsOf(r.id))} list{campaignsOf(r.id) === 1 ? "" : "s"} ·{" "}
-                {num(mine.length)} call{mine.length === 1 ? "" : "s"}
+                {num(dialCount(mine))} call{dialCount(mine) === 1 ? "" : "s"}
                 {booked ? ` · ${num(booked)} booked` : ""}
               </span>
             </a>
           );
         })}
       </div>
+
+      {orphans ? (
+        <div className="card" style={{ marginTop: 26 }}>
+          <p style={{ margin: 0 }}>
+            <b>{num(orphans)} call{orphans === 1 ? "" : "s"} belong{orphans === 1 ? "s" : ""} to
+            nobody.</b>{" "}
+            Logged before the call lists existed, so they are on the Overview&rsquo;s tile and on
+            no page below it.{" "}
+            <a className="drilled" href="/calls/orphans">Say who they were &rarr;</a>
+          </p>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -3,7 +3,12 @@ import {
   EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
   meetingCounts, meetingArgs,
 } from "../lib/db";
+import { dialCount } from "../lib/calls";
 import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
+
+// A dial needs its person and its day; the campaign behind the contact is the
+// second of the two doors a call can be a rep's through.
+const CALL_COLS = "id, call_date, contact_id, prospect_name, rep, call_contacts(call_campaign_id)";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +17,7 @@ export default async function Overview({ searchParams }) {
   const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: proposals }, { data: calls }] =
+  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: proposals }, { data: calls }, { data: callCamps }] =
     await Promise.all([
       // sender_emails is the edge that makes Instantly bounce placeable — see the
       // bounce section below. It is a text[] on the campaign, written by the sync.
@@ -27,17 +32,23 @@ export default async function Overview({ searchParams }) {
       (w.range === "all"
         ? db.from("proposals").select("id, campaign_id, sent_date")
         : db.from("proposals").select("id, campaign_id, sent_date").gte("sent_date", w.from).lte("sent_date", w.to)),
-      // Phone calls carry no campaign_id (some, like the New York batch, happened
-      // outside any campaign in this database), so unlike meetings/proposals they
-      // can't be scoped to a rep — same as how /meetings already shows them unscoped.
+      // A phone call has no campaign_id — it answers to the rep who made it or
+      // to the owner of the list it came from, which is exactly the pair of
+      // doors `meeting_rows` and `reached_people` already scope by. The contact
+      // is embedded to reach the second door; `contact_id`/`prospect_name` and
+      // `call_date` are what makes a dial a dial rather than an outcome row.
       (w.range === "all"
-        ? db.from("phone_calls").select("id, call_date").is("deleted_at", null)
-        : db.from("phone_calls").select("id, call_date").is("deleted_at", null).gte("call_date", w.from).lte("call_date", w.to)),
+        ? db.from("phone_calls").select(CALL_COLS).is("deleted_at", null)
+        : db.from("phone_calls").select(CALL_COLS).is("deleted_at", null).gte("call_date", w.from).lte("call_date", w.to)),
+      db.from("call_campaigns").select("id, owner"),
     ]);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
   const groupOf = new Map((members ?? []).map((m) => [m.campaign_id, m.group_id]));
   const cById = new Map((campaigns ?? []).map((c) => [c.id, c]));
+  // The second door a phone call can be a rep's through: the owner of the call
+  // list the contact sits on, for a call logged without a rep on it.
+  const callCampOwner = new Map((callCamps ?? []).map((c) => [c.id, c.owner?.trim() || null]));
 
   // A rep owns groups, not campaigns, so their scope is every campaign inside
   // the groups they own. "all" means no scoping at all.
@@ -365,8 +376,19 @@ export default async function Overview({ searchParams }) {
   const running = scopedCampaigns.filter((c) => c.status === "running").length;
   const meetingCount = meetingPile.meetings;
   const proposalCount = scopedProposals.length;
-  // Not rep-scoped — phone_calls has no campaign_id to scope by, same as /meetings.
-  const callCount = (calls ?? []).length;
+  // Dials, not rows: logCall writes one row per ticked outcome, so `.length`
+  // here read 16 for 11 calls. `dialCount` is the same rule the calls workspace
+  // counts with, imported rather than re-stated.
+  //
+  // Scoped to the rep who dialled, or to the owner of the call list the contact
+  // sits on — `meeting_rows`'s two doors, in the same order. The three July
+  // rows carry neither and so belong to nobody: they are in the all-reps total
+  // and in no rep's view, which /calls/orphans exists to end.
+  const callOwnerOf = (c) =>
+    c.rep ?? callCampOwner.get(c.call_contacts?.call_campaign_id) ?? null;
+  const scopedCalls = rep === "all" ? (calls ?? []) : (calls ?? []).filter((c) => callOwnerOf(c) === rep);
+  const callCount = dialCount(scopedCalls);
+  const orphanCalls = (calls ?? []).filter((c) => !c.contact_id).length;
   const bounceRate = overallBounced == null || !overall.sent ? null : pct(overallBounced, overall.sent);
 
   // Every link carries the current window and rep through to the page behind it.
@@ -549,7 +571,13 @@ export default async function Overview({ searchParams }) {
           value={num(callCount)}
           raw={callCount}
           tone={callCount ? undefined : "muted"}
-          note="Hand-logged, not scoped to a rep"
+          /* Dials, not outcomes — one call that ended "no answer, left a
+             voicemail" is one number here and two rows in the log below it. */
+          note={`Hand-logged dials, not outcomes${
+            rep === "all" && orphanCalls
+              ? ` · ${num(orphanCalls)} on no list yet`
+              : ""
+          }`}
           href="/calls"
         />
         <Tile

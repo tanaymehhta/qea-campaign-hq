@@ -94,6 +94,28 @@ export async function deleteCall(formData) {
   done(formData, error);
 }
 
+/**
+ * Give an unassigned call a person, a list and a rep.
+ *
+ * The three 16 July "New York" calls have no contact row — they predate the
+ * table — so they are counted on the Overview, invisible on every campaign
+ * page, and attributed to no rep. Nothing in the database can close that; the
+ * facts only exist in somebody's memory. This is where they get typed in.
+ */
+export async function adoptOrphanCall(formData) {
+  const { error } = await db.rpc("adopt_orphan_call", {
+    p_call: formData.get("call_id"),
+    p_campaign: formData.get("campaign_id"),
+    p_full_name: formData.get("full_name") ?? "",
+    p_rep: formData.get("rep") ?? "",
+    p_org: formData.get("org_name") ?? "",
+    p_role: formData.get("role") ?? "",
+    p_phone: formData.get("phone") ?? "",
+    p_email: formData.get("email") ?? "",
+  });
+  done(formData, error);
+}
+
 export async function setContactDnc(formData) {
   const { error } = await db.rpc("set_contact_dnc", {
     p_contact: formData.get("contact_id"),
