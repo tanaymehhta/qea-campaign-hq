@@ -122,6 +122,11 @@ async function writeActivities(rows: any[]): Promise<number> {
   return n;
 }
 
+// The six words `campaigns.status` accepts, plus lemlist's synonyms for them.
+const CAMPAIGN_STATUS = ["running", "paused", "draft", "completed", "errored"];
+const LEMLIST_STATUS = (raw: string) =>
+  raw === "ended" ? "completed" : CAMPAIGN_STATUS.includes(raw) ? raw : "unknown";
+
 const INSTANTLY_STATUS: Record<number, string> = {
   0: "draft", 1: "running", 2: "paused", 3: "completed", 4: "running", "-1": "errored",
 };
@@ -538,7 +543,11 @@ async function syncLemlist(from: string, to: string, deep: boolean) {
   for (const c of campaigns) {
     const { data } = await db.from("campaigns").upsert({
       source: "lemlist", source_campaign_id: c._id, name: c.name,
-      status: ["running", "paused", "draft", "completed", "errored"].includes(c.status) ? c.status : "unknown",
+      // lemlist's word for finished is "ended", which is not one of the six the
+      // column accepts, so five campaigns it knew perfectly well were done read
+      // back as "unknown" — a shrug where there was a real answer. `status_raw`
+      // below keeps lemlist's own word, so nothing is lost by translating here.
+      status: LEMLIST_STATUS(c.status),
       status_raw: c.status, started_on: (c.createdAt ?? "").slice(0, 10) || null,
       raw: c, last_synced: new Date().toISOString(),
     }, { onConflict: "source,source_campaign_id" }).select("id").single();

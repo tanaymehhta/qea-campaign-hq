@@ -1,5 +1,5 @@
 import {
-  db, dailyRange, mailboxRange, today, shift, num, pct, windowFrom, prettyDate,
+  db, dailyRange, mailboxRange, today, shift, num, pct, windowFrom, prettyDate, prettyWhen,
   EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
   meetingCounts, meetingArgs, everyRow,
 } from "../lib/db";
@@ -20,7 +20,7 @@ export default async function Overview({ searchParams }) {
     await Promise.all([
       // sender_emails is the edge that makes Instantly bounce placeable — see the
       // bounce section below. It is a text[] on the campaign, written by the sync.
-      db.from("campaigns").select("id, source, name, status, sender_emails, open_tracking"),
+      db.from("campaigns").select("id, source, name, status, sender_emails, open_tracking, last_synced"),
       repList(),
       dailyRange(w.from, w.to),
       mailboxRange(w.from, w.to),
@@ -373,8 +373,22 @@ export default async function Overview({ searchParams }) {
     : SPAN[w.range] ? `Last ${SPAN[w.range]} days`
     : "All time";
 
-  const scopedCampaigns = (campaigns ?? []).filter((c) => inScope(c.id));
-  const running = scopedCampaigns.filter((c) => c.status === "running").length;
+  // A campaign, to everyone who reads this page, is a group — the thing the
+  // table below lists and the thing a rep says they own. The 35 rows underneath
+  // are vendor sequences: ten of them make up "Chicago Retrofit" alone. Counting
+  // those made the tile say 6 of 35 next to a table showing 5 campaigns, 3 live.
+  //
+  // `actual_status` is the same word the table's badge prints, derived in
+  // v_group_summary from two signals that must agree — a sequence the vendor
+  // still calls running AND a send in the last 14 days. That is what kills the
+  // lemlist rows claiming `running` since June: the group they sit in went
+  // `ended` without anyone having to notice them.
+  const live = shownGroups.filter((g) => g.actual_status === "live").length;
+  // "Running right now" is only ever as true as the last sync. One job writes
+  // every campaign row in a pass, so the newest `last_synced` is the moment the
+  // whole table was checked — and without it printed, a correct 0 and a 0 from
+  // a sync that died on Tuesday look exactly alike.
+  const syncedAt = (campaigns ?? []).reduce((a, c) => (c.last_synced > a ? c.last_synced : a), "");
   const meetingCount = meetingPile.meetings;
   const proposalCount = scopedProposals.length;
   // One row per call since 20 Aug: the form posts one outcome, so pressing Add
@@ -413,11 +427,11 @@ export default async function Overview({ searchParams }) {
         <h1>Overview</h1>
         <p className="sub">
           {rep === "all" ? (
-            <>Everything sent across Instantly and lemlist. {running} of {(campaigns ?? []).length} campaigns
-              are running right now.</>
+            <>Everything sent across Instantly and lemlist. {live} of {shownGroups.length} campaigns
+              are live as of {prettyWhen(syncedAt)}.</>
           ) : (
-            <>{rep} owns {shownGroups.length} campaign group{shownGroups.length === 1 ? "" : "s"} and{" "}
-              {scopedCampaigns.length} campaigns, {running} of them running right now.</>
+            <>{rep} owns {shownGroups.length} campaign{shownGroups.length === 1 ? "" : "s"},{" "}
+              {live} live as of {prettyWhen(syncedAt)}.</>
           )}
         </p>
       </div>
@@ -443,9 +457,9 @@ export default async function Overview({ searchParams }) {
         <Tile
           hero
           label="Active campaigns"
-          value={num(running)}
-          raw={running}
-          note={`${running} of ${num(scopedCampaigns.length)} in this view`}
+          value={num(live)}
+          raw={live}
+          note={`${live} of ${num(shownGroups.length)} in this view`}
           href="/campaigns"
         />
         <Tile
