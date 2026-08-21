@@ -1,4 +1,7 @@
-import { db, num, prettyDate, today, initials, repList, listHref, meetingArgs, everyRow } from "../../lib/db";
+import {
+  db, num, prettyDate, today, initials, repList, listHref, meetingArgs, everyRow,
+  responseCounts,
+} from "../../lib/db";
 import { Tile, Reps, Pill, PersonLink, Chev } from "../../components/ui";
 import { logMeeting, editMeeting, setMeetingStatus, removeMeeting, restoreMeeting } from "./actions";
 
@@ -91,6 +94,17 @@ export default async function Meetings({ searchParams }) {
 
   const sum = (k) => mine.reduce((a, s) => a + (s[k] ?? 0), 0);
   const running = mine.filter((s) => s.status === "running").length;
+
+  // People who wrote back an answer, over this rep's campaigns, lifetime —
+  // the same function the Overview tile and /replies both ask. This tile used
+  // to sum `v_campaign_summary.replied`, the vendor's reply counter, and
+  // called itself "a floor, not a total" because that is what a vendor count
+  // is. It is not a floor any more: it is every human who answered, and the
+  // note under it now says what would move it.
+  const responses = await responseCounts({
+    from: null, to: null, source: null,
+    campaignIds: mine.map((s) => s.campaign_id),
+  });
   // The KPI counts booked + held only — same rule as the Overview and the
   // campaign views. The list below still shows every row: a cancellation is
   // worth seeing, it just isn't worth counting.
@@ -175,8 +189,16 @@ export default async function Meetings({ searchParams }) {
       <div className="grid g5" style={{ marginBottom: 34 }}>
         <Tile label="Campaigns" value={num(mine.length)} raw={mine.length} note={`${running} running`} />
         <Tile label="People" value={num(sum("leads"))} raw={sum("leads")} note="in their lists" />
-        <Tile label="Replies" value={num(sum("replied"))} raw={sum("replied")}
-          tone={sum("replied") ? undefined : "muted"} note="a floor, not a total" />
+        <Tile label="Responses" value={num(responses.responded)} raw={responses.responded}
+          tone={responses.responded ? undefined : "muted"}
+          note={
+            responses.needs_label
+              ? `${num(responses.interested)} interested · ${num(responses.needs_label)} still to read`
+              : `${num(responses.interested)} interested`
+          }
+          href={`/replies?${new URLSearchParams({
+            view: "responded", range: "all", ...(known ? { rep } : {}),
+          })}`} />
         <Tile label="Meetings" value={num(kpiMeetings.length)} raw={kpiMeetings.length}
           tone={kpiMeetings.length ? undefined : "muted"} note="booked or held — the primary KPI" />
         <Tile label="Proposals" value={num(myProposals.length)} raw={myProposals.length}
