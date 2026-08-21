@@ -1,5 +1,5 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
-import { callRepList, contactsFor, callsFor, callStats, meetingsForCalls } from "../../../../lib/calls";
+import { callRepList, contactsFor, callsFor, callStats, meetingsForCalls, callsElsewhere, callListOwners } from "../../../../lib/calls";
 import { Tile, Pill, Chev } from "../../../../components/ui";
 import { Board, Card } from "../../../../components/board";
 import { Drawer } from "../../../../components/drawer";
@@ -125,7 +125,7 @@ const FILTERS = {
  * talking") was buried inside them. Owners get the owner points: they are a
  * buyer, not a channel.
  */
-function Points({ ct, rep }) {
+function Points({ ct, rep, unsafe }) {
   const first = ct.full_name.split(" ")[0];
   const caller = rep.split(" ")[0];
   const bldgs = ct.buildings ?? [];
@@ -135,6 +135,68 @@ function Points({ ct, rep }) {
 
   const boroughs = [...bldgs.reduce((m, b) => m.set(b.borough, (m.get(b.borough) ?? 0) + 1), new Map())]
     .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(" · ");
+
+  // The two facts that make an UNSAFE call urgent, summed over the buildings
+  // this person carries: what the city is owed, and how far past the 90-day
+  // repair deadline the worst filing is.
+  const owed = bldgs.reduce((a, b) => a + (b.ecb ?? 0), 0);
+  const overdue = bldgs.filter((b) => b.overdue > 0).length;
+  const worst = bldgs.reduce((a, b) => Math.max(a, b.overdue ?? 0), 0);
+
+  if (unsafe) {
+    return (
+      <>
+        <div className="pbook">
+          <b>{num(n)} UNSAFE building{n === 1 ? "" : "s"}</b> carried · top building ranks{" "}
+          <b>#{ct.best_rank}</b>
+          {owed ? ` · $${num(owed)} unpaid` : ""}
+          {overdue ? ` · ${num(overdue)} past the 90 days` : ""}
+          {boroughs ? ` · ${boroughs}` : ""}
+        </div>
+
+        {ct.role === "engineer" ? (
+          <ul className="ppoints">
+            <li><b>Thirty seconds</b> — {caller} from QEA Tech, calling about the FISP filings
+              under {first}&rsquo;s name.</li>
+            <li><b>{num(n)} of them read UNSAFE</b>
+              {overdue ? <> — {num(overdue)} already past the 90-day repair deadline
+                {worst ? `, the worst by ${num(worst)} days` : ""}</> : null}
+              {owed ? <>, and the owners are carrying <b>${num(owed)}</b> in unpaid ECB
+                penalties</> : null}. No repair permit pulled on any of them.</li>
+            <li><b>Nobody has been hired yet.</b> That is the whole reason for the call — the
+              work has to happen and the scope does not exist.</li>
+            <li>Drone scan of the envelope: thermal and visual,{" "}
+              <b>whole building in a day, no scaffold</b>, so the condition survey stops
+              waiting on a sidewalk shed.</li>
+            <li className="stop">&ldquo;Who is scoping the repair on{" "}
+              {top ? top.address : "that one"}?&rdquo; — then stop talking.</li>
+            <li><b>The real ask, reseller:</b> {org} scopes it, we fly it, they file and bill
+              it — and the owner gets out from under the fine faster.</li>
+            <li><b>Close on one building:</b>{top ? ` ${top.address}, ${top.borough}` : " one building"}
+              {top?.overdue ? `, ${num(top.overdue)} days overdue` : ""}. We fly it, they see the
+              output, and if it is not useful nothing was lost.</li>
+          </ul>
+        ) : (
+          <ul className="ppoints">
+            <li><b>Thirty seconds</b> — {caller} from QEA Tech, calling about{" "}
+              {top ? top.address : "the building"}.</li>
+            <li><b>It is filed UNSAFE with the city</b>
+              {top?.overdue ? <> — the 90-day repair clock ran out{" "}
+                <b>{num(top.overdue)} days ago</b></> : <> — the 90-day repair clock is running</>}
+              {top?.ecb ? <>, and there is <b>${num(top.ecb)}</b> outstanding on it</> : null}.</li>
+            <li><b>No repair permit has been pulled</b>, so the fines keep compounding while
+              nothing is scoped.</li>
+            <li>A drone scan puts the whole facade in front of your engineer in a day —{" "}
+              <b>no scaffold, no shed</b> — so the repair can be priced and filed.</li>
+            <li className="stop">&ldquo;Who is handling the FISP repair for you?&rdquo; —
+              then stop talking.</li>
+            <li><b>Close:</b> we fly it this week, your engineer gets the survey, and if it is
+              not useful nothing was lost.</li>
+          </ul>
+        )}
+      </>
+    );
+  }
 
   return (
     <>
@@ -204,7 +266,7 @@ function Points({ ct, rep }) {
  * back looking exactly like a saved one. Both answers render here, where the
  * rep is already looking, and only for the person they are open on.
  */
-function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref, dropped }) {
+function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref, dropped, unsafe, elsewhere, listOf }) {
   const history = s.callsOf(ct);
   const label = Object.fromEntries(OUTCOMES);
   const first = ct.full_name.split(" ")[0];
@@ -255,6 +317,31 @@ function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref, dropped }) {
           <a href={rowHref(ct, null)}>dismiss</a>
         </p>
       ) : null}
+
+      {/* This person has been rung already — on the other list, where they are
+          a second row for the same human. Shown before the script, because
+          "we spoke on the 4th" is the first thing they will say. The calls are
+          not counted by this list's tiles; they belong to the list they were
+          logged on and the link goes there. */}
+      {(elsewhere?.get(ct.id) ?? []).length ? (() => {
+        const other = elsewhere.get(ct.id);
+        const list = listOf?.get(other[0].call_contacts.call_campaign_id);
+        const owner = other[0].rep ?? list?.owner;
+        return (
+          <p className="pres">
+            <span className="tick">!</span>
+            <span>
+              <b>Already rung {num(other.length)} time{other.length === 1 ? "" : "s"}</b>
+              {list ? <> on <b>{list.display_name}</b></> : null} — last{" "}
+              {prettyDate(other[0].call_date)}, {label[other[0].outcome] ?? other[0].outcome}
+              {other[0].note ? <> · &ldquo;{other[0].note}&rdquo;</> : null}
+            </span>
+            {list && owner
+              ? <a href={`/calls/${encodeURIComponent(owner)}/${list.slug}?open=${other[0].call_contacts.id}`}>open it</a>
+              : null}
+          </p>
+        );
+      })() : null}
 
       <div className="phead">
         <div className="meta">
@@ -323,18 +410,23 @@ function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref, dropped }) {
       <div className="psplit">
         <div className="pcol">
           <h2>What to say</h2>
-          <Points ct={ct} rep={rep} />
+          <Points ct={ct} rep={rep} unsafe={unsafe} />
           {/* Reference, not reading — folded so the form never sinks below 46
-              rows of addresses. */}
+              rows of addresses. The last two columns are the list's own
+              urgency: a SAFE streak where there is one, the unpaid balance and
+              the days past the 90-day deadline where the building is UNSAFE. */}
           <details className="pfold" style={{ marginTop: 14 }}>
             <summary>
-              All {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"} on the SAFE list
+              All {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"} on the{" "}
+              {unsafe ? "UNSAFE" : "SAFE"} list
             </summary>
             <div className="tw" style={{ marginTop: 10 }}>
               <table>
                 <thead><tr>
                   <th style={{ textAlign: "left" }}>Address</th><th>BIN</th>
-                  <th>Borough</th><th>Rank</th><th>SAFE streak</th>
+                  <th>Borough</th><th>Rank</th>
+                  <th>{unsafe ? "Unpaid" : "SAFE streak"}</th>
+                  {unsafe ? <th>Past 90 days</th> : null}
                 </tr></thead>
                 <tbody>
                   {(ct.buildings ?? []).map((b) => (
@@ -343,7 +435,16 @@ function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref, dropped }) {
                       <td className="dim">{b.bin}</td>
                       <td>{b.borough}</td>
                       <td>#{b.rank}</td>
-                      <td>{b.streak ? `${b.streak} cycles` : num(b.score)}</td>
+                      {unsafe ? (
+                        <>
+                          <td>{b.ecb ? `$${num(b.ecb)}` : <span className="dim">—</span>}</td>
+                          <td>{b.overdue > 0
+                            ? <b>{num(b.overdue)} days</b>
+                            : <span className="dim">clock running</span>}</td>
+                        </>
+                      ) : (
+                        <td>{b.streak ? `${b.streak} cycles` : num(b.score)}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -552,9 +653,21 @@ export default async function CallWorkspace({ params, searchParams }) {
   }
 
   const [contacts, calls] = await Promise.all([contactsFor(camp.id), callsFor(camp.id)]);
-  const meetingOf = await meetingsForCalls(calls);
+  // Calls the same people have taken on the other list. Not counted by
+  // callStats — see callsElsewhere — but shown, so nobody rings a man on
+  // Tuesday who said no on Monday under a different heading.
+  const [meetingOf, elsewhere, { listOf }] = await Promise.all([
+    meetingsForCalls(calls), callsElsewhere(contacts, camp.id), callListOwners(),
+  ]);
   const s = callStats(contacts, calls, meetingOf);
   const t = today();
+
+  // Which pitch the panel says out loud. Two call lists since 21 Aug 2026 and
+  // they are opposites: a SAFE building has no deadline and the angle is LL97
+  // energy, an UNSAFE one has a 90-day repair clock, an unpaid ECB balance and
+  // no contractor hired, and the angle is the clock. Every "SAFE" on this page
+  // was a hardcoded word until the second list existed.
+  const unsafe = camp.slug === "nyc-ll11-unsafe";
 
   const base = `/calls/${encodeURIComponent(rep)}/${camp.slug}`;
   const here = (f, v = sp.v) => {
@@ -740,8 +853,25 @@ export default async function CallWorkspace({ params, searchParams }) {
           note={`of ${num(contacts.reduce((a, c) => a + c.buildings_count, 0))} carried by the whole list`}
           href={here("reached")} />
         <Tile label="Do-not-call" value={num(s.doNotCall)} raw={s.doNotCall}
-          tone="muted" note="incl. NYCHA, tagged institutional" href={here("dnc")} />
+          tone="muted"
+          /* NYCHA is a SAFE-list fact — 169 buildings behind four names, tagged
+             institutional by that import. Nothing on the UNSAFE pilot is. */
+          note={unsafe ? "retired off the working list" : "incl. NYCHA, tagged institutional"}
+          href={here("dnc")} />
       </div>
+
+      {/* The tiles above count calls filed on THIS list, and that is the rule
+          that keeps them summing to the Overview's total. People on two lists
+          break the reading of "never called" without breaking the arithmetic,
+          so the overlap is stated here rather than folded into a tile. */}
+      {elsewhere.size ? (
+        <p className="note" style={{ marginTop: -18, marginBottom: 26 }}>
+          <b>{num(elsewhere.size)} of these people have already been rung</b> on another list —
+          they sit on both, and the calls are filed where they were logged, so the tiles above
+          do not count them. Each one says so when you open it.{" "}
+          <a className="drilled" href="/calls/log">See every call &rarr;</a>
+        </p>
+      ) : null}
 
       {/* The call list — one card or row per person, best call at the top. */}
       <div className="listhead">
@@ -806,7 +936,7 @@ export default async function CallWorkspace({ params, searchParams }) {
                       </summary>
 
                       <div className="mbody"><div className="inner">
-                        <PersonPanel ct={ct} rep={rep} base={base} t={t} s={s} meetingOf={meetingOf} sp={sp} rowHref={rowHref} dropped={dropped} />
+                        <PersonPanel ct={ct} rep={rep} base={base} t={t} s={s} meetingOf={meetingOf} sp={sp} rowHref={rowHref} dropped={dropped} unsafe={unsafe} elsewhere={elsewhere} listOf={listOf} />
                       </div></div>
                     </details>
               );
@@ -827,7 +957,7 @@ export default async function CallWorkspace({ params, searchParams }) {
             : null}
         >
           {openContact ? (
-            <PersonPanel ct={openContact} rep={rep} base={base} t={t} s={s}
+            <PersonPanel ct={openContact} rep={rep} base={base} t={t} s={s} unsafe={unsafe} elsewhere={elsewhere} listOf={listOf}
               meetingOf={meetingOf} sp={sp} rowHref={rowHref} dropped={dropped} />
           ) : null}
         </Drawer>

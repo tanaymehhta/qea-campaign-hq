@@ -278,10 +278,13 @@ campaign page 11. Rep card and campaign page both read 1 meeting.
 
 None of these stop a rep working. In the order worth doing them.
 
-**A · "Calls logged → see who" lands on the rep picker.** Every other tile on the Overview
-drills into `/list?metric=…`. There is no list of calls anywhere in the app, so the number
-16 — now 11 — is never shown as rows. Needs a `calls` entry in `METRICS` (`lib/db.js`) and
-a row shape in `/list`.
+**A · Fixed 21 Aug 2026.** "Calls logged" landed on `/calls`, the rep picker, so the one
+number a rep adds to by hand was the only one that could never be shown as rows — reported
+as *"the number says 14 and the list is 0. There is no answer to that."* It opens
+`/calls/log` now: one row per call, with the person, the list they sit on, the tag and the
+note. Not a `METRICS` entry in `/list`, because a call is not a person and that page's rows
+are people; it reads `callLog()` and scopes by `callOwnerOf()`, both in `lib/calls.js`, and
+the Overview tile scopes by the same exported function so the two cannot drift.
 
 **B · Two people sharing a firm mailbox merge into one "person reached."** `reached_people`
 keys a phoned person on `lower(email)` with no shared-mailbox test. `v_lead_people` has one
@@ -313,9 +316,55 @@ lowercase today, so it works. `adopt_orphan_call` lowercases; the other two shou
 the tile grid, the call list rows and the log form all wear the dashboard's generic
 components.
 
+**H · A person on two call lists is two rows, and the second list says "never called".**
+Since 21 Aug 2026 there are two lists — `nyc-ll11-safe` (1,252) and `nyc-ll11-unsafe` (173)
+— and **37 email addresses appear on both**: an engineer who signs for a SAFE building and
+an UNSAFE one is on both lists, because a list is a list of buildings' people. A call is
+filed against whichever row the rep had open. Nine of the UNSAFE list's people have been
+rung that way, all of them on the SAFE list.
+
+The tiles deliberately do **not** follow the person across lists — `callStats` counts calls
+filed on the list you are looking at, which is what keeps the two lists summing to the
+Overview's total instead of both claiming one dial. The overlap is shown instead:
+`callsElsewhere()` matches on email **and** name (Shaginyan has an email on one list and
+none on the other, so email alone finds 6 of the 9) and the panel says "Already rung N
+times on <list>" above the script, with a link to the call.
+
+What is still open is `v_lead_people`: those 37 people are two rows on `/leads`, flagged
+`email_is_shared` because its `shared_mailbox` CTE treats any repeated address as a firm
+inbox. The page's stated contract is A ROW IS A PERSON. The fix is to test for more than
+one distinct *name* behind an address rather than more than one row, and to collapse the
+call side across campaigns — one row carrying both lists.
+
 ---
 
 ## 9. How to verify any of this
+
+**The UNSAFE list landed intact.** The import was applied as hand-pasted SQL — no service
+role key is reachable from the repo and `anon` has no insert policy on `call_contacts` — so
+"it ran without an error" is not the same as "every BIN survived". Both sides hash the same
+173 rows:
+
+```
+node scripts/import_unsafe_list.mjs --fingerprint     # -> 75d34f01efdb2df18c5a0654012756b8 173
+```
+
+and in SQL, over the rows the table actually holds:
+
+```sql
+select md5(string_agg(line, E'\n' order by line)), count(*) from (
+  select ct.source_key||'|'||ct.full_name||'|'||coalesce(ct.role,'')||'|'||coalesce(ct.org_name,'')
+    ||'|'||coalesce(ct.phone,'')||'|'||coalesce(ct.email,'')||'|'||coalesce(ct.linkedin,'')
+    ||'|'||ct.buildings_count||'|'||coalesce(ct.best_rank::text,'')
+    ||'|'||coalesce((select string_agg((b->>'bin')||':'||(b->>'address')||':'||(b->>'borough')
+      ||':'||(b->>'rank')||':'||(b->>'score')||':'||(b->>'ecb')||':'||(b->>'overdue'), ',' order by ord)
+      from jsonb_array_elements(ct.buildings) with ordinality x(b, ord)), '') as line
+  from call_contacts ct
+  where ct.call_campaign_id = (select id from call_campaigns where slug='nyc-ll11-unsafe')
+) s;
+```
+
+They matched on 21 Aug 2026. If they ever stop, the table has drifted from the spreadsheet.
 
 Nothing in this file is a claim about code. Every number above came from the live database
 and can be re-asked.

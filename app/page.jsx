@@ -3,6 +3,7 @@ import {
   EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
   meetingCounts, meetingArgs, everyRow,
 } from "../lib/db";
+import { callOwnerOf } from "../lib/calls";
 import { Tile, RangePicker, Reps, BounceCell, DrillCell } from "../components/ui";
 import SendsChart from "../components/sends-chart";
 
@@ -434,9 +435,9 @@ export default async function Overview({ searchParams }) {
   // sits on — `meeting_rows`'s two doors, in the same order. The three July
   // rows carry neither and so belong to nobody: they are in the all-reps total
   // and in no rep's view, which /calls/orphans exists to end.
-  const callOwnerOf = (c) =>
-    c.rep ?? callCampOwner.get(c.call_contacts?.call_campaign_id) ?? null;
-  const scopedCalls = rep === "all" ? (calls ?? []) : (calls ?? []).filter((c) => callOwnerOf(c) === rep);
+  // `callOwnerOf` lives in lib/calls.js since 21 Aug, because /calls/log scopes
+  // by it too and the tile and the rows behind it must be one pile.
+  const scopedCalls = rep === "all" ? (calls ?? []) : (calls ?? []).filter((c) => callOwnerOf(c, callCampOwner) === rep);
   const callCount = scopedCalls.length;
   const orphanCalls = (calls ?? []).filter((c) => !c.contact_id).length;
   const bounceRate = overallBounced == null || !overall.sent ? null : pct(overallBounced, overall.sent);
@@ -456,6 +457,9 @@ export default async function Overview({ searchParams }) {
   // opens every meeting in the window and says so in its title.
   const meetingsHref = () =>
     `/meetings?${new URLSearchParams({ ...windowParams, ...repParams })}`;
+  // Same window, same rep, same scope rule — see /calls/log.
+  const callLogHref = () =>
+    `/calls/log?${new URLSearchParams({ ...windowParams, ...repParams })}`;
   const here = (params) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
@@ -642,7 +646,10 @@ export default async function Overview({ searchParams }) {
               ? ` · ${num(orphanCalls)} on no list yet`
               : ""
           }`}
-          href="/calls"
+          /* Opens the calls themselves, not the rep picker. It pointed at
+             /calls until 21 Aug, which is a list of names — so this was the
+             one tile whose number could never be shown as rows. */
+          href={callLogHref()}
         />
         <Tile
           label="Meetings booked"
