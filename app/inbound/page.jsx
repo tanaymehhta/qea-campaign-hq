@@ -4,7 +4,8 @@ import { prettyWhen, num } from "../../lib/db";
 import { money, dateWindow } from "../../lib/pipeline";
 import { ALL_REPS, REGIONS, repById } from "../../lib/inbound/routing";
 import { cap, errorReason, isCreditError, RUNNING_CHIP } from "../../lib/inbound/words";
-import { RelevanceToggle, RestartButton } from "./controls";
+import { RelevanceToggle, RestartButton, ReachedOut } from "./controls";
+import { loadTouches } from "../../lib/inbound/touched";
 import { Live } from "./live";
 import { Running } from "./running";
 import {
@@ -135,7 +136,7 @@ function Hooks({ hooks }) {
  *  the two — usually the one you wanted. It sits in a links row under the card
  *  rather than a floating strip, because moving a company out of the queue is a
  *  sideways move like every other link on these pages. */
-function CompanyCard({ lead, i }) {
+function CompanyCard({ lead, i, touch, rep }) {
   // A card mid-restart is not a failed card. The red block explains the run
   // being replaced right now, so it collapses with the button inside it — the
   // same mistake the timeline already stopped making, which is showing a stale
@@ -146,9 +147,11 @@ function CompanyCard({ lead, i }) {
   const chip = lead.busy ? RUNNING_CHIP : lead.chip;
   const why = failed ? errorReason(lead.company?.account_type_reason) : null;
   return (
-    <div className={`i-cowrap${failed ? " failed" : ""}${lead.busy ? " busy" : ""}`}
+    <div className={`i-cowrap${failed ? " failed" : ""}${lead.busy ? " busy" : ""}${touch ? " touched" : ""}`}
          style={{ animationDelay: `${Math.min(i, 14) * 0.03}s` }}>
-      <a className="i-co" href={`/inbound/company/${lead.id}`}>
+      {/* The rep rides along: open a company from Mark Vasu's queue and the
+          tick on that page is already his, with no dropdown. */}
+      <a className="i-co" href={`/inbound/company/${lead.id}${rep && rep !== "all" ? `?rep=${rep}` : ""}`}>
         <div className="top">
           <div className="nm">{lead.name}</div>
           {/* What happened to research, on every card. This is what the deleted
@@ -207,6 +210,11 @@ function CompanyCard({ lead, i }) {
           </div>
         ) : null}
         <div className="i-links">
+          {/* First in the row, and the only control here anybody presses daily.
+              Moving a company out of the queue is a rarer, heavier decision, so
+              it keeps its place on the right. */}
+          <ReachedOut companyId={lead.id} touch={touch} rep={rep} />
+          <span className="push" />
           <RelevanceToggle companyId={lead.id} relevant={lead.lane !== "irrelevant"} />
         </div>
       </div>
@@ -214,7 +222,7 @@ function CompanyCard({ lead, i }) {
   );
 }
 
-function CompanyTable({ rows }) {
+function CompanyTable({ rows, touches, rep }) {
   return (
     <div className="card tw">
       <table>
@@ -229,6 +237,7 @@ function CompanyTable({ rows }) {
             <th>Contacts</th>
             <th>Ready</th>
             <th style={{ textAlign: "left" }}>Rep</th>
+            <th style={{ textAlign: "left" }}>Reached out</th>
           </tr>
         </thead>
         <tbody>
@@ -236,7 +245,7 @@ function CompanyTable({ rows }) {
             <tr key={l.id}>
               <td className="dim" style={{ fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
               <td className="name">
-                <a href={`/inbound/company/${l.id}`}>{l.name}</a>
+                <a href={`/inbound/company/${l.id}${rep && rep !== "all" ? `?rep=${rep}` : ""}`}>{l.name}</a>
                 <div className="dim">{l.domain}</div>
               </td>
               <td className="dim" style={{ textAlign: "left" }}>
@@ -254,9 +263,17 @@ function CompanyTable({ rows }) {
               <td className="dim" style={{ textAlign: "left" }}>
                 {l.reps.map((r) => repById(r).name.split(" ")[0]).join(" + ")}
               </td>
+              {/* The same fact as the tick on the card. The table is a scan, so
+                  it reads rather than presses — the control lives on the card
+                  and on the company page. */}
+              <td className="dim" style={{ textAlign: "left" }}>
+                {touches[l.id]
+                  ? `${repById(touches[l.id].by)?.name.split(" ")[0] ?? touches[l.id].by} · ${prettyWhen(touches[l.id].at)}`
+                  : "—"}
+              </td>
             </tr>
           ))}
-          {!rows.length ? <tr><td colSpan={9} className="empty">Nothing here.</td></tr> : null}
+          {!rows.length ? <tr><td colSpan={10} className="empty">Nothing here.</td></tr> : null}
         </tbody>
       </table>
     </div>
@@ -278,6 +295,9 @@ export default async function Inbound({ searchParams }) {
 
   const show = VIEWS[searchParams?.show] ? searchParams.show : "all";
   const { companies, traffic, excluded } = await loadQueue();
+  // Who has already picked each account up. Read once for the page rather than
+  // per card: forty cards is forty reads of the same small file otherwise.
+  const touches = await loadTouches();
 
   const inRange = filterLeads(companies, { rep: null, range, from, to });
   // What the header counts and what the list shows are the same set, minus the
@@ -477,14 +497,16 @@ export default async function Inbound({ searchParams }) {
           {num(filterLeads(companies, { rep, range: "all" }).length)}.
         </div>
       ) : as === "table" ? (
-        <CompanyTable rows={rows} />
+        <CompanyTable rows={rows} touches={touches} rep={rep} />
       ) : (
         lanes.map((lane) => (
           <section key={lane.id} id={lane.id}>
             <Sec title={lane.label} right={num(lane.rows.length)} />
             {lane.rows.length ? (
               <div className="i-grid">
-                {lane.rows.map((l, i) => <CompanyCard key={l.id} lead={l} i={i} />)}
+                {lane.rows.map((l, i) => (
+                  <CompanyCard key={l.id} lead={l} i={i} touch={touches[l.id]} rep={rep} />
+                ))}
               </div>
             ) : (
               <div className="i-empty">None in this window.</div>

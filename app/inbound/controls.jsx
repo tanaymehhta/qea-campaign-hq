@@ -1,4 +1,13 @@
-import { movePerson, setPersonReady, setCompanyRelevant, restartCompany } from "./actions";
+import { movePerson, setPersonReady, setCompanyRelevant, restartCompany, setReachedOut } from "./actions";
+import { ALL_REPS, repById } from "../../lib/inbound/routing";
+import { prettyWhen } from "../../lib/db";
+
+/** The same tick the timeline draws, at label size. */
+const Tick = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
+    <path d="M4.5 10.5l3.5 3.5 7.5-8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 /**
  * The hand controls: reorder a person, overrule a verdict, move a company.
@@ -215,6 +224,82 @@ export function RestartButton({ companyId, stage = 1, small, caveat, wasCredit, 
           across nine companies are held only by an empty `assigned_to`, and
           re-running writes the same mail for the same refusal. */}
       {caveat ? <div className="hint" style={{ marginTop: 8 }}>{caveat}</div> : null}
+    </form>
+  );
+}
+
+/**
+ * The tick: somebody has looked at this account and reached out.
+ *
+ * Three renderings of one control, and which one you get depends on where you
+ * are standing — because the question "who did this" already has an answer in
+ * two of the three cases and asking it again is a click nobody should have to
+ * make.
+ *
+ *   ticked            the answer, and the way to take it back
+ *   inside a rep      one press. You are in Mark Vasu's queue, so it was
+ *                     Mark Vasu, and a dropdown here would only ever be used to
+ *                     pick the name already at the top of the page
+ *   All reps          the box opens a name first. Nothing is saved until one is
+ *                     chosen — an account ticked by nobody is worse than one
+ *                     nobody ticked
+ *
+ * The third is a hidden checkbox and a sibling selector, so the panel opens
+ * without a byte of JavaScript and this stays a server component like the rest
+ * of `controls.jsx`. The checkbox carries no `name`: it opens the drawer, it is
+ * not the answer, and it must not be posted.
+ */
+export function ReachedOut({ companyId, touch, rep }) {
+  if (touch) {
+    const who = repById(touch.by);
+    return (
+      <form action={setReachedOut} className="i-touch is-on">
+        <input type="hidden" name="id" value={companyId} />
+        <input type="hidden" name="want" value="no" />
+        <button type="submit" title="Press to undo — this goes back to nobody having reached out">
+          <span className="box"><Tick /></span>
+          Reached out
+          <span className="dim">
+            {" "}· {who ? who.name.split(" ")[0] : touch.by} · {prettyWhen(touch.at)}
+          </span>
+        </button>
+      </form>
+    );
+  }
+
+  if (rep && rep !== "all" && repById(rep)) {
+    const who = repById(rep);
+    return (
+      <form action={setReachedOut} className="i-touch">
+        <input type="hidden" name="id" value={companyId} />
+        <input type="hidden" name="by" value={rep} />
+        <button type="submit" title={`Marks this reached out by ${who.name}`}>
+          <span className="box" />
+          Reached out<span className="dim">{" "}· as {who.name.split(" ")[0]}</span>
+        </button>
+      </form>
+    );
+  }
+
+  // `companyId` is in the id because these render forty to a page and a label
+  // has to point at its own checkbox and no other one.
+  const gate = `touch-${companyId}`;
+  return (
+    <form action={setReachedOut} className="i-touch">
+      <input type="hidden" name="id" value={companyId} />
+      <input type="checkbox" id={gate} className="gate" />
+      <label htmlFor={gate} title="Tick when you have reached out, then say who you are">
+        <span className="box" />Reached out
+      </label>
+      <span className="ask">
+        <select name="by" defaultValue="">
+          <option value="" disabled>Who reached out?</option>
+          {ALL_REPS.filter((r) => r.id !== "unrouted").map((r) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
+        </select>
+        <button type="submit">Save</button>
+      </span>
     </form>
   );
 }

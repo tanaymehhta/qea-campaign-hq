@@ -689,3 +689,58 @@ a.i-stat:active { transform: scale(.99); }
   outline: 2px solid var(--s1); outline-offset: 1px;
 }
 .i-dates a { font-size: 12px; color: var(--ink-3); }
+
+/* ── Reached out ──────────────────────────────────────────────────────────
+   A checkbox that is a form. `.i-links` underlines its buttons and lays them
+   out in a row, so this overrides both: a tick is a state, not a link, and it
+   needs its box and its label kept together. */
+.i-touch { display: inline-flex; align-items: center; gap: 8px; }
+.i-links .i-touch { display: inline-flex; }
+.i-touch button, .i-touch label {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  border: none; background: none; padding: 0; font: inherit;
+  font-size: 12.5px; color: var(--ink-2); text-decoration: none; }
+.i-touch button:hover, .i-touch label:hover { color: var(--ink-1); }
+.i-touch .box {
+  width: 15px; height: 15px; flex: none; border-radius: 4px;
+  border: 1.5px solid var(--axis); background: var(--surface-1);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s ease, border-color .12s ease; }
+.i-touch button:hover .box, .i-touch label:hover .box { border-color: var(--ink-2); }
+.i-touch .box svg { width: 11px; height: 11px; }
+.i-touch .dim { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* Ticked. Green fill and the tick inside it, so the state reads from across the
+   grid without anyone stopping to read the words next to it. */
+.i-touch.is-on .box { background: var(--good-fill); border-color: var(--good-fill); color: #fff; }
+.i-touch.is-on button { color: var(--good-ink); }
+
+/* The name, asked for only in All reps and only after the box is ticked. The
+   checkbox itself never posts — it has no `name` — it exists to open this. */
+.i-touch .gate { position: absolute; opacity: 0; pointer-events: none; }
+.i-touch .ask { display: none; }
+/* Ticked but not saved yet. Deliberately not green: green on this page means a
+   thing that happened, and nothing has happened until a name is chosen. */
+.i-touch .gate:checked ~ label .box { border-color: var(--ink-1); border-width: 2px; }
+.i-touch .gate:checked ~ label { color: var(--ink-1); font-weight: 500; }
+.i-touch .gate:checked ~ .ask { display: inline-flex; align-items: center; gap: 6px; }
+/* Keyboard reaches the box through the label; without this the focus ring lands
+   on an element nobody can see. */
+.i-touch .gate:focus-visible ~ label .box { outline: 2px solid var(--axis); outline-offset: 2px; }
+.i-touch .ask select {
+  font: inherit; font-size: 12px; padding: 4px 6px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--ink-1); }
+.i-touch .ask button {
+  background: var(--ink-1); color: var(--page); border-radius: var(--r-pill);
+  padding: 4px 11px; font-size: 12px; font-weight: 500; }
+.i-touch .ask button:hover { color: var(--page); opacity: .88; }
+
+/* Pushes Move-to-not-relevant to the far end, so the tick sits under the card
+   it belongs to rather than beside a heavier decision. */
+.i-cofoot .i-links { justify-content: flex-start; }
+.i-cofoot .i-links .push { flex: 1; }
+
+/* Dealt with, at a glance. A left edge rather than a wash: the card already
+   carries a red state for failed research and a blue one for running, and a
+   third full-card colour would leave nothing reading as ordinary. */
+.i-cowrap.touched { border-left: 3px solid var(--good-fill); }

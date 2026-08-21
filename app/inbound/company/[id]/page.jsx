@@ -2,10 +2,11 @@ import "../../inbound.css";
 import { prettyWhen, num } from "../../../../lib/db";
 import { loadCompany, pageOf, pathOf, costs, whyNobody } from "../../../../lib/inbound/queue";
 import { money } from "../../../../lib/pipeline";
-import { REGIONS } from "../../../../lib/inbound/routing";
+import { REGIONS, repById } from "../../../../lib/inbound/routing";
 import { verdict, bullets, cap, isApiError, isCreditError, errorReason, researchChip, RUNNING_CHIP } from "../../../../lib/inbound/words";
 import { Research } from "../../research";
-import { RankButtons, ReadyToggle, RelevanceToggle, RestartButton } from "../../controls";
+import { RankButtons, ReadyToggle, RelevanceToggle, RestartButton, ReachedOut } from "../../controls";
+import { loadTouches } from "../../../../lib/inbound/touched";
 import { Live } from "../../live";
 import { Running } from "../../running";
 
@@ -165,6 +166,11 @@ export default async function Company({ params, searchParams }) {
   const c = d.company;
   if (!c) return <><h1 className="i-h1">Not found</h1><p className="i-sub">No company with that id.</p></>;
   const err = searchParams?.err;
+  // Which queue you walked in from. The card links carry it, so opening a
+  // company out of Mark Vasu's queue signs the tick here without asking. A
+  // bookmark straight to this URL carries nothing, and gets the dropdown.
+  const rep = repById(searchParams?.rep) ? searchParams.rep : "all";
+  const touches = await loadTouches();
 
   const v = verdict(c);
   // Last time's verdict is not the current answer while the classifier is
@@ -213,6 +219,12 @@ export default async function Company({ params, searchParams }) {
           ) : null}
           <Sep />
           <RelevanceToggle companyId={c.id} relevant={v.lane !== "irrelevant"} />
+        </div>
+
+        {/* Under the record, not inside it: this is the one line on the page a
+            person wrote rather than a run produced. */}
+        <div className="i-links">
+          <ReachedOut companyId={c.id} touch={touches[c.id]} rep={rep} />
         </div>
       </header>
 

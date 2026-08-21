@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { db } from "../../lib/db";
+import { setTouch } from "../../lib/inbound/touched";
 
 /**
  * The only writes this app makes to `inbound_*`.
@@ -177,4 +178,32 @@ export async function setCompanyRelevant(formData) {
   });
   refresh(id, null);
   back(error?.message);
+}
+
+/**
+ * "I have looked at this and reached out."
+ *
+ * The one fact on these pages that no run can produce, so a person types it.
+ * `by` is who is claiming it: the rep chip when a rep is standing in their own
+ * queue, and a name they pick when they are standing in All reps. Empty is
+ * refused rather than saved as an anonymous tick — an account marked done by
+ * nobody is worse than one not marked at all.
+ *
+ * Unticking passes no name, which is how a mistaken press is taken back.
+ */
+export async function setReachedOut(formData) {
+  const id = formData.get("id");
+  const by = formData.get("by") || null;
+  const want = formData.get("want") !== "no";
+  let err = null;
+  try {
+    // The refusal is here rather than in the markup, because a select with no
+    // choice made still submits — `required` is a hint, not a guard.
+    if (want && !by) throw new Error("nobody was named, so nothing was ticked");
+    await setTouch(id, want ? by : null);
+  } catch (e) {
+    err = e.message;
+  }
+  refresh(id, null);
+  back(err);
 }
