@@ -1,6 +1,6 @@
 import { db, prettyWhen } from "../../lib/db";
 import { Tile, Pill } from "../../components/ui";
-import { runStates, MOVING, REPO } from "../../lib/github";
+import { runStates, MOVING, REPO, shareable } from "../../lib/github";
 import RefreshWhile from "../../components/refresh-while";
 import Elapsed from "../../components/elapsed";
 import { setFeedbackStatus, askClaude, ship } from "./actions";
@@ -221,8 +221,12 @@ function Run({ run, id }) {
         {/* The preview first and worded as a place rather than a link: it is a
             running copy of the change, and it is the only one of these three a
             person who does not read code has any use for. The same button that
-            ships it is waiting at the top of that page. */}
-        <a className="choice go" href={run.preview} target="_blank" rel="noreferrer">
+            ships it is waiting at the top of that page.
+
+            shareable() carries the bypass secret, so a colleague without a
+            Vercel account can open this. Without the secret set it is the plain
+            preview URL, which still works for anyone who is signed in. */}
+        <a className="choice go" href={shareable(run.preview)} target="_blank" rel="noreferrer">
           See it live →
         </a>
         <form action={ship} className="gapform">
