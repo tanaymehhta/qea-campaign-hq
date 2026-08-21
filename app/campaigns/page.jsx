@@ -1,11 +1,11 @@
-import { db, num, pct, prettyDate, listHref } from "../../lib/db";
+import { db, num, pct, prettyDate, listHref, responseCounts, reachedCounts } from "../../lib/db";
 import { Seg, BounceCell, DrillCell, Num, Chev } from "../../components/ui";
 
 export const dynamic = "force-dynamic";
 
 const SORTS = [
   ["priority", "Priority"],
-  ["reply", "Reply rate"],
+  ["reply", "Response rate"],
   ["sent", "Volume"],
   ["risk", "Bounce risk"],
 ];
@@ -27,13 +27,40 @@ export default async function Campaigns({ searchParams }) {
     subsOf.get(s.group_id).push(s);
   }
 
+  // Who answered, and who we actually emailed — both per group, both from the
+  // functions the Overview tile and /replies ask. The Replies stat here read
+  // `v_group_summary.replied`, the vendor's reply counter, which counts every
+  // message its own auto-reply filter let through; ours counts people who
+  // wrote an answer. Lifetime, because this page has no window.
+  //
+  // Reply % was `replied ÷ leads` — a vendor message count over everyone on
+  // the list, including people never emailed. It is answers over people
+  // reached now, which is the same swap the Interested rate on the homepage
+  // made: one pile on both sides of the line.
+  const stats = new Map(
+    await Promise.all(
+      (groups ?? []).map(async (g) => {
+        const scope = {
+          from: null, to: null, source: null,
+          campaignIds: (subsOf.get(g.id) ?? []).map((s) => s.campaign_id),
+        };
+        const [resp, reach] = await Promise.all([
+          responseCounts(scope),
+          reachedCounts({ ...scope, rep: null }),
+        ]);
+        return [g.id, { resp, reach, rate: pct(resp.responded, reach.people) }];
+      })
+    )
+  );
+  const statOf = (g) => stats.get(g.id) ?? { resp: {}, reach: {}, rate: null };
+
   // Bounce risk is the worst sub-campaign in the group, not the group average:
   // one poisoned list inside an otherwise healthy group is the thing to find.
   const riskOf = (g) =>
     Math.max(0, ...(subsOf.get(g.id) ?? []).filter((s) => s.sent > 40).map((s) => pct(s.bounced, s.sent) ?? 0));
 
   const list = [...(groups ?? [])].sort((a, b) => {
-    if (sort === "reply") return (pct(b.replied, b.leads) ?? -1) - (pct(a.replied, a.leads) ?? -1);
+    if (sort === "reply") return (statOf(b).rate ?? -1) - (statOf(a).rate ?? -1);
     if (sort === "sent") return (b.sent ?? 0) - (a.sent ?? 0);
     if (sort === "risk") return riskOf(b) - riskOf(a);
     return (rank.get(a.id) ?? 100) - (rank.get(b.id) ?? 100);
@@ -65,11 +92,12 @@ export default async function Campaigns({ searchParams }) {
           .map((k) => [k, mine.filter((s) => s.status === k).length])
           .filter(([, n]) => n);
         const rate = pct(g.bounced, g.sent);
-        const rr = pct(g.replied, g.leads);
+        const { resp, rate: rr } = statOf(g);
         // Derived from what the campaigns inside are actually doing, not from
         // the word typed at group creation. See v_group_summary.actual_status.
         const status = (g.actual_status ?? "unknown").replace(/_/g, " ");
         const drill = (metric) => listHref({ metric, range: "all", group: g.slug });
+        const pileHref = (view) => `/replies?view=${view}&range=all&group=${g.slug}`;
 
         return (
           <details
@@ -106,11 +134,11 @@ export default async function Campaigns({ searchParams }) {
                     </div>
                   </div>
                   <div>
-                    <div className="k">Replies</div>
-                    <div className={g.replied ? "v" : "v dim"} data-count={g.replied}>{num(g.replied)}</div>
+                    <div className="k">Responses</div>
+                    <div className={resp.responded ? "v" : "v dim"} data-count={resp.responded}>{num(resp.responded)}</div>
                   </div>
                   <div>
-                    <div className="k">Reply %</div>
+                    <div className="k">Response %</div>
                     <div className={`v${rr !== null && rr >= 3 ? " ok" : " dim"}`}>{rr === null ? "—" : `${rr}%`}</div>
                   </div>
                   <div>
@@ -142,7 +170,8 @@ export default async function Campaigns({ searchParams }) {
                     <span className="sw" style={{ background: toolColor(g) }} />
                     {num(g.sent - g.bounced)} sent minus bounces ·{" "}
                     <span className="sw" style={{ background: "var(--crit)" }} />
-                    {num(g.bounced)} bounced · {num(g.delivered)} delivered · {num(g.replied)} replied
+                    {num(g.bounced)} bounced · {num(g.delivered)} delivered ·{" "}
+                    {num(resp.responded)} answered
                   </div>
                 </div>
                 <span className="ghost">Detail<Chev /></span>
@@ -166,8 +195,10 @@ export default async function Campaigns({ searchParams }) {
                     <thead>
                       <tr>
                         <th>Sub-campaigns</th><th>Leads</th><th>Sent</th><th>Delivered</th>
-                        <th>Bounced</th><th>Bounce %</th><th>Opened</th><th>Replies</th>
-                        <th>Reply %</th><th>LI acc.</th><th>Meetings</th><th>Proposals</th>
+                        <th>Bounced</th><th>Bounce %</th><th>Opened</th>
+                        <th title="People who wrote back an answer. Machines and mail nobody has read yet are in neither this nor the rate beside it.">Responses</th>
+                        <th title="Answers over the people we actually reached — not over the size of the list">Response %</th>
+                        <th>LI acc.</th><th>Meetings</th><th>Proposals</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -181,7 +212,7 @@ export default async function Campaigns({ searchParams }) {
                         <DrillCell v={g.bounced} href={drill("bounced")} />
                         <BounceCell bounced={g.bounced} base={g.sent} />
                         <DrillCell v={g.opened} href={drill("opened")} />
-                        <DrillCell v={g.replied} href={drill("replied")} />
+                        <DrillCell v={resp.responded} href={pileHref("responded")} />
                         <td className={rr !== null && rr >= 3 ? "ok" : "zero"}>{rr === null ? "—" : `${rr}%`}</td>
                         <DrillCell v={g.linkedin_accepted} href={drill("linkedin_accepted")} />
                         <DrillCell v={g.meetings} href={drill("meetings")} />
