@@ -3,11 +3,11 @@ import { Tile, Pill } from "../../components/ui";
 import { runStates, MOVING, REPO, shareable } from "../../lib/github";
 import RefreshWhile from "../../components/refresh-while";
 import Elapsed from "../../components/elapsed";
-import { setFeedbackStatus, askClaude, ship } from "./actions";
+import { setFeedbackStatus, askClaude, ship, discard } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-const FILTERS = { open: "still open", done: "done" };
+const FILTERS = { open: "still open", done: "done", review: "waiting on you" };
 
 /**
  * Everything the team has sent, newest first. A suggestion box nobody reads is
@@ -21,7 +21,9 @@ export default async function Feedback({ searchParams }) {
   const { data } = await db.from("feedback").select("*").order("created_at", { ascending: false });
   const all = data ?? [];
   const open = all.filter((f) => f.status === "open");
-  const rows = filter ? all.filter((f) => f.status === filter) : all;
+  // "review" is a filter on what GitHub says rather than on a column, so it is
+  // applied after the states come back, below.
+  const rows = filter && filter !== "review" ? all.filter((f) => f.status === filter) : all;
 
   const url = (path) => db.storage.from("feedback").getPublicUrl(path).data.publicUrl;
   const here = (f) => (f ? `/feedback?f=${f}` : "/feedback");
@@ -30,6 +32,9 @@ export default async function Feedback({ searchParams }) {
   // One call covers every run; the rest is one lookup per asked card.
   const runs = await runStates(rows);
   const moving = Object.values(runs).some((r) => MOVING.includes(r?.phase));
+  const shown = filter === "review"
+    ? rows.filter((f) => runs[f.id]?.phase === "ready")
+    : rows;
 
   return (
     <>
@@ -74,14 +79,14 @@ export default async function Feedback({ searchParams }) {
           tone={all.length ? undefined : "muted"} note="since the box went up" href={here(null)} />
       </div>
 
-      <h2>{filter ? `Feedback ${FILTERS[filter]}` : "Everything sent"} — {rows.length}</h2>
+      <h2>{filter ? `Feedback ${FILTERS[filter]}` : "Everything sent"} — {shown.length}</h2>
       {filter ? (
         <div className="segrow">
           <a className="choice" href={here(null)}>&times; clear filter</a>
         </div>
       ) : null}
 
-      {rows.map((f, i) => (
+      {shown.map((f, i) => (
         <div className="card" key={f.id}
           style={{ marginBottom: 12, animation: "fadeUp .45s cubic-bezier(.22,.8,.3,1) both",
                    animationDelay: `${0.04 + Math.min(i, 20) * 0.03}s` }}>
@@ -128,7 +133,7 @@ export default async function Feedback({ searchParams }) {
         </div>
       ))}
 
-      {!rows.length ? (
+      {!shown.length ? (
         <div className="card">
           <p className="empty" style={{ padding: 0 }}>
             {filter ? "Nothing in this view." : "Nothing yet — the box is at the foot of every page."}
@@ -229,10 +234,17 @@ function Run({ run, id }) {
         <a className="choice go" href={shareable(run.preview)} target="_blank" rel="noreferrer">
           See it live →
         </a>
+        {/* Yes and no, side by side and the same size. A page that offers only
+            the yes makes turning something down feel like a failure to find
+            the button for it. */}
         <form action={ship} className="gapform">
           <input type="hidden" name="pr" value={run.prNumber} />
           <input type="hidden" name="id" value={id} />
-          <button className="choice" type="submit">Put it on the site</button>
+          <button className="choice yes" type="submit">Yes, put it live</button>
+        </form>
+        <form action={discard} className="gapform">
+          <input type="hidden" name="pr" value={run.prNumber} />
+          <button className="choice no" type="submit">No</button>
         </form>
         <a className="choice" href={run.prUrl} target="_blank" rel="noreferrer">
           Read the change

@@ -5,6 +5,7 @@ import Tween from "../components/tween";
 import FeedbackBox from "../components/feedback";
 import MeshFooter from "../components/mesh-footer";
 import PreviewBanner from "../components/preview-banner";
+import { readyToReview } from "../lib/github";
 
 export const metadata = {
   title: "QEA Campaign HQ",
@@ -27,9 +28,10 @@ async function lastSync() {
 }
 
 export default async function RootLayout({ children }) {
-  const [s, { count: conflicts }] = await Promise.all([
+  const [s, { count: conflicts }, review] = await Promise.all([
     lastSync(),
     db.from("v_conflicts").select("*", { count: "exact", head: true }),
+    readyToReview(db),
   ]);
   const ageMin = s?.finished_at
     ? Math.round((Date.now() - new Date(s.finished_at).getTime()) / 60000)
@@ -50,6 +52,7 @@ export default async function RootLayout({ children }) {
             synced={s ? (ageMin < 1 ? "just now" : `${ageMin} min ago`) : null}
             stale={stale}
             conflicts={conflicts ?? 0}
+            review={review}
           />
           {children}
           {/* On every page, because the moment you notice something is the

@@ -1,6 +1,6 @@
 import { db } from "../lib/db";
 import { REPO } from "../lib/github";
-import { ship } from "../app/feedback/actions";
+import { ship, discard } from "../app/feedback/actions";
 
 /**
  * The bar across the top of a preview that says what you are looking at, and
@@ -46,7 +46,11 @@ export default async function PreviewBanner() {
         <form action={ship} className="gapform">
           <input type="hidden" name="pr" value={pr.number} />
           <input type="hidden" name="id" value={id} />
-          <button className="choice pvgo" type="submit">Put this on the live site</button>
+          <button className="choice pvgo" type="submit">Yes, put this live</button>
+        </form>
+        <form action={discard} className="gapform">
+          <input type="hidden" name="pr" value={pr.number} />
+          <button className="choice" type="submit">No</button>
         </form>
         <a className="note" href={pr.html_url} target="_blank" rel="noreferrer">
           what changed →
