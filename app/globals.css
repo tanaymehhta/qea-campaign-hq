@@ -370,6 +370,16 @@ details[open] > summary .chev{transform:rotate(180deg)}
   animation:fadeUp .45s cubic-bezier(.22,.8,.3,1) both}
 .mrow:hover{box-shadow:var(--lift-lg)}
 .mrow.hasgap{border-color:var(--warn-soft)}
+/* The meetings list only — the phone-call rows below it keep their outline.
+   `--surface-1` is three values off `--page`, so the card cannot just lose the
+   border and stay a card: the line is swapped for the shadow token, which
+   separates it from the page without drawing an edge. The border stays in the
+   box model at zero visibility, so nothing shifts by a pixel.
+
+   `:not(.hasgap)` rather than source order: a meeting logged with no prospect
+   name still shows its amber edge, and that warning is not decoration. */
+.mrow.soft:not(.hasgap){border-color:transparent;box-shadow:var(--lift)}
+.mrow.soft:not(.hasgap):hover{box-shadow:var(--lift-lg)}
 .mrow > summary{display:flex;align-items:center;gap:16px;padding:16px 20px;cursor:pointer;
   list-style:none;transition:background .16s}
 .mrow > summary::-webkit-details-marker{display:none}
@@ -386,6 +396,34 @@ details[open] > summary .chev{transform:rotate(180deg)}
   color:var(--ink-3);font-variant-numeric:tabular-nums}
 .mbody{padding:4px 20px 20px;animation:slideDown .3s cubic-bezier(.22,.8,.3,1) both}
 .mbody .inner{border-top:1px solid var(--grid);padding-top:16px}
+
+/* Name and campaign share the top line, divided rather than run together —
+   the bar is a rule, not a character to read, so it is thinner and dimmer than
+   the words on either side of it. */
+.mrow .who .sep{margin:0 9px;font-weight:400;color:var(--ink-3);opacity:.55}
+/* One row per person: the badge is how a row says it stands for more than one
+   meeting. Beside the pill, quieter than it — the status is the fact you scan
+   for, this is the footnote. */
+.mrow .mcount{flex:0 0 auto;font-size:11px;font-weight:600;letter-spacing:.02em;
+  color:var(--ink-3);background:var(--wash);border:1px solid var(--grid);
+  border-radius:999px;padding:3px 9px;white-space:nowrap}
+
+/* ---- a person's meetings, newest first, down a rail ---- */
+/* Only drawn when there is more than one: a single meeting with a dot and a
+   line beside it is decoration pretending to be a sequence. The line sits at
+   x=3.5 and the dots are 7px wide from x=0, so they share a centre. */
+.mtl{position:relative}
+.mtl.multi::before{content:"";position:absolute;left:3px;top:8px;bottom:8px;
+  width:1px;background:var(--grid)}
+.mtl.multi > .node{position:relative;padding-left:22px}
+.mtl.multi > .node::before{content:"";position:absolute;left:0;top:6px;
+  width:7px;height:7px;border-radius:50%;background:var(--ink-3);
+  box-shadow:0 0 0 3px var(--surface-1)}
+.mtl > .node + .node{margin-top:20px;padding-top:20px;border-top:1px solid var(--grid)}
+.mtl.multi > .node + .node::before{top:26px}
+.mtl .nodehead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.mtl .nodehead .when{font-size:12.5px;font-weight:600;color:var(--ink-2);
+  font-variant-numeric:tabular-nums}
 
 /* ---- bar chart ---- */
 /* rtl on the scroller starts it at the right edge — the newest day — with
@@ -429,6 +467,10 @@ details[open] > summary .chev{transform:rotate(180deg)}
   display:inline-flex;align-items:center;transition:background .16s,border-color .16s,color .16s}
 .choice:hover{background:var(--wash-2);color:var(--ink-1);border-color:var(--axis)}
 .choice.on{border-color:var(--axis);color:var(--ink-1);font-weight:600;background:var(--wash-2)}
+/* The one button on the page that destroys something. It is only ever rendered
+   after the question has already been asked once. */
+.choice.danger{border-color:var(--crit);color:var(--crit);font-weight:600}
+.choice.danger:hover{background:var(--crit);border-color:var(--crit);color:#fff}
 .gapform{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
 .gapform input,.gapform select{font:inherit;font-size:13px;padding:7px 11px;border-radius:9px;
   border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);

@@ -17,6 +17,12 @@ function back(formData) {
   const q = new URLSearchParams();
   const rep = (formData.get("rep") ?? "").trim();
   if (rep) q.set("rep", rep);
+  // The date window the page was showing. Without it a removal bounced the rep
+  // back to All time and looked like the filter had reset itself. `rm` is
+  // deliberately NOT carried: the confirm has been answered, so returning to it
+  // would re-open the question that was just settled.
+  const range = (formData.get("range") ?? "").trim();
+  if (range && range !== "all") q.set("range", range);
   if (formData.get("removed")) q.set("removed", "1");
   return `/meetings${q.size ? `?${q}` : ""}`;
 }

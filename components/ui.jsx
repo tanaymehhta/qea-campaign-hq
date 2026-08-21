@@ -227,17 +227,18 @@ export function Num({ v, zeroDim = true }) {
  * Null is not zero: it prints an em dash and opens nothing, because there is no
  * list of people behind a number we do not have. `num()` would render it "0".
  */
-export function DrillCell({ v, href }) {
+export function DrillCell({ v, href, title }) {
   if (v == null) return <td className="zero" title="not known at this grain">—</td>;
   if (!v) return <td className="zero">{num(v)}</td>;
-  return <td><a className="drilled" href={href}>{num(v)}</a></td>;
+  return <td><a className="drilled" href={href} title={title}>{num(v)}</a></td>;
 }
 
-export function RangePicker({ base, current, day, note, anchor }) {
+export function RangePicker({ base, current, day, note, anchor, options }) {
   const hash = anchor ? `#${anchor}` : "";
   const q = (s) => (base.includes("?") ? `${base}&${s}${hash}` : `${base}?${s}${hash}`);
-  const opts = [
+  const opts = options ?? [
     ["today", "Today"],
+    ["2", "2 days"],
     ["7", "7 days"],
     ["30", "30 days"],
     ["90", "90 days"],
