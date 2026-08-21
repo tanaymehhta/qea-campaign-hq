@@ -1,6 +1,8 @@
 import { db, num, today, prettyDate, initials } from "../../../../lib/db";
 import { callRepList, contactsFor, callsFor, callStats, meetingsForCalls } from "../../../../lib/calls";
 import { Tile, Pill, Chev } from "../../../../components/ui";
+import { Board, Card } from "../../../../components/board";
+import { Drawer } from "../../../../components/drawer";
 import { logCall, editCall, deleteCall, setContactDnc, updateContactDetail, setCallback, restoreContact } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +83,24 @@ const OUTCOMES = [
   ["booked_meeting", "Booked a meeting"],
 ];
 
+/**
+ * The five columns are the five values statusOf() can return, in the order a
+ * shift works them: everyone unrung, then the ones you tried, then the two
+ * conversations that are still alive, then the one that isn't, then the win.
+ *
+ * do-not-call is deliberately not here. It is a tile filter (?f=dnc) and stays
+ * one: a sixth column would put five retired people on screen all day, and
+ * CALL_LOGS §8-C — tiles count DNC people where lists hide them — would become
+ * visible on a board and then get hidden again behind a column nobody reads.
+ */
+const COLUMNS = [
+  ["never_called", "To call", "Nobody left to dial in this view."],
+  ["not_reached", "Didn't reach", "Nobody tried and missed."],
+  ["follow_up", "Follow up", "Nothing to ring back."],
+  ["not_interested", "Not interested", "Nobody has said no."],
+  ["booked_meeting", "Booked meeting", "No meeting off the phone yet."],
+];
+
 const FILTERS = {
   called: "with at least one call",
   reached: "you got through to",
@@ -153,11 +173,247 @@ function Crib({ ct, rep }) {
   );
 }
 
+/**
+ * Everything the page can do to one person: their details, the log-a-call
+ * form, the call history with edit/delete, the crib, the book, and the three
+ * housekeeping forms. Lifted out of the list row on 21 Aug 2026 unchanged, so
+ * the board's drawer and the list's row render the same panel from one place
+ * rather than each growing their own copy of the write path.
+ */
+function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref }) {
+  const history = s.callsOf(ct);
+  return (
+    <>
+                  {/* The two things that matter mid-call: what to dial, then
+                      where to write down what happened. Everything else is
+                      reference and sits below or folds away. */}
+                  <div className="meta" style={{ marginBottom: 16 }}>
+                    <div><div className="k">Phone</div><div className="v">
+                      {ct.phone || <span className="dim">none yet — firm mainline, ask for {ct.full_name.split(" ")[0]}</span>}
+                    </div></div>
+                    <div><div className="k">Email</div><div className="v">{ct.email || "—"}</div></div>
+                    <div><div className="k">Licence</div><div className="v">{ct.license_no || "—"}</div></div>
+                    <div><div className="k">Where</div><div className="v">{[ct.city, ct.state].filter(Boolean).join(", ") || "—"}</div></div>
+                    <div><div className="k">Number from</div><div className="v">{ct.contact_source || "—"}</div></div>
+                    {ct.dnc ? <div><div className="k">Do not call</div><div className="v">{ct.dnc_reason || "yes"}</div></div> : null}
+                  </div>
+
+                  <h2>Log the call</h2>
+                  {/* One call, one outcome, one row. Radios, not
+                      checkboxes: ticking three of them used to post three
+                      rows and count as three calls.
+
+                      Three dates, and they are three different facts: the
+                      day you dialled, the day the meeting happens, and the
+                      day to ring back. Two of them used to sit here as
+                      bare unlabelled boxes and the third did not exist —
+                      so a booked meeting was silently dated to the day of
+                      the call. log_call now refuses that. */}
+                  <form action={logCall} className="gapform">
+                    <input type="hidden" name="contact_id" value={ct.id} />
+                    <input type="hidden" name="rep" value={rep} />
+                    <input type="hidden" name="path" value={base} />
+                    <label className="datefield">
+                      <span>Call date</span>
+                      <input type="date" name="call_date" defaultValue={t} required />
+                    </label>
+                    <span className="outcomes">
+                      {OUTCOMES.map(([k, l]) => (
+                        <label key={k} className="outcome">
+                          <input type="radio" name="outcome" value={k} required />
+                          {l}
+                        </label>
+                      ))}
+                    </span>
+                    <input name="note" placeholder="What happened? Notes go here." style={{ flex: 2, minWidth: 220 }} />
+                    <label className="datefield">
+                      <span>Meeting on</span>
+                      <input type="date" name="meeting_date"
+                        title="The day the meeting actually happens. Required if you tick Booked a meeting — this is the date the Overview counts." />
+                    </label>
+                    <label className="datefield">
+                      <span>Call back</span>
+                      <input type="date" name="callback_date" title="Ring this person again on" />
+                    </label>
+                    <button className="choice" type="submit">Log call</button>
+                  </form>
+                  {history.length ? (
+                    <div className="tw" style={{ marginTop: 14 }}>
+                      <table>
+                        <thead><tr>
+                          <th>Date</th><th>Outcome</th><th>Rep</th>
+                          <th style={{ textAlign: "left" }}>Note</th>
+                          <th title="The meeting this call booked — the same row the Overview counts">Meeting</th>
+                          <th>Callback</th><th></th>
+                        </tr></thead>
+                        <tbody>
+                          {history.map((c) => (
+                            String(sp.editCall) === String(c.id) ? (
+                              <tr key={c.id}>
+                                {/* One cell holding the whole form — a <form> can't
+                                    wrap a <tr> without the browser fostering it out
+                                    of the table, so it lives inside a single <td>. */}
+                                <td colSpan={7}>
+                                  <form action={editCall} className="gapform">
+                                    <input type="hidden" name="call_id" value={c.id} />
+                                    <input type="hidden" name="contact_id" value={ct.id} />
+                                    <input type="hidden" name="rep" value={rep} />
+                                    <input type="hidden" name="path" value={base} />
+                                    <label className="datefield">
+                                      <span>Call date</span>
+                                      <input type="date" name="call_date" defaultValue={c.call_date} required />
+                                    </label>
+                                    <select name="outcome" defaultValue={c.outcome} required>
+                                      {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                                    </select>
+                                    <input name="note" defaultValue={c.note ?? ""} placeholder="Note"
+                                      style={{ flex: 2, minWidth: 200 }} />
+                                    {/* Prefilled from the meeting this call
+                                        made, so moving a meeting is editing
+                                        the call that booked it — the one
+                                        place that already keeps both rows
+                                        in step (edit_call). */}
+                                    <label className="datefield">
+                                      <span>Meeting on</span>
+                                      <input type="date" name="meeting_date"
+                                        defaultValue={meetingOf.get(c.id)?.meeting_date ?? ""}
+                                        title="The day the meeting actually happens. Required for a booked meeting." />
+                                    </label>
+                                    <label className="datefield">
+                                      <span>Call back</span>
+                                      <input type="date" name="callback_date" defaultValue={c.callback_date ?? ""}
+                                        title="Ring this person again on" />
+                                    </label>
+                                    <button className="choice" type="submit">Save</button>
+                                    <a className="choice" href={rowHref(ct, null)}>Cancel</a>
+                                  </form>
+                                </td>
+                              </tr>
+                            ) : (
+                              <tr key={c.id}>
+                                <td className="dim">{prettyDate(c.call_date)}</td>
+                                <td><Pill status={c.outcome} /></td>
+                                <td>{c.rep || "—"}</td>
+                                <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
+                                {/* Reads the meetings row itself, not a
+                                    copy of its date kept here — there is
+                                    one meeting and one place it lives. */}
+                                <td className="dim">
+                                  {meetingOf.get(c.id)
+                                    ? <a className="drilled" href="/meetings">{prettyDate(meetingOf.get(c.id).meeting_date)}</a>
+                                    : "—"}
+                                </td>
+                                <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
+                                <td className="rowactions">
+                                  <a className="choice" href={rowHref(ct, c.id)}>Edit</a>
+                                  <form action={deleteCall}>
+                                    <input type="hidden" name="call_id" value={c.id} />
+                                    <input type="hidden" name="contact_id" value={ct.id} />
+                                    <input type="hidden" name="rep" value={rep} />
+                                    <input type="hidden" name="path" value={base} />
+                                    <button className="choice" type="submit">Delete</button>
+                                  </form>
+                                </td>
+                              </tr>
+                            )
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+
+                  <Crib ct={ct} rep={rep} />
+
+                  {/* The full book is reference, not reading — folded so the
+                      form above never sinks below 65 rows of addresses. */}
+                  <details style={{ marginTop: 14 }}>
+                    <summary className="note" style={{ cursor: "pointer" }}>
+                      All {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"} on the SAFE list &rarr;
+                    </summary>
+                    <div className="tw" style={{ marginTop: 10 }}>
+                      <table>
+                        <thead><tr>
+                          <th style={{ textAlign: "left" }}>Address</th><th>BIN</th>
+                          <th>Borough</th><th>Rank</th><th>SAFE streak</th>
+                        </tr></thead>
+                        <tbody>
+                          {(ct.buildings ?? []).map((b) => (
+                            <tr key={b.bin}>
+                              <td className="name">{b.address}</td>
+                              <td className="dim">{b.bin}</td>
+                              <td>{b.borough}</td>
+                              <td>#{b.rank}</td>
+                              <td>{b.streak ? `${b.streak} cycles` : num(b.score)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+
+                  <div className="choices">
+                    <span className="choices-label">Fix a detail</span>
+                    <form action={updateContactDetail} className="gapform">
+                      <input type="hidden" name="contact_id" value={ct.id} />
+                      <input type="hidden" name="rep" value={rep} />
+                      <input type="hidden" name="path" value={base} />
+                      <select name="field">
+                        <option value="phone">phone</option>
+                        <option value="email">email</option>
+                        <option value="linkedin">linkedin</option>
+                      </select>
+                      <input name="value" placeholder="new value" />
+                      <button className="choice" type="submit">Save</button>
+                    </form>
+                  </div>
+
+                  <div className="choices">
+                    <span className="choices-label">Callback</span>
+                    <form action={setCallback} className="gapform">
+                      <input type="hidden" name="contact_id" value={ct.id} />
+                      <input type="hidden" name="rep" value={rep} />
+                      <input type="hidden" name="path" value={base} />
+                      <input type="date" name="date" defaultValue={ct.callback_date ?? ""} />
+                      <button className="choice" type="submit">Set</button>
+                    </form>
+                    {/* Retiring someone used to be one-way — a misclick
+                        cost a contact until someone wrote SQL. */}
+                    {ct.dnc ? (
+                      <>
+                        <span className="choices-label">Retired</span>
+                        <form action={restoreContact} className="gapform">
+                          <input type="hidden" name="contact_id" value={ct.id} />
+                          <input type="hidden" name="rep" value={rep} />
+                          <input type="hidden" name="path" value={base} />
+                          <button className="choice" type="submit">Put back on the list</button>
+                        </form>
+                      </>
+                    ) : (
+                      <>
+                        <span className="choices-label">Do not call</span>
+                        <form action={setContactDnc} className="gapform">
+                          <input type="hidden" name="contact_id" value={ct.id} />
+                          <input type="hidden" name="rep" value={rep} />
+                          <input type="hidden" name="path" value={base} />
+                          <input name="reason" placeholder="why?" required />
+                          <button className="choice" type="submit">Retire</button>
+                        </form>
+                      </>
+                    )}
+                  </div>
+    </>
+  );
+}
+
 export default async function CallWorkspace({ params, searchParams }) {
   const rep = decodeURIComponent(params.rep);
   const sp = searchParams ?? {};
   const filter = FILTERS[sp.f] ? sp.f : null;
   const showAll = sp.v === "all";
+  // Board is the view; ?view=list is the old row list, kept while the board
+  // earns its keep. No param to preserve across a write this way, which is
+  // why app/calls/actions.js needs no change to keep the rep where they were.
+  const view = sp.view === "list" ? "list" : "board";
 
   const { data: camp } = await db
     .from("call_campaigns").select("*").eq("slug", params.campaign).single();
@@ -213,6 +469,16 @@ export default async function CallWorkspace({ params, searchParams }) {
     const q = new URLSearchParams();
     if (f) q.set("f", f);
     if (v === "all") q.set("v", "all");
+    if (view === "list") q.set("view", "list");
+    return `${base}${q.size ? `?${q}` : ""}#list`;
+  };
+  // The view toggle keeps the filter and the show-everyone state — switching
+  // how the same pile is drawn must not quietly change which pile it is.
+  const viewHref = (want) => {
+    const q = new URLSearchParams();
+    if (filter) q.set("f", filter);
+    if (showAll) q.set("v", "all");
+    if (want === "list") q.set("view", "list");
     return `${base}${q.size ? `?${q}` : ""}#list`;
   };
 
@@ -224,6 +490,7 @@ export default async function CallWorkspace({ params, searchParams }) {
     const q = new URLSearchParams();
     if (filter) q.set("f", filter);
     if (showAll) q.set("v", "all");
+    if (view === "list") q.set("view", "list");
     q.set("open", ct.id);
     if (callId) q.set("editCall", callId);
     return `${base}?${q}#c-${ct.id}`;
@@ -235,6 +502,10 @@ export default async function CallWorkspace({ params, searchParams }) {
   let list = contacts.filter((ct) => (filter === "dnc" ? true : !ct.dnc));
   if (filter) list = list.filter(s.is[filter]);
   const undialable = list.filter((ct) => !(ct.phone || ct.email)).length;
+  // Everyone this view is about, before the phone/email trim. The column
+  // headers count this; the cards under them are the trimmed `list`. The two
+  // are different piles on purpose and the foot of each column says so.
+  const pile = list;
   if (!showAll) list = list.filter((ct) => ct.phone || ct.email);
 
   // Follow-ups due sort to the top with a marker; beneath them, buildings
@@ -248,6 +519,70 @@ export default async function CallWorkspace({ params, searchParams }) {
 
   const statusOf = (ct) =>
     ct.dnc ? "dnc" : !s.callsOf(ct).length ? "never_called" : s.lastOutcome(ct);
+
+  // Cards per column, so ?v=all does not render 1,236 of them at once. Server
+  // side, one link that bumps the cap — no virtualisation, no library.
+  const cap = Math.max(10, Math.min(1000, Number(sp.n) || 50));
+  const moreHref = (n) => {
+    const q = new URLSearchParams();
+    if (filter) q.set("f", filter);
+    if (showAll) q.set("v", "all");
+    if (view === "list") q.set("view", "list");
+    q.set("n", String(n));
+    return `${base}?${q}#list`;
+  };
+
+  const columns = COLUMNS.map(([key, label, empty]) => {
+    const count = pile.filter((ct) => statusOf(ct) === key).length;
+    const mine = list.filter((ct) => statusOf(ct) === key);
+    const shown = mine.slice(0, cap);
+    const hidden = count - shown.length;
+    return {
+      key, label, empty, count: num(count),
+      cards: shown.map((ct) => {
+        const [call] = s.callsOf(ct);
+        const meeting = call ? meetingOf.get(call.id) : null;
+        return (
+          <Card
+            key={ct.id}
+            href={rowHref(ct, null)}
+            name={ct.full_name}
+            due={s.is.due(ct)}
+            age={call ? prettyDate(call.call_date) : `#${ct.best_rank}`}
+            reach={ct.phone || ct.email || "no contact details yet"}
+            buildings={`${num(ct.buildings_count)} bldg${ct.buildings_count === 1 ? "" : "s"}`}
+            org={ct.org_name}
+            note={call?.note}
+            chip={
+              meeting ? `Meeting ${prettyDate(meeting.meeting_date)}`
+                : ct.callback_date ? `Call back ${prettyDate(ct.callback_date)}`
+                : null
+            }
+            won={key === "booked_meeting"}
+          />
+        );
+      }),
+      // Two reasons a card can be missing and they are not the same reason:
+      // past the cap on this page, or no phone or email yet. A column that
+      // reported only one would be hiding the other behind a true sentence.
+      more: hidden > 0 ? (
+        <>
+          {mine.length > shown.length ? (
+            <a className="drilled" href={moreHref(cap + 50)}>
+              {num(mine.length - shown.length)} more here — show 50 of them
+            </a>
+          ) : null}
+          {count > mine.length ? (
+            <span style={{ display: "block" }}>
+              {num(count - mine.length)} more have no phone or email yet
+            </span>
+          ) : null}
+        </>
+      ) : null,
+    };
+  });
+
+  const openContact = sp.open ? contacts.find((ct) => ct.id === sp.open) : null;
 
   return (
     <>
@@ -314,10 +649,18 @@ export default async function CallWorkspace({ params, searchParams }) {
           tone="muted" note="incl. NYCHA, tagged institutional" href={here("dnc")} />
       </div>
 
-      {/* The call list — one row per person, best call at the top. */}
-      <h2 id="list">
-        {filter ? `People ${FILTERS[filter]}` : "The call list"} — {num(list.length)} shown
-      </h2>
+      {/* The call list — one card or row per person, best call at the top. */}
+      <div className="listhead">
+        <h2 id="list">
+          {filter ? `People ${FILTERS[filter]}` : "The call list"} — {num(list.length)} shown
+        </h2>
+        {/* Two drawings of one pile. Both read the same array, so the count
+            above does not move when you switch. */}
+        <div className="seg">
+          <a className={view === "board" ? "on" : ""} href={viewHref("board")}>Kanban</a>
+          <a className={view === "list" ? "on" : ""} href={viewHref("list")}>List</a>
+        </div>
+      </div>
       <div className="segrow">
         {filter ? <a className="choice" href={here(null)}>&times; clear filter</a> : null}
         <span className="note">
@@ -330,7 +673,7 @@ export default async function CallWorkspace({ params, searchParams }) {
         </a>
       </div>
 
-      {list.map((ct, i) => {
+      {view === "list" ? list.map((ct, i) => {
               const history = s.callsOf(ct);
               const due = s.is.due(ct);
               const [glyphBg, glyphInk] = GLYPH_TINT[statusOf(ct)] ?? ["var(--tint-n)", "var(--ink-1)"];
@@ -369,229 +712,31 @@ export default async function CallWorkspace({ params, searchParams }) {
                       </summary>
 
                       <div className="mbody"><div className="inner">
-                        {/* The two things that matter mid-call: what to dial, then
-                            where to write down what happened. Everything else is
-                            reference and sits below or folds away. */}
-                        <div className="meta" style={{ marginBottom: 16 }}>
-                          <div><div className="k">Phone</div><div className="v">
-                            {ct.phone || <span className="dim">none yet — firm mainline, ask for {ct.full_name.split(" ")[0]}</span>}
-                          </div></div>
-                          <div><div className="k">Email</div><div className="v">{ct.email || "—"}</div></div>
-                          <div><div className="k">Licence</div><div className="v">{ct.license_no || "—"}</div></div>
-                          <div><div className="k">Where</div><div className="v">{[ct.city, ct.state].filter(Boolean).join(", ") || "—"}</div></div>
-                          <div><div className="k">Number from</div><div className="v">{ct.contact_source || "—"}</div></div>
-                          {ct.dnc ? <div><div className="k">Do not call</div><div className="v">{ct.dnc_reason || "yes"}</div></div> : null}
-                        </div>
-
-                        <h2>Log the call</h2>
-                        {/* One call, one outcome, one row. Radios, not
-                            checkboxes: ticking three of them used to post three
-                            rows and count as three calls.
-
-                            Three dates, and they are three different facts: the
-                            day you dialled, the day the meeting happens, and the
-                            day to ring back. Two of them used to sit here as
-                            bare unlabelled boxes and the third did not exist —
-                            so a booked meeting was silently dated to the day of
-                            the call. log_call now refuses that. */}
-                        <form action={logCall} className="gapform">
-                          <input type="hidden" name="contact_id" value={ct.id} />
-                          <input type="hidden" name="rep" value={rep} />
-                          <input type="hidden" name="path" value={base} />
-                          <label className="datefield">
-                            <span>Call date</span>
-                            <input type="date" name="call_date" defaultValue={t} required />
-                          </label>
-                          <span className="outcomes">
-                            {OUTCOMES.map(([k, l]) => (
-                              <label key={k} className="outcome">
-                                <input type="radio" name="outcome" value={k} required />
-                                {l}
-                              </label>
-                            ))}
-                          </span>
-                          <input name="note" placeholder="What happened? Notes go here." style={{ flex: 2, minWidth: 220 }} />
-                          <label className="datefield">
-                            <span>Meeting on</span>
-                            <input type="date" name="meeting_date"
-                              title="The day the meeting actually happens. Required if you tick Booked a meeting — this is the date the Overview counts." />
-                          </label>
-                          <label className="datefield">
-                            <span>Call back</span>
-                            <input type="date" name="callback_date" title="Ring this person again on" />
-                          </label>
-                          <button className="choice" type="submit">Log call</button>
-                        </form>
-                        {history.length ? (
-                          <div className="tw" style={{ marginTop: 14 }}>
-                            <table>
-                              <thead><tr>
-                                <th>Date</th><th>Outcome</th><th>Rep</th>
-                                <th style={{ textAlign: "left" }}>Note</th>
-                                <th title="The meeting this call booked — the same row the Overview counts">Meeting</th>
-                                <th>Callback</th><th></th>
-                              </tr></thead>
-                              <tbody>
-                                {history.map((c) => (
-                                  String(sp.editCall) === String(c.id) ? (
-                                    <tr key={c.id}>
-                                      {/* One cell holding the whole form — a <form> can't
-                                          wrap a <tr> without the browser fostering it out
-                                          of the table, so it lives inside a single <td>. */}
-                                      <td colSpan={7}>
-                                        <form action={editCall} className="gapform">
-                                          <input type="hidden" name="call_id" value={c.id} />
-                                          <input type="hidden" name="contact_id" value={ct.id} />
-                                          <input type="hidden" name="rep" value={rep} />
-                                          <input type="hidden" name="path" value={base} />
-                                          <label className="datefield">
-                                            <span>Call date</span>
-                                            <input type="date" name="call_date" defaultValue={c.call_date} required />
-                                          </label>
-                                          <select name="outcome" defaultValue={c.outcome} required>
-                                            {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                                          </select>
-                                          <input name="note" defaultValue={c.note ?? ""} placeholder="Note"
-                                            style={{ flex: 2, minWidth: 200 }} />
-                                          {/* Prefilled from the meeting this call
-                                              made, so moving a meeting is editing
-                                              the call that booked it — the one
-                                              place that already keeps both rows
-                                              in step (edit_call). */}
-                                          <label className="datefield">
-                                            <span>Meeting on</span>
-                                            <input type="date" name="meeting_date"
-                                              defaultValue={meetingOf.get(c.id)?.meeting_date ?? ""}
-                                              title="The day the meeting actually happens. Required for a booked meeting." />
-                                          </label>
-                                          <label className="datefield">
-                                            <span>Call back</span>
-                                            <input type="date" name="callback_date" defaultValue={c.callback_date ?? ""}
-                                              title="Ring this person again on" />
-                                          </label>
-                                          <button className="choice" type="submit">Save</button>
-                                          <a className="choice" href={rowHref(ct, null)}>Cancel</a>
-                                        </form>
-                                      </td>
-                                    </tr>
-                                  ) : (
-                                    <tr key={c.id}>
-                                      <td className="dim">{prettyDate(c.call_date)}</td>
-                                      <td><Pill status={c.outcome} /></td>
-                                      <td>{c.rep || "—"}</td>
-                                      <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
-                                      {/* Reads the meetings row itself, not a
-                                          copy of its date kept here — there is
-                                          one meeting and one place it lives. */}
-                                      <td className="dim">
-                                        {meetingOf.get(c.id)
-                                          ? <a className="drilled" href="/meetings">{prettyDate(meetingOf.get(c.id).meeting_date)}</a>
-                                          : "—"}
-                                      </td>
-                                      <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
-                                      <td className="rowactions">
-                                        <a className="choice" href={rowHref(ct, c.id)}>Edit</a>
-                                        <form action={deleteCall}>
-                                          <input type="hidden" name="call_id" value={c.id} />
-                                          <input type="hidden" name="contact_id" value={ct.id} />
-                                          <input type="hidden" name="rep" value={rep} />
-                                          <input type="hidden" name="path" value={base} />
-                                          <button className="choice" type="submit">Delete</button>
-                                        </form>
-                                      </td>
-                                    </tr>
-                                  )
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null}
-
-                        <Crib ct={ct} rep={rep} />
-
-                        {/* The full book is reference, not reading — folded so the
-                            form above never sinks below 65 rows of addresses. */}
-                        <details style={{ marginTop: 14 }}>
-                          <summary className="note" style={{ cursor: "pointer" }}>
-                            All {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"} on the SAFE list &rarr;
-                          </summary>
-                          <div className="tw" style={{ marginTop: 10 }}>
-                            <table>
-                              <thead><tr>
-                                <th style={{ textAlign: "left" }}>Address</th><th>BIN</th>
-                                <th>Borough</th><th>Rank</th><th>SAFE streak</th>
-                              </tr></thead>
-                              <tbody>
-                                {(ct.buildings ?? []).map((b) => (
-                                  <tr key={b.bin}>
-                                    <td className="name">{b.address}</td>
-                                    <td className="dim">{b.bin}</td>
-                                    <td>{b.borough}</td>
-                                    <td>#{b.rank}</td>
-                                    <td>{b.streak ? `${b.streak} cycles` : num(b.score)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </details>
-
-                        <div className="choices">
-                          <span className="choices-label">Fix a detail</span>
-                          <form action={updateContactDetail} className="gapform">
-                            <input type="hidden" name="contact_id" value={ct.id} />
-                            <input type="hidden" name="rep" value={rep} />
-                            <input type="hidden" name="path" value={base} />
-                            <select name="field">
-                              <option value="phone">phone</option>
-                              <option value="email">email</option>
-                              <option value="linkedin">linkedin</option>
-                            </select>
-                            <input name="value" placeholder="new value" />
-                            <button className="choice" type="submit">Save</button>
-                          </form>
-                        </div>
-
-                        <div className="choices">
-                          <span className="choices-label">Callback</span>
-                          <form action={setCallback} className="gapform">
-                            <input type="hidden" name="contact_id" value={ct.id} />
-                            <input type="hidden" name="rep" value={rep} />
-                            <input type="hidden" name="path" value={base} />
-                            <input type="date" name="date" defaultValue={ct.callback_date ?? ""} />
-                            <button className="choice" type="submit">Set</button>
-                          </form>
-                          {/* Retiring someone used to be one-way — a misclick
-                              cost a contact until someone wrote SQL. */}
-                          {ct.dnc ? (
-                            <>
-                              <span className="choices-label">Retired</span>
-                              <form action={restoreContact} className="gapform">
-                                <input type="hidden" name="contact_id" value={ct.id} />
-                                <input type="hidden" name="rep" value={rep} />
-                                <input type="hidden" name="path" value={base} />
-                                <button className="choice" type="submit">Put back on the list</button>
-                              </form>
-                            </>
-                          ) : (
-                            <>
-                              <span className="choices-label">Do not call</span>
-                              <form action={setContactDnc} className="gapform">
-                                <input type="hidden" name="contact_id" value={ct.id} />
-                                <input type="hidden" name="rep" value={rep} />
-                                <input type="hidden" name="path" value={base} />
-                                <input name="reason" placeholder="why?" required />
-                                <button className="choice" type="submit">Retire</button>
-                              </form>
-                            </>
-                          )}
-                        </div>
+                        <PersonPanel ct={ct} rep={rep} base={base} t={t} s={s} meetingOf={meetingOf} sp={sp} rowHref={rowHref} />
                       </div></div>
                     </details>
               );
-            })}
-      {!list.length ? (
+            }) : <Board columns={columns} />}
+      {!list.length && view === "list" ? (
         <div className="card"><p className="empty" style={{ padding: 0 }}>Nobody matches this view.</p></div>
+      ) : null}
+
+      {/* The board's person panel. Same <PersonPanel> the list row renders —
+          server HTML, server actions, one write path. The list keeps its own
+          native <details>, so the panel is never on screen twice. */}
+      {view === "board" ? (
+        <Drawer
+          open={!!openContact}
+          title={openContact?.full_name}
+          subtitle={openContact
+            ? [openContact.role, openContact.org_name].filter(Boolean).join(" · ")
+            : null}
+        >
+          {openContact ? (
+            <PersonPanel ct={openContact} rep={rep} base={base} t={t} s={s}
+              meetingOf={meetingOf} sp={sp} rowHref={rowHref} />
+          ) : null}
+        </Drawer>
       ) : null}
     </>
   );
