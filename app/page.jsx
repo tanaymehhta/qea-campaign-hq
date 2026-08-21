@@ -227,6 +227,30 @@ export default async function Overview({ searchParams }) {
     )
   );
 
+  // The same question per group for the response pile, and for the same reason
+  // the reached pile is asked this way: a column that summed a different
+  // definition from the tile above it is exactly how a page disagrees with
+  // itself. Until now the Responses column read `v_daily_facts.replied` — the
+  // vendor's own reply counter — while the tile read `response_counts`, so the
+  // page printed 41 under a tile that said 33 and neither said which was which.
+  //
+  // `response_people` groups by email alone, so a person who answered on two
+  // groups' campaigns would count in both columns and once in the total. That
+  // is true of no one today (measured 21 Aug: zero people appear on more than
+  // one campaign, zero reply rows carry a null campaign_id) and v_invariants
+  // now says so out loud rather than this comment being the only record.
+  const respByGroup = new Map(
+    await Promise.all(
+      shownGroups.map(async (g) => [
+        g.id,
+        await responseCounts({
+          ...scope,
+          campaignIds: (campaigns ?? []).filter((c) => groupOf.get(c.id) === g.id).map((c) => c.id),
+        }),
+      ])
+    )
+  );
+
   // ------------------------------------------------------------------ opened
   //
   // Three numbers were being called "opened" and the tile picked the one that
@@ -402,8 +426,8 @@ export default async function Overview({ searchParams }) {
   // The same window and rep the tile counted, handed to the page behind it. If
   // this ever stops matching `scope` above, the number and the list are two
   // piles again — which is the bug this whole change exists to end.
-  const pileHref = (view) =>
-    `/replies?${new URLSearchParams({ view, ...windowParams, ...repParams })}`;
+  const pileHref = (view, extra = {}) =>
+    `/replies?${new URLSearchParams({ view, ...windowParams, ...repParams, ...extra })}`;
   const here = (params) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
@@ -633,7 +657,7 @@ export default async function Overview({ searchParams }) {
               <th>Campaign</th><th>Status</th><th>Sent</th>
               <th title="First time we emailed this person — not a follow-up">First touches</th>
               <th>Bounced</th>
-              <th>Bounce %</th><th title="People who have opened at least once — a dash means no campaign in this group can register an open">Opened</th><th>Replies</th>
+              <th>Bounce %</th><th title="People who have opened at least once — a dash means no campaign in this group can register an open">Opened</th><th title="People who wrote back an answer — the tile above, per group. Machines and mail nobody has read yet are in neither.">Responses</th>
               <th title="A meeting booked on a phone call belongs to no email group, so it is counted in the Total and in no row above it">Meetings</th><th>Proposals</th>
             </tr>
           </thead>
@@ -665,7 +689,10 @@ export default async function Overview({ searchParams }) {
                   <DrillCell v={gBounced} href={drill("bounced", { group: g.slug })} />
                   <BounceCell bounced={gBounced} base={m.sent} />
                   <DrillCell v={groupOpens(g.id)} href={drill("opened", { group: g.slug })} />
-                  <DrillCell v={m.replied} href={drill("replied", { group: g.slug })} />
+                  <DrillCell
+                    v={respByGroup.get(g.id)?.responded ?? null}
+                    href={pileHref("responded", { group: g.slug })}
+                  />
                   <DrillCell v={mt} href={drill("meetings", { group: g.slug })} />
                   <DrillCell v={pr} href={drill("proposals", { group: g.slug })} />
                 </tr>
@@ -678,7 +705,7 @@ export default async function Overview({ searchParams }) {
               <td>{overallBounced == null ? "—" : num(overallBounced)}</td>
               <td>{overallBounced != null && overall.sent ? `${pct(overallBounced, overall.sent)}%` : "—"}</td>
               <td>{reached.trackable ? num(reached.opened) : "\u2014"}</td>
-              <td>{num(overall.replied)}</td>
+              <td>{num(pile.responded)}</td>
               <td>{num(meetingCount)}</td>
               <td>{num(proposalCount)}</td>
             </tr>
