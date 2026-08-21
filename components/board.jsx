@@ -10,6 +10,8 @@
  * read the rendered array would say 82 while the tile above it says 1,236, and
  * both would be right about different things with no way to tell.
  */
+import { DragCard, DropColumn } from "./board-dnd";
+
 export function Board({ columns }) {
   return (
     <div className="board">
@@ -19,9 +21,11 @@ export function Board({ columns }) {
             {c.label}
             <span className="n">{c.count}</span>
           </div>
-          <div className="cards">
-            {c.cards.length ? c.cards : <p className="colempty">{c.empty}</p>}
-          </div>
+          <DropColumn outcome={c.key}>
+            <div className="cards">
+              {c.cards.length ? c.cards : <p className="colempty">{c.empty}</p>}
+            </div>
+          </DropColumn>
           {c.more ? <p className="more">{c.more}</p> : null}
         </section>
       ))}
@@ -35,9 +39,14 @@ export function Board({ columns }) {
  * showed. It is a link, not a button: the drawer's state is `?open=` in the
  * URL, so a card survives a refresh, a Back, and a pasted link.
  */
-export function Card({ href, name, due, age, reach, buildings, org, note, chip, won }) {
+export function Card({ id, from, href, name, due, age, reach, buildings, org, note, chip, won }) {
   return (
-    <a className={`bcard${won ? " won" : ""}${due ? " due" : ""}`} href={href}>
+    <DragCard
+      id={id}
+      from={from}
+      href={href}
+      className={`bcard${won ? " won" : ""}${due ? " due" : ""}`}
+    >
       <span className="nm">
         <b>
           {due ? <span title="follow-up due">⚑ </span> : null}
@@ -52,6 +61,6 @@ export function Card({ href, name, due, age, reach, buildings, org, note, chip, 
       </span>
       {note ? <span className="line dim quote">{note}</span> : null}
       {chip ? <span className="chip">{chip}</span> : null}
-    </a>
+    </DragCard>
   );
 }

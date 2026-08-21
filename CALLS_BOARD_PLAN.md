@@ -230,8 +230,15 @@ touched, so there is nothing to migrate back.
 
 ## 7. Not doing
 
-- **Drag-and-drop.** A second way to set an outcome, and it cannot say which
-  of the four tags a drop meant.
+- ~~**Drag-and-drop.**~~ Built 21 Aug, and the objection above is why it works
+  the way it does. The premise was wrong in one place: the five columns *are*
+  statusOf()'s five values, so a drop on "Follow up" does say `follow_up` and
+  nothing else. What a drop still cannot say is the date, the note, and the day
+  a meeting actually happens — so a drop **writes nothing**. It opens the person
+  with that tag preselected and asks for the rest, and the same
+  `<form action={logCall}>` posts it. There is still exactly one way to set an
+  outcome. Dropping into "To call" is refused with the reason (a call is what
+  took them out of it), and dropping a card back where it started is a no-op.
 - **An API route / client data fetching.** RLS blocks direct writes; the RPCs
   are the API and server actions already reach them.
 - **A state library.** The state is five query params.

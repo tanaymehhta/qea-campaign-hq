@@ -180,8 +180,9 @@ function Crib({ ct, rep }) {
  * the board's drawer and the list's row render the same panel from one place
  * rather than each growing their own copy of the write path.
  */
-function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref }) {
+function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref, dropped }) {
   const history = s.callsOf(ct);
+  const label = Object.fromEntries(OUTCOMES);
   return (
     <>
                   {/* The two things that matter mid-call: what to dial, then
@@ -198,7 +199,16 @@ function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref }) {
                     {ct.dnc ? <div><div className="k">Do not call</div><div className="v">{ct.dnc_reason || "yes"}</div></div> : null}
                   </div>
 
-                  <h2>Log the call</h2>
+                  <h2>{dropped ? `Moving to \u201c${label[dropped]}\u201d` : "Log the call"}</h2>
+                  {dropped ? (
+                    <p className="note" style={{ margin: "-4px 0 10px" }}>
+                      Nothing has moved yet. A card changes column because a call was logged,
+                      so this needs the call that did it
+                      {dropped === "booked_meeting"
+                        ? " — including the day the meeting actually happens."
+                        : "."}
+                    </p>
+                  ) : null}
                   {/* One call, one outcome, one row. Radios, not
                       checkboxes: ticking three of them used to post three
                       rows and count as three calls.
@@ -219,8 +229,9 @@ function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref }) {
                     </label>
                     <span className="outcomes">
                       {OUTCOMES.map(([k, l]) => (
-                        <label key={k} className="outcome">
-                          <input type="radio" name="outcome" value={k} required />
+                        <label key={k} className={dropped === k ? "outcome on" : "outcome"}>
+                          <input type="radio" name="outcome" value={k} required
+                            defaultChecked={dropped === k} />
                           {l}
                         </label>
                       ))}
@@ -229,6 +240,7 @@ function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref }) {
                     <label className="datefield">
                       <span>Meeting on</span>
                       <input type="date" name="meeting_date"
+                        required={dropped === "booked_meeting"}
                         title="The day the meeting actually happens. Required if you tick Booked a meeting — this is the date the Overview counts." />
                     </label>
                     <label className="datefield">
@@ -414,6 +426,10 @@ export default async function CallWorkspace({ params, searchParams }) {
   // earns its keep. No param to preserve across a write this way, which is
   // why app/calls/actions.js needs no change to keep the rep where they were.
   const view = sp.view === "list" ? "list" : "board";
+  // Set by a drop, and only ever one of the four. A drop picks the tag; it
+  // cannot pick the date, the note or — for a booked meeting — the day the
+  // meeting happens, so it preselects the tag and the panel asks for the rest.
+  const dropped = OUTCOMES.some(([k]) => k === sp.outcome) ? sp.outcome : null;
 
   const { data: camp } = await db
     .from("call_campaigns").select("*").eq("slug", params.campaign).single();
@@ -545,6 +561,8 @@ export default async function CallWorkspace({ params, searchParams }) {
         return (
           <Card
             key={ct.id}
+            id={ct.id}
+            from={key}
             href={rowHref(ct, null)}
             name={ct.full_name}
             due={s.is.due(ct)}
@@ -712,7 +730,7 @@ export default async function CallWorkspace({ params, searchParams }) {
                       </summary>
 
                       <div className="mbody"><div className="inner">
-                        <PersonPanel ct={ct} rep={rep} base={base} t={t} s={s} meetingOf={meetingOf} sp={sp} rowHref={rowHref} />
+                        <PersonPanel ct={ct} rep={rep} base={base} t={t} s={s} meetingOf={meetingOf} sp={sp} rowHref={rowHref} dropped={dropped} />
                       </div></div>
                     </details>
               );
@@ -734,7 +752,7 @@ export default async function CallWorkspace({ params, searchParams }) {
         >
           {openContact ? (
             <PersonPanel ct={openContact} rep={rep} base={base} t={t} s={s}
-              meetingOf={meetingOf} sp={sp} rowHref={rowHref} />
+              meetingOf={meetingOf} sp={sp} rowHref={rowHref} dropped={dropped} />
           ) : null}
         </Drawer>
       ) : null}

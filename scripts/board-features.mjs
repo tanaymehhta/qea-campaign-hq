@@ -156,6 +156,52 @@ truthy(`column repaints (${lightCol} -> ${darkCol})`, lightCol !== darkCol);
 truthy("cards are not left white on a dark page",
   darkCard !== "rgb(255, 255, 255)" && darkCard !== lightCol);
 
+/* ── 8 · dragging a card asks for the call that moves it ──────────────────── */
+console.log("\n8 · DRAG AND DROP");
+await goto(PAGE);
+truthy("cards are draggable", await $(`document.querySelector(".bcard").draggable === true`));
+
+// A real dragstart/drop pair through the DataTransfer the handlers read.
+const drag = (fromSel, toIdx) => $(`(()=>{
+  const card = document.querySelector("${fromSel}");
+  const zone = document.querySelectorAll(".dropzone")[${toIdx}];
+  const dt = new DataTransfer();
+  card.dispatchEvent(new DragEvent("dragstart",{bubbles:true,dataTransfer:dt}));
+  zone.dispatchEvent(new DragEvent("dragover",{bubbles:true,dataTransfer:dt}));
+  zone.dispatchEvent(new DragEvent("drop",{bubbles:true,dataTransfer:dt}));
+  return true})()`);
+
+// Didn't reach (col 2) -> Booked meeting (col 5)
+const dragged = await $(`document.querySelector(".col:nth-child(2) .bcard .nm b").textContent.trim()`);
+await drag(".col:nth-child(2) .bcard", 4);
+await sleep(1600);
+check("the drop opens that person", await $(`document.querySelector(".drawer h2")?.textContent`), dragged);
+check("...with the column's outcome preselected",
+  await $(`document.querySelector('.drawerbody input[name="outcome"]:checked')?.value`), "booked_meeting");
+check("...and says nothing has moved yet",
+  await $(`document.querySelector(".drawerbody h2").textContent`), "Moving to \u201cBooked a meeting\u201d");
+truthy("...and makes the meeting date mandatory before it will submit",
+  await $(`document.querySelector('.drawerbody input[name="meeting_date"]').required === true`));
+truthy("the form still posts to the same server action, not a new endpoint",
+  await $(`!!document.querySelector('.drawerbody form[action]')`));
+
+// Nothing may be written by the drag itself.
+check("the drag wrote nothing — the tile has not moved",
+  await $(`document.querySelector('[data-count]')?.getAttribute("data-count")`), "11");
+
+await goto(PAGE);
+await drag(".col:nth-child(3) .bcard", 0);      // Follow up -> To call
+await sleep(900);
+check("dropping into To call is refused, not silently ignored",
+  await $(`!!document.querySelector(".refused")`), true);
+check("...and it does not open anybody", await $(`!!document.querySelector(".drawer")`), false);
+
+await goto(PAGE);
+await drag(".col:nth-child(3) .bcard", 2);      // Follow up -> Follow up
+await sleep(900);
+check("dropping a card back where it started does nothing",
+  await $(`!!document.querySelector(".drawer")`), false);
+
 /* ── 7 · every other page still answers ───────────────────────────────────── */
 console.log("\n7 · NOTHING ELSE MOVED");
 for (const p of ["/", "/meetings", "/leads", "/calls", "/pipeline", "/inbound", "/campaigns", "/health", "/replies"]) {
