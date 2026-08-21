@@ -53,21 +53,36 @@ the click and the list must be the same pile** (`NEXT_AGENT.md` §1).
 
 One press is one call. That is the whole action.
 
-### The four tags
+### The five tags
 
 | Tag | Stored as | Use it when |
 |---|---|---|
-| Didn't reach them | `not_reached` | Nobody picked up. Voicemail, email instead, dead line — all of it. |
+| Didn't reach them / left a voicemail | `not_reached` | Nobody picked up. A voicemail counts here. |
+| Left an email and made a phone call | `emailed_and_called` | You rang **and** emailed, and still spoke to nobody. |
 | Follow up | `follow_up` | You spoke to a human, ring them back. |
 | Not interested | `not_interested` | You spoke to a human, they said no. |
 | Booked a meeting | `booked_meeting` | They agreed. The meeting date is required. |
 
-Three of the four mean you got through. `not_reached` is the only one that does not, and
-it is what "Spoke to someone" excludes.
+**Three of the five mean you got through.** The first two are the two ways of not getting
+through, and "Spoke to someone" excludes both — which is the only reason they could be
+split without any tile changing meaning.
 
-Whether a voicemail was left is a sentence in the note, not a category the dashboard
-counts. That was three separate outcomes until 20 Aug and it is the reason a tile called
-"No answer" read 6 when no call in this database has ever been a no-answer.
+The valid list is `call_outcomes()` in the database (migration `20260821200000`). The check
+constraint on `phone_calls` and the guards inside `log_call` and `edit_call` all read that
+one function, so adding a sixth tag is one line in one place rather than four that have to
+agree. On the front end, `OUTCOMES` orders them on screen, `COLUMNS` gives each one a board
+column — an outcome with no column does not fall into a neighbour, the person vanishes off
+the board — and `NOT_REACHED` in `lib/calls.js` is the single definition of "got through".
+
+Added 21 Aug 2026, and it half-reverses the 20 Aug collapse. What was wrong then was three
+tags for one fact — "No answer", "Left voicemail", "Left email" — with a tile counting the
+wrong one. What is back now is one tag for a genuinely different action: two touches
+instead of none, and no tile counts it apart.
+
+Whether a voicemail was left is now part of the first tag rather than a sentence in the
+note. What is still a sentence in the note is anything finer than these five — who the
+assistant was, which extension, what they said — because a category only earns its place
+when something counts it.
 
 ### What one press moves
 

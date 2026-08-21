@@ -1,5 +1,5 @@
 import { num, prettyDate, windowFrom, shift, today } from "../../../lib/db";
-import { callLog, callListOwners, callOwnerOf, callRepList } from "../../../lib/calls";
+import { callLog, callListOwners, callOwnerOf, callRepList, gotThrough } from "../../../lib/calls";
 import { Tile, Pill, RangePicker } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function CallLogPage({ searchParams }) {
 
   const mine = rep === "all" ? calls : calls.filter((c) => callOwnerOf(c, ownerOf) === rep);
 
-  const reached = mine.filter((c) => c.outcome !== "not_reached").length;
+  const reached = mine.filter((c) => gotThrough(c.outcome)).length;
   const booked = mine.filter((c) => c.outcome === "booked_meeting").length;
   const noList = mine.filter((c) => !c.contact_id).length;
 
@@ -77,7 +77,7 @@ export default async function CallLogPage({ searchParams }) {
           tone={mine.length ? undefined : "muted"} note="one per press of Log call" />
         <Tile label="Got through" value={num(reached)} raw={reached}
           tone={reached ? undefined : "muted"}
-          note="a live conversation — the other three tags, not Didn't reach them" />
+          note="a live conversation — the three tags that are not one of the two misses" />
         <Tile label="Meetings booked" value={num(booked)} raw={booked}
           tone={booked ? undefined : "muted"} note="calls tagged Booked a meeting" />
       </div>

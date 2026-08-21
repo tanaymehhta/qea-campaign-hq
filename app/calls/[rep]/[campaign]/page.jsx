@@ -67,17 +67,28 @@ const GLYPH_TINT = {
   follow_up: ["var(--tint-1)", "var(--s1)"],
 };
 
-// The four. One call ends one way, so these are radio buttons: pick one, press
+// The five. One call ends one way, so these are radio buttons: pick one, press
 // Log call, that is one call on the Overview — and if it is the first one,
 // one meeting too.
 //
-// There were seven until 20 Aug 2026, and three of them ("No answer", "Left
-// voicemail", "Left email") were one fact written three ways. Whether you left
-// a message is a sentence in the note, not a category the dashboard counts.
+// The first two are both "no human answered", split on 21 Aug 2026 because the
+// difference decides the next call: a voicemail is one touch, a voicemail plus
+// an email is two, and only the second leaves something they can reply to.
+// Neither is a conversation — "Spoke to someone" excludes both — so the split
+// costs no tile its meaning.
+//
+// There were seven until 20 Aug and three of them were collapsed, which makes
+// this look like a reversal and it is only half of one. What was wrong then was
+// three tags for one fact ("No answer", "Left voicemail", "Left email") with a
+// tile counting the wrong one; what is back now is one tag for a different
+// action. The valid list lives in the database — `call_outcomes()`, migration
+// 20260821200000 — and this array is its order on screen.
+//
 // "Booked a meeting" is last so it is not one misclick from the Log call
 // button, which is where it sat when it was a checkbox.
 const OUTCOMES = [
-  ["not_reached", "Didn't reach them"],
+  ["not_reached", "Didn't reach them / left a voicemail"],
+  ["emailed_and_called", "Left an email and made a phone call"],
   ["follow_up", "Follow up"],
   ["not_interested", "Not interested"],
   ["booked_meeting", "Booked a meeting"],
@@ -85,22 +96,29 @@ const OUTCOMES = [
 
 /** Which dot the chosen tag lights. Order and keys follow OUTCOMES. */
 const TAG_CLASS = {
-  not_reached: "miss", follow_up: "fu", not_interested: "no", booked_meeting: "win",
+  not_reached: "miss", emailed_and_called: "mail",
+  follow_up: "fu", not_interested: "no", booked_meeting: "win",
 };
 
 /**
- * The five columns are the five values statusOf() can return, in the order a
- * shift works them: everyone unrung, then the ones you tried, then the two
- * conversations that are still alive, then the one that isn't, then the win.
+ * The six columns are the six values statusOf() can return, in the order a
+ * shift works them: everyone unrung, then the two kinds of tried-and-missed,
+ * then the two conversations that are still alive, then the one that isn't,
+ * then the win.
+ *
+ * A column per outcome is not decoration. statusOf() returns the last outcome
+ * verbatim, so an outcome with no column here does not fall into a neighbour —
+ * the person disappears off the board entirely.
  *
  * do-not-call is deliberately not here. It is a tile filter (?f=dnc) and stays
- * one: a sixth column would put five retired people on screen all day, and
+ * one: a seventh column would put five retired people on screen all day, and
  * CALL_LOGS §8-C — tiles count DNC people where lists hide them — would become
  * visible on a board and then get hidden again behind a column nobody reads.
  */
 const COLUMNS = [
   ["never_called", "To call", "Nobody left to dial in this view."],
   ["not_reached", "Didn't reach", "Nobody tried and missed."],
+  ["emailed_and_called", "Emailed + called", "Nobody has had both touches yet."],
   ["follow_up", "Follow up", "Nothing to ring back."],
   ["not_interested", "Not interested", "Nobody has said no."],
   ["booked_meeting", "Booked meeting", "No meeting off the phone yet."],
