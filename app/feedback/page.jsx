@@ -1,5 +1,7 @@
 import { db, prettyWhen } from "../../lib/db";
 import { Tile, Pill } from "../../components/ui";
+import { runState, REPO } from "../../lib/github";
+import RefreshWhile from "../../components/refresh-while";
 import { setFeedbackStatus, askClaude } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,15 @@ export default async function Feedback({ searchParams }) {
 
   const url = (path) => db.storage.from("feedback").getPublicUrl(path).data.publicUrl;
   const here = (f) => (f ? `/feedback?f=${f}` : "/feedback");
+
+  // Only the rows on screen, and only the ones somebody actually pressed the
+  // button on. Everything else costs no call at all.
+  const runs = Object.fromEntries(
+    await Promise.all(
+      rows.filter((f) => f.asked_at).map(async (f) => [f.id, await runState(f.id, f.asked_at)]),
+    ),
+  );
+  const anyWorking = Object.values(runs).some((r) => r?.state === "working");
 
   return (
     <>
@@ -92,6 +103,8 @@ export default async function Feedback({ searchParams }) {
             </a>
           ) : null}
 
+          <Run run={runs[f.id]} />
+
           <div className="choices">
             <form action={setFeedbackStatus} className="gapform">
               <input type="hidden" name="id" value={f.id} />
@@ -101,12 +114,15 @@ export default async function Feedback({ searchParams }) {
               </button>
             </form>
             <a className="choice" href={f.page.startsWith("/") ? f.page : "/"}>Go to the page →</a>
-            {/* Only on what's still open: handing Claude something already
-                marked done is how you get a pull request nobody asked for. */}
-            {f.status === "open" ? (
+            {/* Only on what's still open, and only once: handing Claude
+                something already asked for is how you get a second run on a
+                branch it is still pushing to. */}
+            {f.status === "open" && (!runs[f.id] || runs[f.id].state === "stalled") ? (
               <form action={askClaude} className="gapform">
                 <input type="hidden" name="id" value={f.id} />
-                <button className="choice" type="submit">Ask Claude to build this</button>
+                <button className="choice" type="submit">
+                  {runs[f.id] ? "Try again" : "Ask Claude to build this"}
+                </button>
               </form>
             ) : null}
           </div>
@@ -120,6 +136,93 @@ export default async function Feedback({ searchParams }) {
           </p>
         </div>
       ) : null}
+
+      {/* Mounted only while something is actually in flight, so the polling
+          stops by itself once the last card has a pull request on it. */}
+      {anyWorking ? <RefreshWhile /> : null}
     </>
+  );
+}
+
+/**
+ * What became of the press, said on the card that was pressed.
+ *
+ * The button used to vanish into nothing: the page looked identical before and
+ * after, and the only way to find out whether anything had started was to open
+ * GitHub. Each state here answers the question the reader actually has, which
+ * is "can I look at it yet".
+ */
+function Run({ run }) {
+  if (!run) return null;
+
+  if (run.state === "working") {
+    return (
+      <div className="runline">
+        <span className="pulse" aria-hidden="true" />
+        <b>Claude is working on this.</b>
+        <span className="note">
+          started {prettyWhen(run.askedAt)} — usually about two minutes
+        </span>
+        <a className="note" style={{ marginLeft: "auto" }}
+          href={`https://github.com/${REPO}/actions/workflows/feedback-agent.yml`}
+          target="_blank" rel="noreferrer">watch it →</a>
+      </div>
+    );
+  }
+
+  if (run.state === "stalled") {
+    return (
+      <div className="runline bad">
+        <b>That run didn&rsquo;t finish.</b>
+        <span className="note">Nothing was changed. Try again, or look at why.</span>
+        <a className="note" style={{ marginLeft: "auto" }}
+          href={`https://github.com/${REPO}/actions/workflows/feedback-agent.yml`}
+          target="_blank" rel="noreferrer">see the run →</a>
+      </div>
+    );
+  }
+
+  if (run.merged) {
+    return (
+      <div className="runline good">
+        <b>Shipped.</b>
+        <span className="note">This is live on the dashboard now.</span>
+        <a className="note" style={{ marginLeft: "auto" }} href={run.prUrl}
+          target="_blank" rel="noreferrer">what changed →</a>
+      </div>
+    );
+  }
+
+  if (run.closed) {
+    return (
+      <div className="runline">
+        <b>Turned down.</b>
+        <span className="note">The change was closed without going live.</span>
+        <a className="note" style={{ marginLeft: "auto" }} href={run.prUrl}
+          target="_blank" rel="noreferrer">read it →</a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="runline good">
+      <b>Ready to look at.</b>
+      <span className="note">{run.prTitle}</span>
+      <div className="choices" style={{ marginLeft: "auto", marginTop: 0 }}>
+        {/* The preview first and worded as a place rather than a link: it is a
+            running copy of the change, and it is the only one of these two a
+            person who does not read code has any use for. */}
+        {run.preview ? (
+          <a className="choice" href={run.preview} target="_blank" rel="noreferrer">
+            See it live →
+          </a>
+        ) : (
+          <span className="note">preview still building…</span>
+        )}
+        <a className="choice" href={run.prUrl} target="_blank" rel="noreferrer">
+          Read the change
+        </a>
+      </div>
+    </div>
   );
 }

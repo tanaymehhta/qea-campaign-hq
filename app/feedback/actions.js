@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { db } from "../../lib/db";
+import { REPO } from "../../lib/github";
 
 /**
  * Feedback, written the same way as every other write here: a security-definer
@@ -34,9 +35,11 @@ function origin() {
  * nowhere on an arbitrary page to put "saved" or "that failed". Landing on the
  * list is the better confirmation anyway — you watch your own item arrive.
  */
-function finish(err, sent) {
+function finish(err, sent, asked) {
   revalidatePath("/feedback");
-  const q = new URLSearchParams(err ? { err } : sent ? { sent: "1" } : {});
+  const q = new URLSearchParams(
+    err ? { err } : sent ? { sent: "1" } : asked ? { asked: "1" } : {},
+  );
   // "replace": a Server Action redirect pushes by default, and this one lands
   // on the page it started from, so a push buries the way back one press deeper.
   redirect(`/feedback${q.size ? `?${q}` : ""}`, "replace");
@@ -84,9 +87,6 @@ export async function setFeedbackStatus(formData) {
   finish(error?.message);
 }
 
-/** The repo the dashboard is built from. One constant rather than an env var:
- *  it has never been anything else, and a wrong value here fails loudly. */
-const REPO = "tanaymehhta/qea-campaign-hq";
 
 /**
  * Hand one piece of feedback to Claude, which runs in GitHub Actions and opens
@@ -126,5 +126,12 @@ export async function askClaude(formData) {
   // 204 is the whole success response — GitHub accepts the dispatch and says
   // nothing else, so there is no run id to hand back and link to here.
   if (!res.ok) finish(`GitHub wouldn't take it (${res.status}): ${await res.text()}`);
-  redirect("/feedback?asked=1", "replace");
+
+  // Written only once GitHub has taken it, so a rejected dispatch leaves the
+  // card looking unasked rather than permanently "working" on a run that never
+  // started. This is the only thing that distinguishes the two states.
+  const { error: markErr } = await db.rpc("mark_feedback_asked", { p_id: id });
+  if (markErr) finish(`it started, but we couldn't record that: ${markErr.message}`);
+
+  finish(null, false, "asked");
 }
