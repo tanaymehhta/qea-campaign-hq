@@ -1,7 +1,7 @@
 import {
   db, num, prettyDate, prettyWhen, windowFrom, shift, today,
   METRICS, PAGE_SIZES, pageSize, campaignIdsForGroup, campaignIdsForRep, listHref, reachedArgs,
-  reachedCounts, pct, dailyRange, meetingArgs,
+  reachedCounts, pct, dailyRange,
 } from "../../lib/db";
 import { RangePicker, Pill, Seg, PersonLink, ShareDonut, tally } from "../../components/ui";
 
@@ -24,7 +24,6 @@ export const dynamic = "force-dynamic";
 const UNIT = {
   activities: ["send", "sends"],
   replies:    ["message", "messages"],
-  meetings:   ["meeting", "meetings"],
   proposals:  ["proposal", "proposals"],
   people:     ["person", "people"],
 };
@@ -47,23 +46,20 @@ export default async function List({ searchParams }) {
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * size;
 
-  // scope: a campaign group, a single campaign, or everything. Group ids ride
-  // along for the meetings branch, where a meeting can carry a group_id and no
-  // campaign_id — the Overview counts those, so this list must too.
+  // scope: a campaign group, a single campaign, or everything.
   let scopeIds = null;
-  let scopeGroupIds = [];
   let scopeLabel = "all campaigns";
   if (sp.campaign) {
     const { data: c } = await db.from("campaigns").select("id, name").eq("id", sp.campaign).single();
     if (c) { scopeIds = [c.id]; scopeLabel = c.name; }
   } else if (sp.group) {
     const { group, ids } = await campaignIdsForGroup(sp.group);
-    if (group) { scopeIds = ids; scopeGroupIds = [group.id]; scopeLabel = group.display_name; }
+    if (group) { scopeIds = ids; scopeLabel = group.display_name; }
   } else if (sp.rep) {
     // Reps own groups, not campaigns — see campaignIdsForRep. Scoping here keeps
     // a rep-filtered tile and the list behind it counting the same people.
-    const { label, ids, groupIds } = await campaignIdsForRep(sp.rep);
-    if (label) { scopeIds = ids; scopeGroupIds = groupIds; scopeLabel = `${label}'s campaigns`; }
+    const { label, ids } = await campaignIdsForRep(sp.rep);
+    if (label) { scopeIds = ids; scopeLabel = `${label}'s campaigns`; }
   }
 
   const campaignNames = new Map(
@@ -146,27 +142,6 @@ export default async function List({ searchParams }) {
       // to stay clickable regardless of which slice is currently selected.
       if (m.sentiment) q = q.eq("sentiment", m.sentiment);
       else if (!forBreakdown && sp.sentiment && sp.sentiment !== "all") q = q.eq("sentiment", sp.sentiment);
-    } else if (m.table === "meetings") {
-      // `meeting_rows` is the same function the Overview tile counts, asked with
-      // the same five arguments — so this list cannot be a different pile from
-      // the number that sent you here. It was one, until 20 Aug: the tile read
-      // 5 for Mark Vasu and this page opened 4, because a meeting booked on a
-      // phone call carries no campaign and no group and the scope filter below
-      // could only see those two. Migration 20260820174533.
-      //
-      // booked + held only, the window, and the three scope doors all live
-      // inside the function now — which is why nothing is appended here.
-      // "All time" still means every meeting ever, not capped at today: a
-      // meeting is allowed to be in the future.
-      q = db.rpc("meeting_rows", meetingArgs({
-        from: w.range === "all" ? null : w.from,
-        to: w.range === "all" ? null : w.to,
-        campaignIds: scopeIds, groupIds: scopeGroupIds, rep: sp.rep,
-      }), { count: "exact" });
-      // Ordering by a column not in `select` fails on a set-returning function
-      // (measured 20 Aug), so the breakdown query asks for its sort column too.
-      if (cols) q = q.select(`${cols}, scope_date`);
-      return q.order("scope_date", { ascending: false, nullsFirst: false });
     } else {
       q = db.from("proposals")
         .select(cols ?? "id, campaign_id, prospect_name, company, amount, sent_date, status, note", { count: "exact" })
@@ -175,25 +150,19 @@ export default async function List({ searchParams }) {
     }
     // An empty scope means the group has no campaigns; `in ()` is invalid SQL,
     // so the caller short-circuits rather than silently returning everything.
-    // Meetings scope on campaign OR group — a group-only meeting (campaign_id
-    // null) is counted by the Overview tile and must not vanish here.
-    // Meetings never reach here — scope is an argument to their function, not
-    // a filter on its output, which is the whole point of the change above.
     if (scopeIds !== null && scopeIds.length) q = q.in("campaign_id", scopeIds);
     return q;
   };
 
   // An activity list is one event type by definition, so there is nothing to
   // divide; the other shapes carry a state worth seeing the shape of.
-  const BREAKDOWN = { people: "status", replies: "sentiment", meetings: "status", proposals: "status" };
+  const BREAKDOWN = { people: "status", replies: "sentiment", proposals: "status" };
   const field = BREAKDOWN[m.table];
   let breakdown = [];
 
   // An empty scope means the group has no campaigns; `in ()` is invalid SQL, so
-  // short-circuit rather than silently returning everything. Meetings are
-  // exempt: their scope is a function argument, and a rep with no campaigns can
-  // still own a group and a phone list.
-  const scopeEmpty = m.table !== "meetings" && scopeIds !== null && !scopeIds.length;
+  // short-circuit rather than silently returning everything.
+  const scopeEmpty = scopeIds !== null && !scopeIds.length;
   if (!scopeEmpty) {
     const [res, cats] = await Promise.all([
       build().range(offset, offset + size - 1),
@@ -300,7 +269,7 @@ export default async function List({ searchParams }) {
       ) : null}
 
       <ShareDonut
-        title={m.table === "replies" ? "replies" : m.table === "meetings" ? "meetings" : "people"}
+        title={m.table === "replies" ? "replies" : "people"}
         items={breakdown}
         note={`By ${field === "sentiment" ? "how the reply was read" : "status"}, across all ${num(count)} — not just this page.`}
       />
@@ -331,11 +300,6 @@ export default async function List({ searchParams }) {
             {m.table === "replies" ? (
               <tr><th style={{ textAlign: "left" }}>Person</th><th style={{ textAlign: "left" }}>Company</th>
                 <th style={{ textAlign: "left" }}>Campaign</th><th>Type</th><th style={{ textAlign: "left" }}>Message</th><th>When</th></tr>
-            ) : m.table === "meetings" ? (
-              <tr><th style={{ textAlign: "left" }}>Person</th><th style={{ textAlign: "left" }}>Company</th>
-                <th style={{ textAlign: "left" }}>Where from</th><th>Status</th><th>Evidence</th>
-                <th title="The day it was agreed — this is what the date window above filters on">Booked</th>
-                <th title="The day the meeting happens">Meeting</th></tr>
             ) : m.table === "proposals" ? (
               <tr><th style={{ textAlign: "left" }}>Person</th><th style={{ textAlign: "left" }}>Company</th>
                 <th style={{ textAlign: "left" }}>Campaign</th><th>Amount</th><th>Status</th><th>Sent</th></tr>
@@ -367,33 +331,6 @@ export default async function List({ searchParams }) {
                     <div className="dim" style={{ fontSize: 12.5 }}>{(r.body ?? "").slice(0, 220) || "—"}</div>
                   </td>
                   <td className="dim">{prettyWhen(r.received_at)}</td>
-                </tr>
-              );
-
-              if (m.table === "meetings") return (
-                <tr key={r.id}>
-                  <td className="name">
-                    {r.prospect_name || r.prospect_email
-                      ? <PersonLink email={r.prospect_email} name={r.prospect_name} />
-                      : <span className="dim">not recorded</span>}
-                    {r.prospect_email ? <div className="dim" style={{ fontSize: 12 }}>{r.prospect_email}</div> : null}</td>
-                  <td style={{ textAlign: "left" }}>{r.company || "—"}</td>
-                  {/* A call meeting belongs to no email campaign, so it says
-                      where it did come from rather than printing a dash. */}
-                  <td style={{ textAlign: "left" }}>
-                    {r.origin === "call"
-                      ? <span>on a call{r.rep ? ` · ${r.rep}` : ""}</span>
-                      : cname}
-                  </td>
-                  <td><Pill status={r.status} /></td>
-                  <td className="dim">{r.evidence}</td>
-                  {/* Blank, not the meeting date repeated: the four meetings
-                      logged before 20 Aug have no record of when they were
-                      agreed, and copying one date into the other column would
-                      invent the fact. They still count — the window falls back
-                      to the meeting date for them. */}
-                  <td className="dim">{r.booked_on ? prettyDate(r.booked_on) : <span title="not recorded — this meeting predates the column">—</span>}</td>
-                  <td className="dim">{prettyDate(r.meeting_date)}</td>
                 </tr>
               );
 
