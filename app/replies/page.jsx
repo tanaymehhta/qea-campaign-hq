@@ -1,6 +1,7 @@
 import {
   db, num, prettyWhen, prettyDate, initials, today, shift,
-  windowFrom, repList, campaignIdsForRep, responseCounts, responsePeople,
+  windowFrom, repList, campaignIdsForRep, campaignIdsForGroup,
+  responseCounts, responsePeople,
   logMeetingHref,
 } from "../../lib/db";
 import { PersonLink, Pill, Chev, Reps, RangePicker } from "../../components/ui";
@@ -72,7 +73,36 @@ export default async function Replies({ searchParams }) {
 
   const { reps } = await repList();
   const rep = reps.some((r) => r.id === sp.rep) ? sp.rep : "all";
-  const { ids } = rep === "all" ? { ids: null } : await campaignIdsForRep(rep);
+
+  // Three scopes can arrive at once, because the tiles that link here sit on
+  // pages that already know one or two of them: a rep strip, a group row, a
+  // sub-campaign page. A rep owns groups and a group owns campaigns, so they
+  // nest, and the honest combination is the **intersection** — ?rep=Justin&
+  // group=lber-boston means the campaigns in both. Union would widen a scope
+  // the clicked tile had already narrowed, which is how a tile and its own
+  // click become two numbers again.
+  //
+  // A scope that was asked for and could not be resolved narrows to nothing —
+  // never back to everything. A broken link should show an empty pile and say
+  // why; widening it to the whole company would answer a question nobody
+  // asked with a number that looks like an answer to the one they did.
+  const campaignAsked = (sp.campaign ?? "").trim();
+  const campaign =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(campaignAsked)
+      ? campaignAsked
+      : null;
+  const [repScope, groupScope] = await Promise.all([
+    rep === "all" ? { ids: null } : campaignIdsForRep(rep),
+    sp.group ? campaignIdsForGroup(sp.group) : { group: null, ids: null },
+  ]);
+  const asked = [
+    repScope.ids,
+    sp.group ? groupScope.ids ?? [] : null,
+    campaignAsked ? (campaign ? [campaign] : []) : null,
+  ].filter(Boolean);
+  // No scope at all is `null` — every campaign the anon key can see — and not
+  // an empty array, which means the opposite and would empty the page.
+  const campaignIds = asked.length ? asked.reduce((a, b) => a.filter((id) => b.includes(id))) : null;
 
   // The same four arguments the tile counted with. If this object and the one
   // in app/page.jsx ever stop matching, the number and the list are two piles
@@ -80,7 +110,7 @@ export default async function Replies({ searchParams }) {
   const scope = {
     from: w.range === "all" ? null : w.from,
     to: w.range === "all" ? null : w.to,
-    campaignIds: ids,
+    campaignIds,
     source: null,
   };
 
@@ -126,7 +156,23 @@ export default async function Replies({ searchParams }) {
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
     return q.toString() ? `/replies?${q}` : "/replies";
   };
-  const base = { view, ...windowParams, rep: rep === "all" ? "" : rep, q: search };
+  const base = {
+    view, ...windowParams, rep: rep === "all" ? "" : rep, q: search,
+    // Carried on every control, so narrowing to a group and then changing the
+    // window or the pile does not silently widen back to the whole company.
+    group: sp.group ?? "", campaign: campaignAsked,
+  };
+
+  // What the page is scoped to, said out loud. A number that is smaller than
+  // the homepage's because it is one group's is fine; a number that is smaller
+  // for a reason nobody can see is the fault this page exists to end.
+  const scopeName = campaignAsked
+    ? subById.get(campaign)?.sub_campaign_label
+      || subById.get(campaign)?.name
+      || `an unknown campaign (${campaignAsked})`
+    : sp.group
+      ? groupScope.group?.display_name ?? `an unknown group (${sp.group})`
+      : null;
 
   // Rebuilt from the params this page understands rather than echoed back from
   // the URL, so whatever the label action receives is something this file wrote.
@@ -140,6 +186,12 @@ export default async function Replies({ searchParams }) {
         those numbers ask the same question of the database. One row per person; open a row
         to read the thread and change what it means.
       </p>
+      {scopeName ? (
+        <p className="sub" style={{ marginTop: -10 }}>
+          Scoped to <b>{scopeName}</b>.{" "}
+          <a className="drilled" href={here({ ...base, group: "", campaign: "" })}>everything</a>
+        </p>
+      ) : null}
 
       <Reps reps={reps} current={rep} hrefFor={(id) => here({ ...base, rep: id === "all" ? "" : id })} />
 
@@ -171,6 +223,8 @@ export default async function Replies({ searchParams }) {
         <input type="hidden" name="view" value={view} />
         {w.range === "day" ? <input type="hidden" name="d" value={w.from} /> : <input type="hidden" name="range" value={w.range} />}
         {rep !== "all" ? <input type="hidden" name="rep" value={rep} /> : null}
+        {base.group ? <input type="hidden" name="group" value={base.group} /> : null}
+        {base.campaign ? <input type="hidden" name="campaign" value={base.campaign} /> : null}
         <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <circle cx="7" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.5" />
           <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
