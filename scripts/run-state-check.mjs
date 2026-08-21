@@ -7,7 +7,20 @@
  * a preview link Vercel words differently. Each of those fails a line here.
  */
 import assert from "node:assert/strict";
-import { runStates, MOVING, shareable } from "../lib/github.js";
+import { execSync } from "node:child_process";
+
+// Unauthenticated GitHub allows 60 requests an hour per address, which two runs
+// of this will exhaust — and a rate-limited answer is indistinguishable here
+// from a real one. Borrow the gh CLI's token when nothing else is set.
+if (!process.env.GITHUB_DISPATCH_TOKEN) {
+  try {
+    process.env.GITHUB_DISPATCH_TOKEN = execSync("gh auth token", { encoding: "utf8" }).trim();
+  } catch {
+    console.warn("no token available — this may fail on rate limits alone");
+  }
+}
+
+const { runStates, MOVING, shareable } = await import("../lib/github.js");
 
 // The feedback that produced pull request #3.
 const REAL = "99115538-4225-437f-a447-91d976bb64c5";
@@ -17,11 +30,26 @@ const ago = (mins) => new Date(Date.now() - mins * 60_000).toISOString();
 
 const KNOWN = ["queued", "working", "building", "ready", "shipped", "closed", "failed"];
 
+// The probe pull request from the discard check: its branch was deleted, and it
+// must still be found and reported as turned down rather than as still working.
+const DISCARDED = "11111111-2222-4333-8444-555555555555";
+
 const states = await runStates([
   { id: REAL, asked_at: ago(30) },
   { id: NONE, asked_at: ago(30) },
+  { id: DISCARDED, asked_at: ago(30) },
   { id: "unpressed", asked_at: null },
 ]);
+
+assert.notEqual(states[REAL].phase, "unknown",
+  "GitHub answered — if this is unknown the run is rate limited, not broken");
+
+// Turning a change down deletes its branch, so ?head= would stop matching it.
+// Matching on the pull request's remembered head.ref is what keeps this right.
+assert.equal(states[DISCARDED].phase, "closed",
+  "a change whose branch was deleted reads as turned down, not as still working");
+assert.match(states[DISCARDED].prUrl, /\/pull\/\d+$/,
+  "and it still carries the link to what was proposed");
 
 assert.ok(!("unpressed" in states), "a row nobody sent costs no lookup and gets no state");
 

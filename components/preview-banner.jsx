@@ -49,7 +49,7 @@ export default async function PreviewBanner() {
           <button className="choice pvgo" type="submit">Yes, put this live</button>
         </form>
         <form action={discard} className="gapform">
-          <input type="hidden" name="pr" value={pr.number} />
+          <input type="hidden" name="id" value={id} />
           <button className="choice" type="submit">No</button>
         </form>
         <a className="note" href={pr.html_url} target="_blank" rel="noreferrer">
