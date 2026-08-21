@@ -388,6 +388,10 @@ export default async function Inbound({ searchParams }) {
                 note={`${share(stats.failed, stats.companies)} of companies`}
                 foot="never returned a verdict"
                 on={show === "failed"} href={href({ ...here, show: "failed" })} />
+          <Stat label="Reached out" value={num(stats.touched)}
+                note={`${share(stats.touched, stats.companies)} of companies`}
+                foot={`${num(stats.companies - stats.touched)} nobody has picked up`}
+                on={show === "touched"} href={href({ ...here, show: "touched" })} />
           {/* The one number that cannot follow the filters: a webhook that failed
               to parse never got a company_id, so there is nothing to filter it
               by. It says "all time" rather than quietly ignoring the window. */}
@@ -449,6 +453,25 @@ export default async function Inbound({ searchParams }) {
             ? <a href={href({ ...here, range: "7", from: null, to: null })}>Clear</a>
             : null}
         </form>
+
+        {/* The tick, as a filter, in both directions. A rep opening the queue
+            asks it both ways — what is left this morning, and what somebody has
+            already picked up — and the second question is the one that stops two
+            people mailing the same account.
+
+            It rides on `show` rather than a param of its own, because the header
+            tiles are already that filter and two filters both narrowing the same
+            list would need a rule for what happens when they disagree. So this
+            says "All" only when nothing is filtering: pressing Reached out from
+            Research failed replaces it rather than adding to it, and the note on
+            the right names whichever one is on. */}
+        <div className="i-seg">
+          {[["all", "All"], ["untouched", "Not reached out"], ["touched", "Reached out"]]
+            .map(([k, label]) => (
+              <a key={k} href={href({ ...here, show: k })}
+                 className={show === k ? "on" : ""}>{label}</a>
+            ))}
+        </div>
 
         <div className="i-seg">
           {[["cards", "Cards"], ["table", "Table"]].map(([k, label]) => (
