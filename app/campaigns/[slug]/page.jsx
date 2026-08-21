@@ -1,4 +1,7 @@
-import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize, PAGE_SIZES } from "../../../lib/db";
+import {
+  db, num, pct, prettyDate, prettyWhen, listHref, pageSize, PAGE_SIZES,
+  responseCounts, reachedCounts,
+} from "../../../lib/db";
 import { Num, BounceCell, Pill, DrillCell, PeopleTable, Tile, ShareDonut, tally } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -41,11 +44,39 @@ export default async function Group({ params, searchParams }) {
     return `/campaigns/${params.slug}?${q}#people`;
   };
   const drill = (metric) => listHref({ metric, range: "all", group: params.slug });
+  const pileHref = (view, extra = {}) =>
+    `/replies?${new URLSearchParams({ view, range: "all", group: params.slug, ...extra })}`;
 
-  // rank by reply rate — the whole reason for running variants
+  // Answers and people reached, for the group and for each sub-campaign in it.
+  // Both from the functions the Overview tile and /replies ask, because a
+  // column that sums a different definition from the tile above it is how a
+  // page comes to disagree with itself. This read `v_campaign_summary.replied`
+  // — the vendor's reply counter, message-grain and filtered by the vendor's
+  // own idea of a robot — and divided it by `leads`, the size of the list.
+  //
+  // Two calls per sub-campaign. This is a detail page for one group; the
+  // Overview asks the same question five times for the same reason.
+  const lifetime = (ids) => ({ from: null, to: null, source: null, campaignIds: ids });
+  const [groupResp, groupReach, subStats] = await Promise.all([
+    responseCounts(lifetime(ids)),
+    reachedCounts({ ...lifetime(ids), rep: null }),
+    Promise.all(
+      (subs ?? []).map(async (sub) => {
+        const [resp, reach] = await Promise.all([
+          responseCounts(lifetime([sub.campaign_id])),
+          reachedCounts({ ...lifetime([sub.campaign_id]), rep: null }),
+        ]);
+        return [sub.campaign_id, { resp, reach, rate: pct(resp.responded, reach.people) }];
+      })
+    ),
+  ]);
+  const statOf = (id) => subStats.find(([k]) => k === id)?.[1] ?? { resp: {}, reach: {}, rate: null };
+  const groupRate = pct(groupResp.responded, groupReach.people);
+
+  // rank by response rate — the whole reason for running variants
   const ranked = (subs ?? []).sort((a, b) => {
-    const ra = a.leads ? a.replied / a.leads : -1;
-    const rb = b.leads ? b.replied / b.leads : -1;
+    const ra = statOf(a.campaign_id).rate ?? -1;
+    const rb = statOf(b.campaign_id).rate ?? -1;
     if (rb !== ra) return rb - ra;
     return (b.sent ?? 0) - (a.sent ?? 0);
   });
@@ -78,10 +109,14 @@ export default async function Group({ params, searchParams }) {
           note={`${g.campaign_count} campaigns · ${g.running_count} running`} href="#people" />
         <Tile plus label="Sent" value={num(g.sent)} raw={g.sent}
           note={`${num(g.delivered)} delivered`} href={drill("sent")} />
-        <Tile plus label="Replies" value={num(g.replied)} raw={g.replied}
-          tone={g.replied ? undefined : "muted"}
-          note={g.leads ? `${pct(g.replied, g.leads)}% of leads · 3–8% is healthy` : "—"}
-          href={drill("replied")} />
+        <Tile plus label="Responses" value={num(groupResp.responded)} raw={groupResp.responded}
+          tone={groupResp.responded ? undefined : "muted"}
+          note={
+            groupRate == null
+              ? `${num(groupResp.interested)} interested`
+              : `${groupRate}% of the ${num(groupReach.people)} reached · ${num(groupResp.interested)} interested`
+          }
+          href={pileHref("responded")} />
         <Tile plus label="Meetings" value={num(g.meetings)} raw={g.meetings}
           tone={g.meetings ? undefined : "muted"} note="The primary KPI" href={drill("meetings")} />
         <Tile plus label="Proposals sent" value={num(g.proposals)} raw={g.proposals}
@@ -104,13 +139,15 @@ export default async function Group({ params, searchParams }) {
         </div>
       ) : null}
 
-      <h2>Sub-campaigns, best reply rate first</h2>
+      <h2>Sub-campaigns, best response rate first</h2>
       <div className="card tw">
         <table>
           <thead>
             <tr>
               <th>Sub-campaign</th><th>Tool</th><th>Status</th><th>Leads</th><th>Sent</th>
-              <th>Bounced</th><th>Bounce %</th><th>Opened</th><th>Replies</th><th>Reply %</th>
+              <th>Bounced</th><th>Bounce %</th><th>Opened</th>
+              <th title="People who wrote back an answer. Machines and mail nobody has read yet are in neither this nor the rate beside it.">Responses</th>
+              <th title="Answers over the people we actually reached in this sub-campaign — not over the size of its list">Response %</th>
               <th>LI acc.</th><th>Meetings</th><th>Proposals</th><th>Cap/day</th>
             </tr>
           </thead>
@@ -128,9 +165,12 @@ export default async function Group({ params, searchParams }) {
                 <Num v={s.bounced} />
                 <BounceCell bounced={s.bounced} base={s.sent} />
                 <Num v={s.opened} />
-                <Num v={s.replied} />
-                <td className={s.leads && pct(s.replied, s.leads) >= 3 ? "ok" : "zero"}>
-                  {s.leads ? `${pct(s.replied, s.leads)}%` : "—"}
+                <DrillCell
+                  v={statOf(s.campaign_id).resp.responded ?? null}
+                  href={pileHref("responded", { campaign: s.campaign_id })}
+                />
+                <td className={statOf(s.campaign_id).rate >= 3 ? "ok" : "zero"}>
+                  {statOf(s.campaign_id).rate == null ? "—" : `${statOf(s.campaign_id).rate}%`}
                 </td>
                 <Num v={s.linkedin_accepted} />
                 <Num v={s.meetings} />
@@ -142,8 +182,8 @@ export default async function Group({ params, searchParams }) {
               <td>Total</td><td /><td />
               <td>{num(g.leads)}</td><td>{num(g.sent)}</td><td>{num(g.bounced)}</td>
               <td>{g.sent ? `${pct(g.bounced, g.sent)}%` : "—"}</td>
-              <td>{num(g.opened)}</td><td>{num(g.replied)}</td>
-              <td>{g.leads ? `${pct(g.replied, g.leads)}%` : "—"}</td>
+              <td>{num(g.opened)}</td><td>{num(groupResp.responded)}</td>
+              <td>{groupRate == null ? "—" : `${groupRate}%`}</td>
               <td>{num(g.linkedin_accepted)}</td><td>{num(g.meetings)}</td><td>{num(g.proposals)}</td><td />
             </tr>
           </tbody>
