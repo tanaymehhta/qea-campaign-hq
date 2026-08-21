@@ -1,6 +1,6 @@
 import { db, prettyWhen } from "../../lib/db";
 import { Tile, Pill } from "../../components/ui";
-import { setFeedbackStatus } from "./actions";
+import { setFeedbackStatus, askClaude } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +36,16 @@ export default async function Feedback({ searchParams }) {
       {sp.sent ? (
         <div className="warnbox w">
           <b>Thanks — that&rsquo;s saved.</b> It&rsquo;s at the top of the list below.
+        </div>
+      ) : null}
+      {sp.asked ? (
+        <div className="warnbox w">
+          <b>Handed to Claude.</b>{" "}
+          <a href="https://github.com/tanaymehhta/qea-campaign-hq/actions/workflows/feedback-agent.yml"
+             target="_blank" rel="noreferrer">Watch it work</a>, then{" "}
+          <a href="https://github.com/tanaymehhta/qea-campaign-hq/pulls"
+             target="_blank" rel="noreferrer">read the pull request</a> it opens.
+          Nothing reaches the live site until you merge it.
         </div>
       ) : null}
       {sp.err ? (
@@ -91,6 +101,14 @@ export default async function Feedback({ searchParams }) {
               </button>
             </form>
             <a className="choice" href={f.page.startsWith("/") ? f.page : "/"}>Go to the page →</a>
+            {/* Only on what's still open: handing Claude something already
+                marked done is how you get a pull request nobody asked for. */}
+            {f.status === "open" ? (
+              <form action={askClaude} className="gapform">
+                <input type="hidden" name="id" value={f.id} />
+                <button className="choice" type="submit">Ask Claude to build this</button>
+              </form>
+            ) : null}
           </div>
         </div>
       ))}

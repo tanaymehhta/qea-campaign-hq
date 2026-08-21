@@ -83,3 +83,48 @@ export async function setFeedbackStatus(formData) {
   });
   finish(error?.message);
 }
+
+/** The repo the dashboard is built from. One constant rather than an env var:
+ *  it has never been anything else, and a wrong value here fails loudly. */
+const REPO = "tanaymehhta/qea-campaign-hq";
+
+/**
+ * Hand one piece of feedback to Claude, which runs in GitHub Actions and opens
+ * a pull request. Deliberately a button someone presses and not a trigger on
+ * insert: the box accepts anonymous writes, so this click is the only thing
+ * standing between arbitrary typed text and an agent with commit rights.
+ *
+ * The branch is named after the feedback id on the far side, so pressing this
+ * twice updates one pull request instead of opening a second one.
+ */
+export async function askClaude(formData) {
+  const token = process.env.GITHUB_DISPATCH_TOKEN;
+  if (!token) finish("GITHUB_DISPATCH_TOKEN isn't set on this deployment");
+
+  const id = formData.get("id");
+  const { data, error } = await db.from("feedback").select("*").eq("id", id).single();
+  if (error) finish(`couldn't read that feedback back: ${error.message}`);
+
+  const res = await fetch(`https://api.github.com/repos/${REPO}/dispatches`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({
+      event_type: "feedback",
+      client_payload: {
+        id: data.id,
+        page: data.page,
+        rep: data.rep || "someone",
+        body: data.body,
+      },
+    }),
+  });
+
+  // 204 is the whole success response — GitHub accepts the dispatch and says
+  // nothing else, so there is no run id to hand back and link to here.
+  if (!res.ok) finish(`GitHub wouldn't take it (${res.status}): ${await res.text()}`);
+  redirect("/feedback?asked=1", "replace");
+}
