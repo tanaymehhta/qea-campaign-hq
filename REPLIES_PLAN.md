@@ -1,6 +1,7 @@
 # One definition of a reply, on every page
 
-Status: agreed 21 Aug 2026. Phases are ticked as they land.
+Status: **built, 21 Aug 2026.** All eight phases are on `main`. Every surface
+below reads one number; `node scripts/responses-parity.mjs` is what says so.
 
 ## The fault
 
@@ -79,38 +80,38 @@ is worth a gate rather than a comment — see Phase 8.
 
 Each one ships alone and each one moves numbers on exactly the pages it names.
 
-**1 · /replies learns to be scoped.** It accepts `?rep` today and nothing else.
+**1 · /replies learns to be scoped. Done.** It accepts `?rep` today and nothing else.
 Add `?group=<slug>` (resolve with the existing `campaignIdsForGroup`) and
 `?campaign=<uuid>` into `scope.campaignIds`. No number moves; this is what makes
 every tile below clickable to its own pile.
 
-**2 · Overview bottom table.** Replies column and the Total cell switch to a
+**2 · Overview bottom table. Done.** Replies column and the Total cell switch to a
 per-group `responseCounts`, same window and rep as the tile above. Column header
 becomes Responses. The href changes from `/list?metric=replied` to
 `/replies?view=responded&group=…`. After this the page agrees with itself:
 33 above, 33 below.
 
-**3 · /meetings tile.** One `responseCounts` call over the rep's campaign ids.
+**3 · /meetings tile. Done.** One `responseCounts` call over the rep's campaign ids.
 The note "a floor, not a total" comes off — it was true of the vendor number and
 is not true of this one.
 
-**4 · /campaigns.** Group card stat, the sub-campaign summary row, and the
+**4 · /campaigns. Done.** Group card stat, the sub-campaign summary row, and the
 `sort=reply` comparator. The counts must be fetched before the sort.
 
-**5 · /campaigns/[slug].** Group tile, the per-sub-campaign Replies column, and
+**5 · /campaigns/[slug]. Done.** Group tile, the per-sub-campaign Replies column, and
 the Total row. One call per sub-campaign, in parallel.
 
-**6 · /c/[id].** The tile. The per-step block keeps `step_metrics.replied` and
+**6 · /c/[id]. Done.** The tile. The per-step block keeps `step_metrics.replied` and
 gains the word "vendor-counted" so the two numbers on one page are told apart.
 
-**7 · Reply %.** Currently `replied ÷ leads` — a vendor message count over
+**7 · Reply %. Done, inside 4–6.** Currently `replied ÷ leads` — a vendor message count over
 everyone on the list, including people never emailed. It becomes
 `responded ÷ reached people`, using `reachedCounts` on the identical scope. This
 is the same swap the Interested rate on the homepage already made. The healthy
 band in the note (3–8%) is calibrated against the old fraction and needs
 restating once the new one is on screen for a day.
 
-**8 · The gate.** Two rows in `v_invariants`, following the meetings PARTITION
+**8 · The gate. Done — migration 20260821120000.** Two rows in `v_invariants`, following the meetings PARTITION
 precedent, both empty today and both able to fail:
 
 - `response_column_does_not_sum` — per-group `responded` versus the unscoped
@@ -147,3 +148,25 @@ keep working. Nothing will link to it from a tile any more.
 `people.replied_count` on /person/[email] and /list stays. It is per-person
 already and answers a different question — how many campaigns this human
 replied on.
+
+## What it reads now
+
+Measured on the running app, 21 Aug 2026, all time. Six surfaces, one number.
+
+| Surface | Before | After |
+|---|---|---|
+| Overview tile | 33 | 33 |
+| Overview table, Total | 41 | **33** |
+| /meetings tile | 41 | **33** |
+| /campaigns, five cards | 41 | **33** |
+| /campaigns/[slug], five pages | 41 | **33** |
+| /replies, the pile itself | 33 | 33 |
+
+And it partitions in both directions: 16 interested + 17 not interested = 33,
+and 33 answered + 0 unread + 85 machines = the 118 people who have ever sent us
+anything.
+
+`node scripts/responses-parity.mjs` — 133 checks, partition by group and by rep
+across five windows, tile against click, parts against whole, and no page
+reading `.replied` off a summary view. The last one was verified failing before
+it was trusted.
