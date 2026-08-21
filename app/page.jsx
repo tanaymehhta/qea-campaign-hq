@@ -183,10 +183,8 @@ export default async function Overview({ searchParams }) {
   // mix of vendors is in scope, which is the whole reason for the swap.
   const interestedRate =
     pile.interested == null || !pile.responded ? null : pct(pile.interested, pile.responded);
-  // Responses over emails sent — the back of the funnel the tile sits at the
-  // front of, not over people reached (a person can be sent to more than once).
-  const responseRate =
-    pile.responded == null || !overall.sent ? null : pct(pile.responded, overall.sent);
+  // The response rate wants `reached`, which is read a few lines down, so it is
+  // built there rather than here beside the pile it comes from.
 
   // ----------------------------------------------------------------- reached
   //
@@ -209,6 +207,26 @@ export default async function Overview({ searchParams }) {
   // behind this tile now calls. Same scope object as the response pile above,
   // so both ends of the funnel are windowed, scoped and vendored identically.
   const reached = await reachedCounts(scope);
+
+  // Responses over the people we emailed — both halves counting people, which
+  // is the rule /campaigns already follows and the reason its Responses column
+  // divides by `reached_counts.people` too.
+  //
+  // It read `overall.sent` for an afternoon, because that is what the feedback
+  // asking for it said. Sends are messages: a person in a four-step sequence is
+  // four of them and can still only answer once, so that fraction fell every
+  // time a sequence got longer and rose every time one was cut, neither of
+  // which is a change in how many people wrote back. It also printed a smaller
+  // number than /campaigns showed for the same campaign, which is the page
+  // disagreeing with itself one click away.
+  //
+  // Two things still move this number and neither is fixable here. The
+  // numerator is a floor — replies outside the sequence and CC'd third parties
+  // never reached lemlist — so it climbs as lemlist leaves. And replies arrive
+  // days after the sends that earned them, so a narrow recent window reads low
+  // and the same window reads higher a month later.
+  const responseRate =
+    pile.responded == null || !reached.people ? null : pct(pile.responded, reached.people);
   // The same question per group, asked of the same function. A column that
   // summed a different definition from the tile above it is exactly how a page
   // ends up disagreeing with itself.
@@ -546,10 +564,10 @@ export default async function Overview({ searchParams }) {
           // wrote back" and "the question never reached the database" are
           // different sentences and only one of them is ever true here.
           //
-          // The rate beside it is responses over emails sent — the front of the
-          // same funnel this tile sits at the back of. Count first, same as the
-          // label promises; do not pass `raw`, or the count-up tween would
-          // replace the pair with a bare integer.
+          // The rate beside it is these people over the people reached — the
+          // tile one along, which is the front of the same funnel. Count first,
+          // same as the label promises; do not pass `raw`, or the count-up
+          // tween would replace the pair with a bare integer.
           value={
             responseRate == null
               ? num(pile.responded)
