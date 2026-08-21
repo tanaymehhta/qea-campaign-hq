@@ -428,6 +428,12 @@ export default async function Overview({ searchParams }) {
   // piles again — which is the bug this whole change exists to end.
   const pileHref = (view, extra = {}) =>
     `/replies?${new URLSearchParams({ view, ...windowParams, ...repParams, ...extra })}`;
+  // Meetings have their own page and no longer have a row on /list. It reads
+  // the same window and the same rep off the URL, so the tile and the page
+  // behind it count one pile — but it has no group filter, so a per-group cell
+  // opens every meeting in the window and says so in its title.
+  const meetingsHref = () =>
+    `/meetings?${new URLSearchParams({ ...windowParams, ...repParams })}`;
   const here = (params) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
@@ -625,7 +631,7 @@ export default async function Overview({ searchParams }) {
                   meetingPile.from_calls ? ` · ${num(meetingPile.from_calls)} off the phone` : ""
                 } · counted from the day it was booked`
           }
-          href={drill("meetings")}
+          href={meetingsHref()}
         />
       </div>
 
@@ -693,7 +699,7 @@ export default async function Overview({ searchParams }) {
                     v={respByGroup.get(g.id)?.responded ?? null}
                     href={pileHref("responded", { group: g.slug })}
                   />
-                  <DrillCell v={mt} href={drill("meetings", { group: g.slug })} />
+                  <DrillCell v={mt} href={meetingsHref()} title="Meetings has one page and no group filter — this opens every meeting in the window" />
                   <DrillCell v={pr} href={drill("proposals", { group: g.slug })} />
                 </tr>
               );

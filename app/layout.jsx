@@ -4,6 +4,7 @@ import Nav from "../components/nav";
 import Tween from "../components/tween";
 import FeedbackBox from "../components/feedback";
 import MeshFooter from "../components/mesh-footer";
+import PreviewBanner from "../components/preview-banner";
 
 export const metadata = {
   title: "QEA Campaign HQ",
@@ -41,6 +42,9 @@ export default async function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
       <body>
+        {/* Nothing on the live site: it returns null unless this build is a
+            Vercel preview of a feedback/* branch. */}
+        <PreviewBanner />
         <div className="wrap">
           <Nav
             synced={s ? (ageMin < 1 ? "just now" : `${ageMin} min ago`) : null}

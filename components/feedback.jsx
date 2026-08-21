@@ -1,5 +1,6 @@
 import { submitFeedback } from "../app/feedback/actions";
 import { Chev } from "./ui";
+import ShotDrop from "./shot-drop";
 
 /**
  * The box that sits at the foot of every page, folded shut.
@@ -26,10 +27,7 @@ export default function FeedbackBox() {
             placeholder="What did you expect to see, and what did you see instead? Or what would make this page more useful?"
           />
           <div className="fbrow">
-            <label className="fbfile">
-              <span>Screenshot (optional)</span>
-              <input type="file" name="screenshot" accept="image/png,image/jpeg,image/webp,image/gif" />
-            </label>
+            <ShotDrop />
             <button className="choice" type="submit">Send</button>
           </div>
           <p className="note" style={{ margin: 0 }}>

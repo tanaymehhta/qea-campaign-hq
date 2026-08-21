@@ -117,8 +117,12 @@ export default async function Group({ params, searchParams }) {
               : `${groupRate}% of the ${num(groupReach.people)} reached · ${num(groupResp.interested)} interested`
           }
           href={pileHref("responded")} />
+        {/* Meetings have one page, /meetings, which has no group filter — so
+            this opens every meeting rather than this group's, and the note says
+            so instead of the tile quietly changing what it meant. */}
         <Tile plus label="Meetings" value={num(g.meetings)} raw={g.meetings}
-          tone={g.meetings ? undefined : "muted"} note="The primary KPI" href={drill("meetings")} />
+          tone={g.meetings ? undefined : "muted"} note="The primary KPI — opens every meeting"
+          href="/meetings" />
         <Tile plus label="Proposals sent" value={num(g.proposals)} raw={g.proposals}
           tone={g.proposals ? undefined : "muted"} note="Logged by hand" href={drill("proposals")} />
       </div>
@@ -205,7 +209,7 @@ export default async function Group({ params, searchParams }) {
           {g.display_name} itself rather than one of its sub-campaigns, so{" "}
           {Number(g.meetings) - subMeetings === 1 ? "it counts" : "they count"} in the
           total and on the tile but sit in no row above.{" "}
-          <a className="drilled" href={drill("meetings")}>See all {num(g.meetings)} &rarr;</a>
+          <a className="drilled" href="/meetings">See every meeting &rarr;</a>
         </p>
       ) : null}
 

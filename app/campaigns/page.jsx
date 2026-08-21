@@ -215,7 +215,7 @@ export default async function Campaigns({ searchParams }) {
                         <DrillCell v={resp.responded} href={pileHref("responded")} />
                         <td className={rr !== null && rr >= 3 ? "ok" : "zero"}>{rr === null ? "—" : `${rr}%`}</td>
                         <DrillCell v={g.linkedin_accepted} href={drill("linkedin_accepted")} />
-                        <DrillCell v={g.meetings} href={drill("meetings")} />
+                        <DrillCell v={g.meetings} href="/meetings" title="Meetings has one page and no group filter — this opens every meeting" />
                         <DrillCell v={g.proposals} href={drill("proposals")} />
                       </tr>
                     </tbody>

@@ -1,8 +1,8 @@
 import {
-  db, num, prettyDate, today, initials, repList, listHref, meetingArgs, everyRow,
-  responseCounts,
+  db, num, prettyDate, today, initials, repList, meetingArgs, everyRow,
+  responseCounts, windowFrom,
 } from "../../lib/db";
-import { Tile, Reps, Pill, PersonLink, Chev } from "../../components/ui";
+import { Tile, Reps, Pill, PersonLink, Chev, RangePicker } from "../../components/ui";
 import { logMeeting, editMeeting, setMeetingStatus, removeMeeting, restoreMeeting } from "./actions";
 
 const STATUSES = ["booked", "held", "no_show", "cancelled"];
@@ -35,6 +35,26 @@ export default async function Meetings({ searchParams }) {
   // a deliberate trip rather than something you can wander into.
   const showRemoved = !!searchParams?.removed;
 
+  // Which meeting has been asked about but not yet removed. Removal is two
+  // clicks and always has been dangerous enough to deserve them: the first
+  // click only writes this id into the URL and re-renders, the second is the
+  // one that writes to the database. Nothing is destroyed by arriving at a
+  // link, which also means a stray click, a prefetch or a shared URL cannot
+  // take a meeting off the board.
+  const pendingRemoval = searchParams?.rm ?? null;
+
+  // The date window, added 21 Aug. It counts by the day a meeting was AGREED,
+  // not the day it happens — `meeting_rows` applies p_from/p_to to `scope_date`,
+  // which is `booked_on` falling back to the meeting date for the four rows
+  // logged before that column existed. A meeting agreed today for September is
+  // a win today; dating it by the meeting would empty this week and fill one a
+  // fortnight out. Same rule, same function, as the Overview tile.
+  //
+  // Default is all time, so the page opens exactly as it did before anyone
+  // touches the picker.
+  const w = windowFrom(searchParams ?? {});
+  const windowed = w.range === "all" ? {} : { from: w.from, to: w.to };
+
   // Two reads of the same function, because the bin must not empty the tiles.
   // The live pile always feeds the KPI and the rep strip; the removed pile is
   // fetched only when the bin is open and is only ever rendered as a list.
@@ -48,7 +68,7 @@ export default async function Meetings({ searchParams }) {
   const [{ groups, reps }, { data: subs }, meetings, { data: proposals }, calls, { data: callCamps }, removedRows] = await Promise.all([
     repList(),
     db.from("v_campaign_summary").select("campaign_id, group_id, name, sub_campaign_label, group_name, group_slug, status, leads, replied, source"),
-    everyRow(() => db.rpc("meeting_rows", meetingArgs({ status: "all" })).order("id")),
+    everyRow(() => db.rpc("meeting_rows", meetingArgs({ status: "all", ...windowed })).order("id")),
     db.from("proposals").select("id, campaign_id"),
     // `org_name` on the contact is the company. phone_calls has no such column
     // of its own, so the Company cell on every call row below read "—" whatever
@@ -61,6 +81,9 @@ export default async function Meetings({ searchParams }) {
         .order("id")
     ),
     db.from("call_campaigns").select("id, slug, display_name, owner"),
+    // The bin is NOT windowed. It is a deliberate trip to see what was struck
+    // off, and a date filter that hid half of it would make "nothing has been
+    // removed" mean two different things.
     everyRow(() => db.rpc("meeting_rows", meetingArgs({ status: "removed" })).order("id")),
   ]);
 
@@ -88,6 +111,54 @@ export default async function Meetings({ searchParams }) {
     .sort((a, b) => (b.deleted_at ?? "").localeCompare(a.deleted_at ?? ""));
   // What the list below renders. The tiles above never read this.
   const listed = showRemoved ? removed : myMeetings;
+
+  /**
+   * ONE ROW PER PERSON (21 Aug 2026).
+   *
+   * Jeffrey Hohenstein had two meetings and appeared twice, both rows carrying
+   * the same name, company and campaign, with nothing saying they were the same
+   * man. The list groups on identity now and the meetings stack inside.
+   *
+   * Identity is the email address, lowercased — the rule `v_lead_people` uses
+   * and the one this codebase refuses to break (migration 20260820180517: a
+   * name-only match merged two different Michael Murphys and was reverted). The
+   * name fallback exists only because a hand-logged meeting is allowed to have
+   * no address at all, and it is flagged in the row rather than trusted
+   * silently. A meeting with neither is its own group — it cannot be traced to
+   * anybody, which is what the Conflicts warning inside it already says.
+   *
+   * The KPI is unchanged: it counts meetings, not people. That is why the
+   * heading now prints both numbers — one row per person over a count of
+   * meetings is exactly the kind of pair that reads as a bug when only half of
+   * it is on screen.
+   */
+  const personKey = (m) =>
+    m.prospect_email ? `e:${m.prospect_email.trim().toLowerCase()}`
+      : m.prospect_name ? `n:${m.prospect_name.trim().toLowerCase()}`
+        : `m:${m.id}`;
+  const peopleRows = [];
+  const rowByKey = new Map();
+  for (const m of listed) {
+    const k = personKey(m);
+    let row = rowByKey.get(k);
+    if (!row) { row = { key: k, meetings: [] }; rowByKey.set(k, row); peopleRows.push(row); }
+    row.meetings.push(m);
+  }
+  // Headcount over the meetings that count, for the heading. Distinct people,
+  // same key.
+  const peopleCounted = new Set(
+    (showRemoved ? removed : myMeetings)
+      .filter((m) => m.status === "booked" || m.status === "held")
+      .map(personKey)
+  ).size;
+
+  /**
+   * The campaign, cut at its first dash. "NYC LL11 — SAFE / Reliable owners"
+   * becomes "NYC LL11"; "Chicago Retrofit" has no dash and passes through
+   * whole. The full label is still printed in the panel below, and linked.
+   */
+  const shortCampaign = (label) =>
+    label ? (label.split(/\s[\u2014\u2013-]\s/)[0].trim() || label) : null;
   const myProposals = (proposals ?? []).filter(
     (p) => !myGroupIds || myGroupIds.has(groupOfCampaign(p.campaign_id))
   );
@@ -114,14 +185,23 @@ export default async function Meetings({ searchParams }) {
     (r.id === "all" ? allMeetings : allMeetings.filter((m) => m.rep === r.id))
       .filter(counted).length;
 
-  const here = (id) => (id === "all" ? "/meetings" : `/meetings?rep=${encodeURIComponent(id)}`);
-  // The bin link, keeping whichever rep is selected.
-  const listHere = (bin) => {
+  // Every link on this page rebuilds the whole URL, so picking a rep keeps the
+  // window and picking a window keeps the rep. Built once here rather than
+  // three times: the bin link used to drop the range, which read as the filter
+  // silently resetting itself.
+  const url = ({ rep: r = known ? rep : "", bin = false, range = w.range, rm = null } = {}) => {
     const q = new URLSearchParams();
-    if (known) q.set("rep", rep);
+    if (r && r !== "all") q.set("rep", r);
+    if (range && range !== "all") q.set(searchParams?.d ? "d" : "range", searchParams?.d || range);
     if (bin) q.set("removed", "1");
-    return `/meetings${q.size ? `?${q}` : ""}`;
+    if (rm) q.set("rm", rm);
+    return `/meetings${q.size ? `?${q}` : ""}${rm ? `#m-${rm}` : ""}`;
   };
+  const here = (id) => url({ rep: id });
+  const listHere = (bin) => url({ bin });
+  // The picker appends its own `range=`, so its base carries everything except
+  // the range — otherwise clicking 7 days would drop the rep.
+  const rangeBase = url({ bin: showRemoved, range: "all" });
 
   // A phone call's campaign lives on its contact, not the call row itself —
   // and so does the company. `phone_calls.company` has never existed, so every
@@ -130,13 +210,22 @@ export default async function Meetings({ searchParams }) {
   const org = (c) => c.call_contacts?.org_name || null;
   const callCampById = new Map((callCamps ?? []).map((c) => [c.id, c]));
   const campOfCall = (c) => callCampById.get(c.call_contacts?.call_campaign_id) ?? null;
+  // `calls` holds only live rows (`deleted_at is null`), so a meeting whose
+  // source call is not in here names a call that has been deleted. That is the
+  // one case where a call-origin meeting can be removed: `delete_call` cancels
+  // the meeting and leaves it on the board rather than taking it, so the row is
+  // otherwise stranded — refused here, and told to go and change a call that is
+  // on no screen. The database draws the same line; this only stops the page
+  // offering a button it would then refuse. Migration 20260821140000.
+  const liveCallIds = new Set(calls.map((c) => c.id));
+  const ownedByALiveCall = (m) =>
+    m.origin === "call" && !!m.source_call_id && liveCallIds.has(m.source_call_id);
+
   const bookedCalls = calls.filter((c) => c.outcome === "booked_meeting");
   const shownCalls = showAllCalls ? calls : bookedCalls;
   const callToggle = (v) => {
-    const q = new URLSearchParams();
-    if (known) q.set("rep", rep);
-    if (v) q.set("calls", v);
-    return `/meetings${q.size ? `?${q}` : ""}#calls`;
+    const base = url();
+    return `${base}${base.includes("?") ? "&" : "?"}${v ? `calls=${v}&` : ""}`.replace(/[?&]$/, "") + "#calls";
   };
   // "Campaign" means the parent group, and it now arrives on the row as
   // `scope_label` — resolved from the group, else the campaign's group, else the
@@ -184,6 +273,17 @@ export default async function Meetings({ searchParams }) {
           const n = countFor(r);
           return n === 1 ? "1 meeting" : `${n} meetings`;
         }}
+      />
+
+      {/* Counted by the day a meeting was AGREED, not the day it happens —
+          the note says so, because the two dates are different and the whole
+          point of the column is that they are. The four tiles left of Meetings
+          below read `v_campaign_summary`, which is lifetime and has no window
+          to give, so they do not move with this. */}
+      <RangePicker
+        base={rangeBase}
+        current={searchParams?.d ? "day" : w.range}
+        note="counted by the day a meeting was agreed, not the day it happens"
       />
 
       <div className="grid g5" style={{ marginBottom: 34 }}>
@@ -263,6 +363,7 @@ export default async function Meetings({ searchParams }) {
         <div className="mbody"><div className="inner">
           <form action={logMeeting} className="gapform">
             <input type="hidden" name="rep" value={known ? rep : ""} />
+            <input type="hidden" name="range" value={w.range} />
             <input name="name" placeholder="Prospect name *" required
               defaultValue={pre.name} style={{ minWidth: 180 }} />
             <input name="email" type="email" placeholder="Email"
@@ -319,7 +420,9 @@ export default async function Meetings({ searchParams }) {
       <h2 style={{ marginTop: 0 }}>
         {showRemoved
           ? "Removed — meetings that were never meetings"
-          : known ? `Meetings booked by ${rep}` : `All meetings — ${num(allMeetings.filter(counted).length)} booked or held, ever`}
+          : `${known ? `${rep} — ` : ""}${num(kpiMeetings.length)} booked or held${
+              kpiMeetings.length === peopleCounted ? "" : ` with ${num(peopleCounted)} people`
+            }${w.range === "all" ? ", ever" : ` · ${w.label.toLowerCase()}`}`}
       </h2>
       {showRemoved ? (
         <p className="sub" style={{ marginTop: -6 }}>
@@ -342,7 +445,7 @@ export default async function Meetings({ searchParams }) {
           <span className="note">
             {showRemoved
               ? `${num(removed.length)} removed.`
-              : `${num(removed.length)} meeting${removed.length === 1 ? " has" : "s have"} been removed as mistakes.`}
+              : `${num(removed.length)} meeting${removed.length === 1 ? " has" : "s have"} been removed as ${removed.length === 1 ? "a mistake" : "mistakes"}.`}
           </span>
           <a className="choice" href={listHere(!showRemoved)}>
             {showRemoved ? "Back to the board" : "Show removed"}
@@ -350,22 +453,34 @@ export default async function Meetings({ searchParams }) {
         </div>
       ) : null}
 
-      {!listed.length ? (
+      {!peopleRows.length ? (
         <div className="card"><p className="empty" style={{ padding: 0 }}>
-          {showRemoved ? "Nothing has been removed." : "No meetings logged against this rep yet."}
+          {showRemoved
+            ? "Nothing has been removed."
+            : w.range === "all"
+              ? known ? `No meetings logged against ${rep} yet.` : "No meetings logged yet."
+              : `No meeting was agreed in ${w.label.toLowerCase()}${known ? ` by ${rep}` : ""}. Widen the window above.`}
         </p></div>
       ) : null}
 
-      {listed.map((m, i) => {
-        const campaign = m.scope_label;
-        const owner = m.rep;
-        const tint = reps.find((r) => r.id === owner);
-        const anonymous = !m.prospect_name;
+      {peopleRows.map((person, i) => {
+        // The newest meeting speaks for the person in the closed row: their
+        // status pill, their date, their campaign. The rest are underneath.
+        const head = person.meetings[0];
+        const tint = reps.find((r) => r.id === head.rep);
+        const nameless = !head.prospect_name;
+        const many = person.meetings.length > 1;
+        const camp = shortCampaign(head.scope_label);
         return (
           <details
-            className={anonymous ? "mrow hasgap" : "mrow"}
-            key={m.id}
-            open={i === 0}
+            className={nameless ? "mrow hasgap" : "mrow soft"}
+            key={person.key}
+            /* Closed, all of them. The first row used to open itself so the
+               page never looked empty; the cost was that the list you came to
+               read started one screen down. The only thing that opens a row now
+               is a removal you asked about — its confirm has to be on screen to
+               be answered. */
+            open={person.meetings.some((m) => m.id === pendingRemoval)}
             style={{ animationDelay: `${0.06 + i * 0.05}s` }}
           >
             <summary>
@@ -373,182 +488,262 @@ export default async function Meetings({ searchParams }) {
                 className="glyph"
                 style={{
                   background: tint?.tint ?? "var(--tint-4)",
-                  color: anonymous ? "var(--warn-ink)" : tint?.ink ?? "var(--ink-1)",
+                  color: nameless ? "var(--warn-ink)" : tint?.ink ?? "var(--ink-1)",
                 }}
               >
-                {anonymous ? "?" : initials(m.prospect_name)}
+                {nameless ? "?" : initials(head.prospect_name)}
               </span>
               <span className="meat">
                 {/* A link inside a summary navigates on its own click and lets
                     every other click through to the toggle, so the name goes to
-                    the person and the rest of the row still opens. */}
-                <span className="who" style={anonymous ? { color: "var(--ink-3)" } : undefined}>
-                  {m.prospect_email
-                    ? <PersonLink email={m.prospect_email} name={m.prospect_name} />
-                    : m.prospect_name || "No prospect recorded"}
+                    the person and the rest of the row still opens.
+
+                    Name and campaign on the top line, company under it —
+                    changed 21 Aug. The campaign is cut at its first dash: the
+                    list is read by scanning down the left edge for a name, and
+                    "PACE ENGINEERING P.C. — NYC LL11 — SAFE / Reliable owners"
+                    put three facts in the place the eye looks for one. */}
+                <span className="who" style={nameless ? { color: "var(--ink-3)" } : undefined}>
+                  {head.prospect_email
+                    ? <PersonLink email={head.prospect_email} name={head.prospect_name} />
+                    : head.prospect_name || "No prospect recorded"}
+                  {camp ? <><span className="sep">&#9474;</span>{camp}</> : null}
                 </span>
-                <span className="line">
-                  {(m.company || "No company")} — {campaign ?? "campaign unknown"}
-                </span>
+                <span className="line">{head.company || "No company"}</span>
               </span>
-              <Pill status={m.status} />
-              <span className="when">{prettyDate(m.meeting_date)}</span>
+              {/* One row per person, not per meeting (21 Aug). Jeffrey
+                  Hohenstein was on this list twice and both rows said the same
+                  three things. The KPI still counts meetings — the badge is how
+                  the row says it stands for more than one. */}
+              {many ? (
+                <span className="mcount" title="meetings with this person in this window">
+                  {num(person.meetings.length)} meetings
+                </span>
+              ) : null}
+              <Pill status={head.status} />
+              <span className="when">{prettyDate(head.meeting_date)}</span>
               <Chev />
             </summary>
 
             <div className="mbody">
               <div className="inner">
-                <div className="meta">
-                  <div><div className="k">Prospect</div><div className="v">
-                    {m.prospect_name || m.prospect_email
-                      ? <PersonLink email={m.prospect_email} name={m.prospect_name} />
-                      : <span className="dim">not recorded</span>}
-                  </div></div>
-                  <div><div className="k">Company</div><div className="v">{m.company || "—"}</div></div>
-                  <div><div className="k">Email</div><div className="v">{m.prospect_email || "—"}</div></div>
-                  {/* `group_slug` is null for a meeting that came off a phone
-                      call — its label names a call list, which lives under
-                      /calls, so linking it here would send you to a page that
-                      does not exist. */}
-                  <div><div className="k">Campaign</div><div className="v">
-                    {campaign ? (
-                      m.group_slug
-                        ? <a className="drilled" href={`/campaigns/${m.group_slug}`}>{campaign}</a>
-                        : campaign
-                    ) : "—"}
-                  </div></div>
-                  <div><div className="k">Sub-campaign</div><div className="v">
-                    {subLabelOf(m.campaign_id)
-                      ? <a className="drilled" href={`/c/${m.campaign_id}`}>{subLabelOf(m.campaign_id)}</a>
-                      : "—"}
-                  </div></div>
-                  <div><div className="k">Evidence</div><div className="v">{m.evidence}</div></div>
-                  <div><div className="k">Happens on</div><div className="v">{prettyDate(m.meeting_date)}</div></div>
-                  {/* Null on the four rows logged before the column existed.
-                      "Not recorded" rather than a date invented from created_at,
-                      which would be a guess — see migration 20260821010000. */}
-                  <div><div className="k">Agreed on</div><div className="v">
-                    {m.booked_on ? prettyDate(m.booked_on) : <span className="dim">not recorded</span>}
-                  </div></div>
-                  <div><div className="k">Owner</div><div className="v">{owner ?? "—"}</div></div>
-                  <div><div className="k">Logged by</div><div className="v">{m.logged_by || "—"}</div></div>
-                  <div><div className="k">Status</div><div className="v">{m.status.replace(/_/g, " ")}</div></div>
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <div className="k">Note</div><div className="v">{m.note || "—"}</div>
-                  </div>
-                </div>
-                {anonymous ? (
-                  <div className="warnbox plain">
-                    This meeting was logged by hand with no prospect name, so it counts towards the
-                    KPI but cannot be traced to anyone.{" "}
-                    <a className="drilled" href="/conflicts">Fill the name in on Conflicts</a>.
-                  </div>
-                ) : null}
-
-                {/* --------------------------------------------------------
-                    The rest of the lifecycle. Until 21 Aug a hand-typed
-                    meeting was write-once and the only remedy was SQL.
-
-                    A meeting that came from a call gets no edit and no remove:
-                    it belongs to the call, which already keeps it in step in
-                    both directions. Offering the controls and letting the
-                    database refuse would be a worse interface than not
-                    offering them and saying where to go.
-                   -------------------------------------------------------- */}
-                {showRemoved ? (
-                  <>
-                    <div className="warnbox plain">
-                      <b>Removed.</b> {m.removed_reason || "No reason recorded."}
+                <div className={many ? "mtl multi" : "mtl"}>
+                  {person.meetings.map((m) => {
+                    const campaign = m.scope_label;
+                    const owner = m.rep;
+                    const anonymous = !m.prospect_name;
+                    return (
+                      <div className="node" key={m.id} id={`m-${m.id}`}>
+                        {/* Which of this person's meetings this block is. Only
+                            when there is more than one — with a single meeting
+                            it would repeat the row above it word for word. */}
+                        {many ? (
+                          <div className="nodehead">
+                            <span className="when">{prettyDate(m.meeting_date)}</span>
+                            <Pill status={m.status} />
+                            {m.scope_label ? <span className="note">{m.scope_label}</span> : null}
+                          </div>
+                        ) : null}
+                    <div className="meta">
+                      <div><div className="k">Prospect</div><div className="v">
+                        {m.prospect_name || m.prospect_email
+                          ? <PersonLink email={m.prospect_email} name={m.prospect_name} />
+                          : <span className="dim">not recorded</span>}
+                      </div></div>
+                      <div><div className="k">Company</div><div className="v">{m.company || "—"}</div></div>
+                      <div><div className="k">Email</div><div className="v">{m.prospect_email || "—"}</div></div>
+                      {/* `group_slug` is null for a meeting that came off a phone
+                          call — its label names a call list, which lives under
+                          /calls, so linking it here would send you to a page that
+                          does not exist. */}
+                      <div><div className="k">Campaign</div><div className="v">
+                        {campaign ? (
+                          m.group_slug
+                            ? <a className="drilled" href={`/campaigns/${m.group_slug}`}>{campaign}</a>
+                            : campaign
+                        ) : "—"}
+                      </div></div>
+                      <div><div className="k">Sub-campaign</div><div className="v">
+                        {subLabelOf(m.campaign_id)
+                          ? <a className="drilled" href={`/c/${m.campaign_id}`}>{subLabelOf(m.campaign_id)}</a>
+                          : "—"}
+                      </div></div>
+                      <div><div className="k">Evidence</div><div className="v">{m.evidence}</div></div>
+                      <div><div className="k">Happens on</div><div className="v">{prettyDate(m.meeting_date)}</div></div>
+                      {/* Null on the four rows logged before the column existed.
+                          "Not recorded" rather than a date invented from created_at,
+                          which would be a guess — see migration 20260821010000. */}
+                      <div><div className="k">Agreed on</div><div className="v">
+                        {m.booked_on ? prettyDate(m.booked_on) : <span className="dim">not recorded</span>}
+                      </div></div>
+                      <div><div className="k">Owner</div><div className="v">{owner ?? "—"}</div></div>
+                      <div><div className="k">Logged by</div><div className="v">{m.logged_by || "—"}</div></div>
+                      <div><div className="k">Status</div><div className="v">{m.status.replace(/_/g, " ")}</div></div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <div className="k">Note</div><div className="v">{m.note || "—"}</div>
+                      </div>
                     </div>
-                    <form action={restoreMeeting} className="gapform">
-                      <input type="hidden" name="id" value={m.id} />
-                      <input type="hidden" name="rep" value={known ? rep : ""} />
-                      <input type="hidden" name="removed" value="1" />
-                      <button className="choice" type="submit">Put it back</button>
-                    </form>
-                  </>
-                ) : (
-                  <>
-                    <div className="choices">
-                      <span className="choices-label">Status</span>
-                      {STATUSES.map((s) => (
-                        <form action={setMeetingStatus} key={s}>
+                    {anonymous ? (
+                      <div className="warnbox plain">
+                        This meeting was logged by hand with no prospect name, so it counts towards the
+                        KPI but cannot be traced to anyone.{" "}
+                        <a className="drilled" href="/conflicts">Fill the name in on Conflicts</a>.
+                      </div>
+                    ) : null}
+
+                    {/* --------------------------------------------------------
+                        The rest of the lifecycle. Until 21 Aug a hand-typed
+                        meeting was write-once and the only remedy was SQL.
+
+                        A meeting that came from a call gets no edit and no remove:
+                        it belongs to the call, which already keeps it in step in
+                        both directions. Offering the controls and letting the
+                        database refuse would be a worse interface than not
+                        offering them and saying where to go.
+                       -------------------------------------------------------- */}
+                    {showRemoved ? (
+                      <>
+                        <div className="warnbox plain">
+                          <b>Removed.</b> {m.removed_reason || "No reason recorded."}
+                        </div>
+                        <form action={restoreMeeting} className="gapform">
                           <input type="hidden" name="id" value={m.id} />
                           <input type="hidden" name="rep" value={known ? rep : ""} />
-                          <button
-                            className={m.status === s ? "choice on" : "choice"}
-                            type="submit" name="status" value={s}
-                            disabled={m.status === s}
-                          >
-                            {s.replace(/_/g, " ")}
-                          </button>
+                          <input type="hidden" name="range" value={w.range} />
+                          <input type="hidden" name="removed" value="1" />
+                          <button className="choice" type="submit">Put it back</button>
                         </form>
-                      ))}
-                    </div>
-
-                    {m.origin === "call" ? (
-                      <p style={{ marginBottom: 0 }}>
-                        This meeting came from a call on {prettyDate(m.call_date)}, so its dates and
-                        note are the call&rsquo;s — change them there and the two cannot disagree.{" "}
-                        <a className="drilled" href="/meetings#calls">Find the call below &rarr;</a>
-                      </p>
+                      </>
                     ) : (
                       <>
                         <div className="choices">
-                          <span className="choices-label">Fix a detail</span>
-                          <form action={editMeeting} className="gapform">
-                            <input type="hidden" name="id" value={m.id} />
-                            <input type="hidden" name="rep" value={known ? rep : ""} />
-                            <input name="name" defaultValue={m.prospect_name ?? ""}
-                              placeholder="Prospect name *" required style={{ minWidth: 170 }} />
-                            <input name="email" type="email" defaultValue={m.prospect_email ?? ""}
-                              placeholder="Email" style={{ minWidth: 190 }} />
-                            <input name="company" defaultValue={m.company ?? ""}
-                              placeholder="Company" style={{ minWidth: 150 }} />
-                            <label className="datefield">
-                              <span>Happens on</span>
-                              <input type="date" name="date" defaultValue={m.meeting_date ?? ""} required />
-                            </label>
-                            <label className="datefield">
-                              <span>Agreed on</span>
-                              <input type="date" name="booked_on" defaultValue={m.booked_on ?? ""} />
-                            </label>
-                            <select name="group" defaultValue={m.group_id ?? ""}>
-                              <option value="">No campaign</option>
-                              {groups.map((g) => (
-                                <option key={g.id} value={g.id}>{g.display_name}</option>
-                              ))}
-                            </select>
-                            <select name="evidence" defaultValue={m.evidence}>
-                              <option value="calendar">calendar invite</option>
-                              <option value="tool">in the tool</option>
-                              <option value="crm">in the CRM</option>
-                              <option value="chat">said in chat</option>
-                            </select>
-                            <input name="note" defaultValue={m.note ?? ""} placeholder="Note"
-                              style={{ flex: 2, minWidth: 190 }} />
-                            <button className="choice" type="submit">Save</button>
-                          </form>
+                          <span className="choices-label">Status</span>
+                          {STATUSES.map((s) => (
+                            <form action={setMeetingStatus} key={s}>
+                              <input type="hidden" name="id" value={m.id} />
+                              <input type="hidden" name="rep" value={known ? rep : ""} />
+                              <input type="hidden" name="range" value={w.range} />
+                              <button
+                                className={m.status === s ? "choice on" : "choice"}
+                                type="submit" name="status" value={s}
+                                disabled={m.status === s}
+                              >
+                                {s.replace(/_/g, " ")}
+                              </button>
+                            </form>
+                          ))}
                         </div>
 
-                        {/* Cancel is for a meeting that was real. This is for
-                            one that never was, so it asks why — the row is kept
-                            as evidence, and evidence with no explanation is
-                            just an absence. */}
-                        <div className="choices">
-                          <span className="choices-label">Remove</span>
-                          <form action={removeMeeting} className="gapform">
-                            <input type="hidden" name="id" value={m.id} />
-                            <input type="hidden" name="rep" value={known ? rep : ""} />
-                            <input name="reason" required style={{ minWidth: 240 }}
-                              placeholder="Why? e.g. duplicate of the call-logged one" />
-                            <button className="choice" type="submit">Remove it</button>
-                          </form>
-                        </div>
+                        {/* --------------------------------------------------
+                            REMOVE, IN TWO CLICKS (21 Aug).
+
+                            It used to be one: a reason box and a "Remove it"
+                            button sitting armed in every open row, one stray
+                            click from taking a meeting off the KPI. The first
+                            click now only puts this meeting's id in the URL and
+                            re-renders — nothing is written by arriving at a
+                            link — and the second click is the one that writes.
+
+                            Every meeting gets the button, including the ones
+                            that came off a phone call and that the database
+                            refuses to remove here. Hiding it from those left the
+                            most obvious question on the page unanswered; asking
+                            and then explaining where to go is the answer.
+                           -------------------------------------------------- */}
+                        {pendingRemoval === m.id ? (
+                          ownedByALiveCall(m) ? (
+                            <div className="warnbox">
+                              <b>This one cannot be removed here.</b> It came from a call on{" "}
+                              {prettyDate(m.call_date)} and belongs to it — remove it from under the
+                              call and the two could disagree about whether the meeting happened.
+                              Change that call&rsquo;s outcome, or delete the call, and this goes with
+                              it.{" "}
+                              <a className="drilled" href="/meetings#calls">Find the call below &rarr;</a>
+                              <div className="choices" style={{ borderTop: "none", paddingTop: 10, marginTop: 6 }}>
+                                <a className="choice" href={url()}>Close</a>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="warnbox">
+                              <b>Remove this meeting?</b> {m.prospect_name || "This meeting"}
+                              {m.meeting_date ? ` on ${prettyDate(m.meeting_date)}` : ""} stops counting
+                              towards the KPI and disappears from every page. The row is kept in the bin
+                              with your reason and can be put back.
+                              <form action={removeMeeting} className="gapform" style={{ marginTop: 12 }}>
+                                <input type="hidden" name="id" value={m.id} />
+                                <input type="hidden" name="rep" value={known ? rep : ""} />
+                                <input type="hidden" name="range" value={w.range} />
+                                <input name="reason" required autoFocus style={{ minWidth: 240 }}
+                                  placeholder="Why? e.g. duplicate of the call-logged one" />
+                                <button className="choice danger" type="submit">Yes, remove it</button>
+                                <a className="choice" href={url()}>Cancel</a>
+                              </form>
+                            </div>
+                          )
+                        ) : (
+                          <div className="choices">
+                            <span className="choices-label">Remove</span>
+                            {/* A link, not a button: a button inside a <details>
+                                would toggle the row shut on its way. */}
+                            <a className="choice" href={url({ rm: m.id })}>Remove this meeting&hellip;</a>
+                            <span className="note">asks once more before anything is written</span>
+                          </div>
+                        )}
+
+                        {m.origin === "call" ? (
+                          <p style={{ marginBottom: 0 }}>
+                            This meeting came from a call on {prettyDate(m.call_date)}, so its dates and
+                            note are the call&rsquo;s — change them there and the two cannot disagree.{" "}
+                            <a className="drilled" href="/meetings#calls">Find the call below &rarr;</a>
+                          </p>
+                        ) : (
+                          <>
+                            <div className="choices">
+                              <span className="choices-label">Fix a detail</span>
+                              <form action={editMeeting} className="gapform">
+                                <input type="hidden" name="id" value={m.id} />
+                                <input type="hidden" name="rep" value={known ? rep : ""} />
+                                <input type="hidden" name="range" value={w.range} />
+                                <input name="name" defaultValue={m.prospect_name ?? ""}
+                                  placeholder="Prospect name *" required style={{ minWidth: 170 }} />
+                                <input name="email" type="email" defaultValue={m.prospect_email ?? ""}
+                                  placeholder="Email" style={{ minWidth: 190 }} />
+                                <input name="company" defaultValue={m.company ?? ""}
+                                  placeholder="Company" style={{ minWidth: 150 }} />
+                                <label className="datefield">
+                                  <span>Happens on</span>
+                                  <input type="date" name="date" defaultValue={m.meeting_date ?? ""} required />
+                                </label>
+                                <label className="datefield">
+                                  <span>Agreed on</span>
+                                  <input type="date" name="booked_on" defaultValue={m.booked_on ?? ""} />
+                                </label>
+                                <select name="group" defaultValue={m.group_id ?? ""}>
+                                  <option value="">No campaign</option>
+                                  {groups.map((g) => (
+                                    <option key={g.id} value={g.id}>{g.display_name}</option>
+                                  ))}
+                                </select>
+                                <select name="evidence" defaultValue={m.evidence}>
+                                  <option value="calendar">calendar invite</option>
+                                  <option value="tool">in the tool</option>
+                                  <option value="crm">in the CRM</option>
+                                  <option value="chat">said in chat</option>
+                                </select>
+                                <input name="note" defaultValue={m.note ?? ""} placeholder="Note"
+                                  style={{ flex: 2, minWidth: 190 }} />
+                                <button className="choice" type="submit">Save</button>
+                              </form>
+                            </div>
+
+                          </>
+                        )}
                       </>
                     )}
-                  </>
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </details>
@@ -620,10 +815,6 @@ export default async function Meetings({ searchParams }) {
           {showAllCalls ? "No phone calls logged yet." : "No calls have booked a meeting yet."}
         </p></div>
       ) : null}
-
-      <div className="range" style={{ marginTop: 18 }}>
-        <a href={listHref({ metric: "meetings", range: "all" })}>Every meeting as a list &rarr;</a>
-      </div>
     </>
   );
 }

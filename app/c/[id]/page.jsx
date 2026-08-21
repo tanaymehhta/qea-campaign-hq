@@ -116,7 +116,7 @@ export default async function Campaign({ params, searchParams }) {
             {respRate == null ? "—" : `${respRate}% of the ${num(reach.people)} reached`}
           </div>
           <div className="drill">see who &rarr;</div></a>
-        <a className="tile plus" href={drill("meetings")}><div className="lbl">Meetings</div>
+        <a className="tile plus" href="/meetings" title="Meetings has one page and no campaign filter — this opens every meeting"><div className="lbl">Meetings</div>
           <div className={c.meetings ? "val" : "val muted"}>{num(c.meetings)}</div>
           <div className="drill">see who &rarr;</div></a>
         <a className="tile plus" href={drill("proposals")}><div className="lbl">Proposals sent</div>
