@@ -3,6 +3,7 @@ import {
   responseCounts, windowFrom,
 } from "../../lib/db";
 import { Tile, Reps, Pill, PersonLink, Chev, RangePicker } from "../../components/ui";
+import ProspectPicker from "../../components/prospect-picker";
 import { logMeeting, editMeeting, setMeetingStatus, removeMeeting, restoreMeeting } from "./actions";
 
 const STATUSES = ["booked", "held", "no_show", "cancelled"];
@@ -364,12 +365,15 @@ export default async function Meetings({ searchParams }) {
           <form action={logMeeting} className="gapform">
             <input type="hidden" name="rep" value={known ? rep : ""} />
             <input type="hidden" name="range" value={w.range} />
-            <input name="name" placeholder="Prospect name *" required
-              defaultValue={pre.name} style={{ minWidth: 180 }} />
-            <input name="email" type="email" placeholder="Email"
-              defaultValue={pre.email} style={{ minWidth: 200 }} />
-            <input name="company" placeholder="Company"
-              defaultValue={pre.company} style={{ minWidth: 160 }} />
+            {/* Campaign, then the person off that campaign's list, and the
+                address and company come with them. Asking for the name first
+                and the campaign last is what let the same person be typed in
+                twice under two spellings. */}
+            <ProspectPicker
+              groups={groups}
+              defaultGroup={preGroup ?? (known ? (groups.find((g) => g.owner === rep)?.id ?? "") : "")}
+              pre={pre}
+            />
             {/* Two dates, and the difference between them is the whole point.
                 "Happens on" is when you will be in the room; "agreed on" is
                 when the win landed, and it is what every date window counts by.
@@ -385,14 +389,6 @@ export default async function Meetings({ searchParams }) {
               <span>Agreed on</span>
               <input type="date" name="booked_on" defaultValue={today()} max={today()} required />
             </label>
-            {/* The campaign the click came from wins over the rep's own
-                group: it names the list this person is actually on. */}
-            <select name="group" defaultValue={preGroup ?? (known ? (groups.find((g) => g.owner === rep)?.id ?? "") : "")}>
-              <option value="">No campaign</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>{g.display_name}</option>
-              ))}
-            </select>
             <select name="evidence" defaultValue="calendar" title="How do we know it's booked?">
               <option value="calendar">calendar invite</option>
               <option value="tool">in the tool</option>
