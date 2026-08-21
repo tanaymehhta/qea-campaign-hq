@@ -28,6 +28,9 @@ export function Drawer({ open, title, subtitle, children }) {
       const q = new URLSearchParams(params);
       q.delete("open");
       q.delete("editCall");
+      // The panel's answer to the last write goes with the panel.
+      q.delete("ok");
+      q.delete("err");
       router.replace(`${pathname}${q.size ? `?${q}` : ""}`, { scroll: false });
     };
     const onKey = (e) => {
@@ -49,6 +52,8 @@ export function Drawer({ open, title, subtitle, children }) {
     const q = new URLSearchParams(params);
     q.delete("open");
     q.delete("editCall");
+    q.delete("ok");
+    q.delete("err");
     return `${pathname}${q.size ? `?${q}` : ""}`;
   })();
 

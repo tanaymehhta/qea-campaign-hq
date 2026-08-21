@@ -830,3 +830,116 @@ html[data-busy="1"] .grid{opacity:.5}
   color:var(--ink-2);background:var(--surface-1);border:1px solid var(--warn-soft);
   border-radius:10px;cursor:pointer}
 .outcome.on{border-color:var(--axis);background:var(--wash-2);font-weight:600}
+
+/* ---- the person panel ----------------------------------------------------
+   What a rep looks at while the phone is ringing. Two columns: what to say on
+   the left, where to write down what happened on the right, and the right one
+   sticks so scrolling the talking points never scrolls the form off screen.
+
+   The form asks for two things — the day and one of four tags. A date box
+   exists only for the tag that needs one, which is what `:has()` below is for:
+   "Ring back on" belongs to Follow up, "Meeting on" to Booked a meeting, and
+   neither is on screen for the other two. There is no JavaScript on this page. */
+.psplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:900px){.psplit{grid-template-columns:1fr}}
+.pcol > h2:first-child{margin-top:0}
+@media (min-width:901px){.pstick{position:sticky;top:12px}}
+
+.phead{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px}
+.phead .meta{flex:1}
+/* Fixing a phone number is a mid-call move — you rang the mainline and they
+   gave you the direct line. It lives on the value now, not in a select at the
+   bottom of the panel asking which field you meant. */
+.pedit{display:inline;margin-left:6px}
+.pedit > summary{list-style:none;cursor:pointer;font-size:11px;color:var(--ink-3);
+  border-bottom:1px dotted var(--axis)}
+.pedit > summary::-webkit-details-marker{display:none}
+.pedit > summary:hover{color:var(--ink-1)}
+.pedit .gapform{margin-top:6px}
+.pedit .gapform input{min-width:180px}
+
+.pmenu{position:relative;flex:none}
+.pmenu > summary{list-style:none}
+.pmenu > summary::-webkit-details-marker{display:none}
+.pmenu .sheet{position:absolute;right:0;top:calc(100% + 6px);width:270px;z-index:6;
+  background:var(--surface-1);border:1px solid var(--border);border-radius:12px;
+  box-shadow:var(--lift-lg);padding:10px}
+.pmenu .sheet .k{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink-3);margin:2px 2px 6px}
+.pmenu .sheet .gapform input{min-width:0;flex:1 1 120px}
+
+.plog{border:1px solid var(--border);border-radius:14px;background:var(--surface-1);padding:14px}
+.plog .bigq{font-size:16px;letter-spacing:-.01em;margin:0 0 12px;color:var(--ink-1)}
+.ptags{display:flex;flex-direction:column;gap:8px}
+.ptag{display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:11px;
+  border:1px solid var(--border);background:var(--page);cursor:pointer;font-size:14px;
+  color:var(--ink-2);transition:border-color .14s,background .14s,color .14s}
+.ptag input{position:absolute;opacity:0;width:0;height:0}
+.ptag .dot{width:8px;height:8px;border-radius:50%;background:var(--axis);flex:none}
+.ptag .sub{margin-left:auto;font-size:11.5px;color:var(--ink-3)}
+.ptag:hover{border-color:var(--axis);background:var(--wash)}
+.ptag:has(input:checked){background:var(--wash-2);color:var(--ink-1);font-weight:600;
+  box-shadow:inset 0 0 0 1px var(--ink-1);border-color:var(--ink-1)}
+.ptag.fu:has(input:checked) .dot{background:var(--warn-ink)}
+.ptag.no:has(input:checked) .dot{background:var(--crit)}
+.ptag.win:has(input:checked) .dot{background:var(--good)}
+.ptag.win:has(input:checked){border-color:var(--good-fill);box-shadow:inset 0 0 0 1px var(--good-fill)}
+.ptag:has(input:focus-visible){outline:2px solid var(--axis);outline-offset:2px}
+
+.plog .gapform{margin-top:12px;align-items:center}
+.plog .gapform input[name=note]{flex:1 1 100%}
+.plog label.datef{display:none}
+.plog:has(.fu input:checked) label.datef.fu,
+.plog:has(.win input:checked) label.datef.win{display:flex}
+.plog .when{font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:7px}
+.plog .when input{font-size:13px}
+
+/* The panel's own answer. It used to be printed at the top of the page —
+   behind the scrim, under the open drawer, where nobody logging a call could
+   see it, so a refused write and a saved one looked identical. */
+.pres{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:10px 13px;
+  border-radius:11px;font-size:13.5px;background:var(--good-soft);
+  border:1px solid color-mix(in srgb,var(--good) 40%,transparent);
+  animation:slideDown .22s cubic-bezier(.22,.8,.3,1) both}
+.pres .tick{width:18px;height:18px;border-radius:50%;flex:none;font-size:11px;color:#fff;
+  background:var(--good-fill);display:inline-flex;align-items:center;justify-content:center}
+.pres.bad{background:color-mix(in srgb,var(--crit) 10%,var(--page));
+  border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
+.pres.bad .tick{background:var(--crit)}
+.pres a{margin-left:auto;font-size:12.5px;color:var(--ink-3);text-decoration:underline;flex:none}
+
+/* Not a script. Six things you can say, in the order they land. */
+.ppoints{margin:0;padding:0;list-style:none}
+.ppoints li{position:relative;padding-left:20px;margin-bottom:10px;font-size:13.5px;
+  color:var(--ink-2);line-height:1.5}
+.ppoints li::before{content:"";position:absolute;left:6px;top:9px;width:5px;height:5px;
+  border-radius:50%;background:var(--axis)}
+.ppoints li b{color:var(--ink-1);font-weight:600}
+.ppoints li.stop{color:var(--ink-1)}
+.ppoints li.stop::before{background:var(--ink-1)}
+.pbook{font-size:12.5px;color:var(--ink-3);padding:10px 12px;border-radius:10px;
+  background:var(--wash);margin-bottom:12px;line-height:1.5}
+.pbook b{color:var(--ink-1);font-weight:600}
+.pfold > summary{list-style:none;cursor:pointer;font-size:12.5px;color:var(--ink-3);
+  padding:9px 0;border-top:1px solid var(--grid)}
+.pfold > summary::-webkit-details-marker{display:none}
+.pfold > summary::before{content:"\25B8 ";color:var(--axis)}
+.pfold[open] > summary::before{content:"\25BE "}
+.pfold > summary:hover{color:var(--ink-1)}
+
+/* The call history lives in half a drawer now, so it is laid out rather than
+   left to the widest note in it. What a call set up next — the meeting it
+   booked, the day to ring back — sits under its own date instead of holding a
+   fifth column open. */
+.pstick table{table-layout:fixed}
+.pstick th:first-child,.pstick td:first-child{width:96px}
+.pstick th:nth-child(2),.pstick td:nth-child(2){width:114px}
+.pstick th:last-child,.pstick td:last-child{width:124px}
+.pstick td{white-space:normal;vertical-align:top}
+/* Only the comment may break mid-word. Left on the row it also broke "Delete"
+   across two lines, because overflow-wrap:anywhere outranks the nowrap on the
+   buttons. */
+.pstick td:nth-child(3){overflow-wrap:anywhere}
+.pstick .rowactions{justify-content:flex-end}
+.pstick td .next{display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.pstick td a.next{text-decoration:underline}

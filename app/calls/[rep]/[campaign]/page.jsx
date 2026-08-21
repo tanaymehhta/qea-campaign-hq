@@ -83,6 +83,11 @@ const OUTCOMES = [
   ["booked_meeting", "Booked a meeting"],
 ];
 
+/** Which dot the chosen tag lights. Order and keys follow OUTCOMES. */
+const TAG_CLASS = {
+  not_reached: "miss", follow_up: "fu", not_interested: "no", booked_meeting: "win",
+};
+
 /**
  * The five columns are the five values statusOf() can return, in the order a
  * shift works them: everyone unrung, then the ones you tried, then the two
@@ -113,306 +118,377 @@ const FILTERS = {
 };
 
 /**
- * The call crib, personalized from the contact's own book — the Day 1 call
- * sheet's script (opener → stop talking → the reseller ask → close on their
- * top building), templated so every one of the 1,252 people gets one without
- * anyone writing 1,252 scripts. Owners get the owner variant: they are a
+ * Not a script — the handful of things worth saying, in the order they land,
+ * drawn from this person's own book. It replaced an Opener/Close screenplay on
+ * 21 Aug 2026: nobody reads two paragraphs of quoted prose with a phone
+ * against their ear, and the one instruction in it that mattered ("then stop
+ * talking") was buried inside them. Owners get the owner points: they are a
  * buyer, not a channel.
  */
-function Crib({ ct, rep }) {
+function Points({ ct, rep }) {
   const first = ct.full_name.split(" ")[0];
   const caller = rep.split(" ")[0];
   const bldgs = ct.buildings ?? [];
   const top = bldgs[0]; // buildings are stored best-rank first
   const n = ct.buildings_count;
+  const org = ct.org_name || "their firm";
 
   const boroughs = [...bldgs.reduce((m, b) => m.set(b.borough, (m.get(b.borough) ?? 0) + 1), new Map())]
     .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(" · ");
 
   return (
     <>
-      <h2>The book — why this call</h2>
-      <p className="note" style={{ marginBottom: 10 }}>
-        {num(n)} SAFE building{n === 1 ? "" : "s"} carried · top building ranks #{ct.best_rank}
-        {top?.streak ? ` (${top.streak}-cycle SAFE streak)` : ""}{boroughs ? ` · ${boroughs}` : ""}
-      </p>
+      <div className="pbook">
+        <b>{num(n)} SAFE building{n === 1 ? "" : "s"}</b> carried · top building ranks{" "}
+        <b>#{ct.best_rank}</b>{top?.streak ? ` (${top.streak}-cycle SAFE streak)` : ""}
+        {boroughs ? ` · ${boroughs}` : ""}
+      </div>
 
-      <h2>Script</h2>
       {ct.role === "engineer" ? (
-        <>
-          <p><b>Opener —</b> &ldquo;{first}? {caller} from QEA Tech — do you have thirty seconds?
-            I was going through the public FISP filings and your name is on {num(n)} building{n === 1 ? "" : "s"} that
-            all read SAFE, on time, no violations. You clearly run a tight book, which is exactly why I called you
-            and not chased a problem building. We scan building envelopes with drones — thermal and visual, whole
-            building in a day, no scaffold. FISP only checks what&rsquo;s falling off; Local Law 97 carbon penalties
-            are the next bill your owners see. Are they asking you about LL97 yet?&rdquo;
-            <b> Then stop talking.</b></p>
-          <p><b>The real ask — reseller.</b> &ldquo;Would you run this under {ct.org_name || "your firm"}? You scope
-            it, we fly it, you file and bill it, you keep the margin — and you clear more buildings a cycle with the
-            same people.&rdquo;</p>
-          <p><b>Close —</b> &ldquo;Let&rsquo;s do one building.
-            {top ? ` ${top.address}, ${top.borough} —` : ""} we fly it, you see the output, and if it&rsquo;s not
-            useful you&rsquo;ve lost nothing. What&rsquo;s your week look like?&rdquo;</p>
-          <p className="note">No answer? Leave the voicemail every single time — one hook (drone scans, no scaffold,
-            LL97), your number twice, twenty seconds. The follow-up email is warm only because the voicemail happened.</p>
-        </>
+        <ul className="ppoints">
+          <li><b>Thirty seconds</b> — {caller} from QEA Tech, calling about the public FISP filings.</li>
+          <li><b>{num(n)} filing{n === 1 ? "" : "s"} under {first}&rsquo;s name all read SAFE</b> —
+            on time, no violations. That is why this call happened and a problem building did not.</li>
+          <li>Drone scan of the envelope: thermal and visual,{" "}
+            <b>whole building in a day, no scaffold</b>.</li>
+          <li>FISP only checks what is falling off.{" "}
+            <b>Local Law 97 carbon penalties are the next bill</b> those owners see.</li>
+          <li className="stop">&ldquo;Are they asking you about LL97 yet?&rdquo; — then stop talking.</li>
+          <li><b>The real ask, reseller:</b> {org} scopes it, we fly it, they file and bill it
+            and keep the margin — more buildings a cycle with the same people.</li>
+          <li><b>Close on one building:</b>{top ? ` ${top.address}, ${top.borough}.` : " one building."}{" "}
+            We fly it, they see the output, and if it is not useful nothing was lost.</li>
+        </ul>
       ) : (
-        <>
-          <p><b>Opener —</b> &ldquo;{first}? {caller} from QEA Tech.
-            {top ? ` Your building at ${top.address} passed FISP` : " Your building passed FISP"}
-            {top?.streak ? ` — ${top.streak} cycles SAFE in a row, no fines` : ""} — that puts you in the most
-            compliant slice of the city, and it&rsquo;s why I called. LL11 only checks falling hazards. It says
-            nothing about where the building leaks energy, and Local Law 97 carbon penalties are the next bill.
-            Our drone scan shows exactly where it leaks — one day, no scaffold. Has anyone put an LL97 number in
-            front of you yet?&rdquo; <b>Then stop talking.</b></p>
-          <p><b>Close —</b> &ldquo;We fly it, you see the output, and if it&rsquo;s not useful you&rsquo;ve lost
-            nothing. What&rsquo;s your week look like?&rdquo;</p>
-        </>
+        <ul className="ppoints">
+          <li><b>Thirty seconds</b> — {caller} from QEA Tech.</li>
+          <li><b>{top ? `${top.address} passed FISP` : "The building passed FISP"}</b>
+            {top?.streak ? ` — ${top.streak} cycles SAFE in a row, no fines` : ""} — the most
+            compliant slice of the city, and why this call happened.</li>
+          <li>LL11 only checks falling hazards. It says nothing about{" "}
+            <b>where the building leaks energy</b> — and LL97 carbon penalties are the next bill.</li>
+          <li>Our drone scan shows exactly where it leaks — <b>one day, no scaffold</b>.</li>
+          <li className="stop">&ldquo;Has anyone put an LL97 number in front of you yet?&rdquo; —
+            then stop talking.</li>
+          <li><b>Close:</b> we fly it, they see the output, and if it is not useful nothing was lost.</li>
+        </ul>
       )}
     </>
   );
 }
 
 /**
- * Everything the page can do to one person: their details, the log-a-call
- * form, the call history with edit/delete, the crib, the book, and the three
- * housekeeping forms. Lifted out of the list row on 21 Aug 2026 unchanged, so
- * the board's drawer and the list's row render the same panel from one place
- * rather than each growing their own copy of the write path.
+ * Everything the page can do to one person, in two columns: what to say on the
+ * left, where to write down what happened on the right. The right column
+ * sticks, so reading the points never scrolls the form off screen.
+ *
+ * Rebuilt 21 Aug 2026 around one question — what is the least a rep has to
+ * type. The answer is the day and one of four tags; the note is optional and
+ * everything else is conditional or gone:
+ *
+ *   · a date box exists only for the tag that needs one. "Ring back on"
+ *     belongs to Follow up, "Meeting on" to Booked a meeting, and neither was
+ *     ever relevant to the other two. CSS `:has()` does it — no JavaScript.
+ *   · the standalone Callback form is gone. It wrote call_contacts.callback_date,
+ *     the same column the form above it already writes, so the panel offered
+ *     the same fact twice in two different shapes. Clearing one — the only
+ *     thing it could do that the form cannot — moved into the overflow.
+ *   · "Fix a detail" is gone as a select-a-field row. Correcting a number is a
+ *     mid-call move, so it lives on the number.
+ *   · do-not-call moved into the overflow. It retires somebody off the list;
+ *     it does not belong on screen all day underneath the phone number.
+ *
+ * The panel also answers now. The database's refusals used to be printed at
+ * the top of the *page* — behind the scrim, under the open drawer — so a
+ * booked meeting with no meeting date (which log_call has always refused) came
+ * back looking exactly like a saved one. Both answers render here, where the
+ * rep is already looking, and only for the person they are open on.
  */
 function PersonPanel({ ct, rep, base, t, s, meetingOf, sp, rowHref, dropped }) {
   const history = s.callsOf(ct);
   const label = Object.fromEntries(OUTCOMES);
+  const first = ct.full_name.split(" ")[0];
+  // ?err= and ?ok= belong to the person the write was about. In the list view
+  // every row renders one of these panels, so an unscoped banner would tell
+  // ninety-three people that their call was logged.
+  const mine = String(sp.open) === String(ct.id);
+  const last = history[0];
+
+  const hidden = (
+    <>
+      <input type="hidden" name="contact_id" value={ct.id} />
+      <input type="hidden" name="rep" value={rep} />
+      <input type="hidden" name="path" value={base} />
+    </>
+  );
+
+  // One field, edited where it is displayed.
+  const fix = (field, value, placeholder) => (
+    <details className="pedit">
+      <summary>{value ? "edit" : "add"}</summary>
+      <form action={updateContactDetail} className="gapform">
+        {hidden}
+        <input type="hidden" name="field" value={field} />
+        <input name="value" defaultValue={value ?? ""} placeholder={placeholder} />
+        <button className="choice" type="submit">Save</button>
+      </form>
+    </details>
+  );
+
   return (
     <>
-                  {/* The two things that matter mid-call: what to dial, then
-                      where to write down what happened. Everything else is
-                      reference and sits below or folds away. */}
-                  <div className="meta" style={{ marginBottom: 16 }}>
-                    <div><div className="k">Phone</div><div className="v">
-                      {ct.phone || <span className="dim">none yet — firm mainline, ask for {ct.full_name.split(" ")[0]}</span>}
-                    </div></div>
-                    <div><div className="k">Email</div><div className="v">{ct.email || "—"}</div></div>
-                    <div><div className="k">Licence</div><div className="v">{ct.license_no || "—"}</div></div>
-                    <div><div className="k">Where</div><div className="v">{[ct.city, ct.state].filter(Boolean).join(", ") || "—"}</div></div>
-                    <div><div className="k">Number from</div><div className="v">{ct.contact_source || "—"}</div></div>
-                    {ct.dnc ? <div><div className="k">Do not call</div><div className="v">{ct.dnc_reason || "yes"}</div></div> : null}
-                  </div>
+      {mine && sp.err ? (
+        <p className="pres bad">
+          <span className="tick">!</span>
+          <span><b>Not saved.</b> {sp.err}</span>
+          <a href={rowHref(ct, null)}>dismiss</a>
+        </p>
+      ) : mine && sp.ok && last ? (
+        <p className="pres">
+          <span className="tick">&#10003;</span>
+          <span>
+            <b>Logged.</b> {prettyDate(last.call_date)} · {label[last.outcome] ?? last.outcome}
+            {meetingOf.get(last.id)
+              ? ` · meeting ${prettyDate(meetingOf.get(last.id).meeting_date)}`
+              : last.callback_date ? ` · ring back ${prettyDate(last.callback_date)}` : ""}
+          </span>
+          <a href={rowHref(ct, null)}>dismiss</a>
+        </p>
+      ) : null}
 
-                  <h2>{dropped ? `Moving to \u201c${label[dropped]}\u201d` : "Log the call"}</h2>
-                  {dropped ? (
-                    <p className="note" style={{ margin: "-4px 0 10px" }}>
-                      Nothing has moved yet. A card changes column because a call was logged,
-                      so this needs the call that did it
-                      {dropped === "booked_meeting"
-                        ? " — including the day the meeting actually happens."
-                        : "."}
-                    </p>
-                  ) : null}
-                  {/* One call, one outcome, one row. Radios, not
-                      checkboxes: ticking three of them used to post three
-                      rows and count as three calls.
+      <div className="phead">
+        <div className="meta">
+          <div><div className="k">Phone</div><div className="v">
+            {ct.phone || <span className="dim">none yet — firm mainline, ask for {first}</span>}
+            {fix("phone", ct.phone, "+1 212 555 0100")}
+          </div></div>
+          <div><div className="k">Email</div><div className="v">
+            {ct.email || <span className="dim">none yet</span>}
+            {fix("email", ct.email, "name@firm.com")}
+          </div></div>
+          <div><div className="k">Licence</div><div className="v">{ct.license_no || "—"}</div></div>
+          <div><div className="k">Where</div><div className="v">
+            {[ct.city, ct.state].filter(Boolean).join(", ") || "—"}</div></div>
+          <div><div className="k">Number from</div><div className="v">{ct.contact_source || "—"}</div></div>
+          {ct.dnc ? <div><div className="k">Do not call</div><div className="v">{ct.dnc_reason || "yes"}</div></div> : null}
+        </div>
 
-                      Three dates, and they are three different facts: the
-                      day you dialled, the day the meeting happens, and the
-                      day to ring back. Two of them used to sit here as
-                      bare unlabelled boxes and the third did not exist —
-                      so a booked meeting was silently dated to the day of
-                      the call. log_call now refuses that. */}
-                  <form action={logCall} className="gapform">
-                    <input type="hidden" name="contact_id" value={ct.id} />
-                    <input type="hidden" name="rep" value={rep} />
-                    <input type="hidden" name="path" value={base} />
-                    <label className="datefield">
-                      <span>Call date</span>
-                      <input type="date" name="call_date" defaultValue={t} required />
-                    </label>
-                    <span className="outcomes">
-                      {OUTCOMES.map(([k, l]) => (
-                        <label key={k} className={dropped === k ? "outcome on" : "outcome"}>
-                          <input type="radio" name="outcome" value={k} required
-                            defaultChecked={dropped === k} />
-                          {l}
-                        </label>
-                      ))}
-                    </span>
-                    <input name="note" placeholder="What happened? Notes go here." style={{ flex: 2, minWidth: 220 }} />
-                    <label className="datefield">
-                      <span>Meeting on</span>
-                      <input type="date" name="meeting_date"
-                        required={dropped === "booked_meeting"}
-                        title="The day the meeting actually happens. Required if you tick Booked a meeting — this is the date the Overview counts." />
-                    </label>
-                    <label className="datefield">
-                      <span>Call back</span>
-                      <input type="date" name="callback_date" title="Ring this person again on" />
-                    </label>
-                    <button className="choice" type="submit">Log call</button>
-                  </form>
-                  {history.length ? (
-                    <div className="tw" style={{ marginTop: 14 }}>
-                      <table>
-                        <thead><tr>
-                          <th>Date</th><th>Outcome</th><th>Rep</th>
-                          <th style={{ textAlign: "left" }}>Note</th>
-                          <th title="The meeting this call booked — the same row the Overview counts">Meeting</th>
-                          <th>Callback</th><th></th>
-                        </tr></thead>
-                        <tbody>
-                          {history.map((c) => (
-                            String(sp.editCall) === String(c.id) ? (
-                              <tr key={c.id}>
-                                {/* One cell holding the whole form — a <form> can't
-                                    wrap a <tr> without the browser fostering it out
-                                    of the table, so it lives inside a single <td>. */}
-                                <td colSpan={7}>
-                                  <form action={editCall} className="gapform">
-                                    <input type="hidden" name="call_id" value={c.id} />
-                                    <input type="hidden" name="contact_id" value={ct.id} />
-                                    <input type="hidden" name="rep" value={rep} />
-                                    <input type="hidden" name="path" value={base} />
-                                    <label className="datefield">
-                                      <span>Call date</span>
-                                      <input type="date" name="call_date" defaultValue={c.call_date} required />
-                                    </label>
-                                    <select name="outcome" defaultValue={c.outcome} required>
-                                      {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                                    </select>
-                                    <input name="note" defaultValue={c.note ?? ""} placeholder="Note"
-                                      style={{ flex: 2, minWidth: 200 }} />
-                                    {/* Prefilled from the meeting this call
-                                        made, so moving a meeting is editing
-                                        the call that booked it — the one
-                                        place that already keeps both rows
-                                        in step (edit_call). */}
-                                    <label className="datefield">
-                                      <span>Meeting on</span>
-                                      <input type="date" name="meeting_date"
-                                        defaultValue={meetingOf.get(c.id)?.meeting_date ?? ""}
-                                        title="The day the meeting actually happens. Required for a booked meeting." />
-                                    </label>
-                                    <label className="datefield">
-                                      <span>Call back</span>
-                                      <input type="date" name="callback_date" defaultValue={c.callback_date ?? ""}
-                                        title="Ring this person again on" />
-                                    </label>
-                                    <button className="choice" type="submit">Save</button>
-                                    <a className="choice" href={rowHref(ct, null)}>Cancel</a>
-                                  </form>
-                                </td>
-                              </tr>
-                            ) : (
-                              <tr key={c.id}>
-                                <td className="dim">{prettyDate(c.call_date)}</td>
-                                <td><Pill status={c.outcome} /></td>
-                                <td>{c.rep || "—"}</td>
-                                <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
-                                {/* Reads the meetings row itself, not a
-                                    copy of its date kept here — there is
-                                    one meeting and one place it lives. */}
-                                <td className="dim">
-                                  {meetingOf.get(c.id)
-                                    ? <a className="drilled" href="/meetings">{prettyDate(meetingOf.get(c.id).meeting_date)}</a>
-                                    : "—"}
-                                </td>
-                                <td className="dim">{c.callback_date ? prettyDate(c.callback_date) : "—"}</td>
-                                <td className="rowactions">
-                                  <a className="choice" href={rowHref(ct, c.id)}>Edit</a>
-                                  <form action={deleteCall}>
-                                    <input type="hidden" name="call_id" value={c.id} />
-                                    <input type="hidden" name="contact_id" value={ct.id} />
-                                    <input type="hidden" name="rep" value={rep} />
-                                    <input type="hidden" name="path" value={base} />
-                                    <button className="choice" type="submit">Delete</button>
-                                  </form>
-                                </td>
-                              </tr>
-                            )
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
+        {/* Rare and destructive, so: present, one click away, not underfoot. */}
+        <details className="pmenu">
+          <summary className="choice">More &#8964;</summary>
+          <div className="sheet">
+            <div className="k">LinkedIn</div>
+            <form action={updateContactDetail} className="gapform">
+              {hidden}
+              <input type="hidden" name="field" value="linkedin" />
+              <input name="value" defaultValue={ct.linkedin ?? ""} placeholder="linkedin.com/in/…" />
+              <button className="choice" type="submit">Save</button>
+            </form>
 
-                  <Crib ct={ct} rep={rep} />
+            {/* The one thing the log form cannot do: take a follow-up off the
+                books when the conversation ended some other way. */}
+            {ct.callback_date ? (
+              <>
+                <div className="k" style={{ marginTop: 12 }}>Follow-up {prettyDate(ct.callback_date)}</div>
+                <form action={setCallback} className="gapform">
+                  {hidden}
+                  <input type="hidden" name="date" value="" />
+                  <button className="choice" type="submit">Clear the follow-up</button>
+                </form>
+              </>
+            ) : null}
 
-                  {/* The full book is reference, not reading — folded so the
-                      form above never sinks below 65 rows of addresses. */}
-                  <details style={{ marginTop: 14 }}>
-                    <summary className="note" style={{ cursor: "pointer" }}>
-                      All {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"} on the SAFE list &rarr;
-                    </summary>
-                    <div className="tw" style={{ marginTop: 10 }}>
-                      <table>
-                        <thead><tr>
-                          <th style={{ textAlign: "left" }}>Address</th><th>BIN</th>
-                          <th>Borough</th><th>Rank</th><th>SAFE streak</th>
-                        </tr></thead>
-                        <tbody>
-                          {(ct.buildings ?? []).map((b) => (
-                            <tr key={b.bin}>
-                              <td className="name">{b.address}</td>
-                              <td className="dim">{b.bin}</td>
-                              <td>{b.borough}</td>
-                              <td>#{b.rank}</td>
-                              <td>{b.streak ? `${b.streak} cycles` : num(b.score)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </details>
+            {ct.dnc ? (
+              <>
+                <div className="k" style={{ marginTop: 12 }}>Retired</div>
+                <form action={restoreContact} className="gapform">
+                  {hidden}
+                  <button className="choice" type="submit">Put back on the list</button>
+                </form>
+              </>
+            ) : (
+              <>
+                <div className="k" style={{ marginTop: 12 }}>Do not call</div>
+                <form action={setContactDnc} className="gapform">
+                  {hidden}
+                  <input name="reason" placeholder="why?" required />
+                  <button className="choice danger" type="submit">Retire</button>
+                </form>
+              </>
+            )}
+          </div>
+        </details>
+      </div>
 
-                  <div className="choices">
-                    <span className="choices-label">Fix a detail</span>
-                    <form action={updateContactDetail} className="gapform">
-                      <input type="hidden" name="contact_id" value={ct.id} />
-                      <input type="hidden" name="rep" value={rep} />
-                      <input type="hidden" name="path" value={base} />
-                      <select name="field">
-                        <option value="phone">phone</option>
-                        <option value="email">email</option>
-                        <option value="linkedin">linkedin</option>
-                      </select>
-                      <input name="value" placeholder="new value" />
-                      <button className="choice" type="submit">Save</button>
-                    </form>
-                  </div>
+      <div className="psplit">
+        <div className="pcol">
+          <h2>What to say</h2>
+          <Points ct={ct} rep={rep} />
+          {/* Reference, not reading — folded so the form never sinks below 46
+              rows of addresses. */}
+          <details className="pfold" style={{ marginTop: 14 }}>
+            <summary>
+              All {num(ct.buildings_count)} building{ct.buildings_count === 1 ? "" : "s"} on the SAFE list
+            </summary>
+            <div className="tw" style={{ marginTop: 10 }}>
+              <table>
+                <thead><tr>
+                  <th style={{ textAlign: "left" }}>Address</th><th>BIN</th>
+                  <th>Borough</th><th>Rank</th><th>SAFE streak</th>
+                </tr></thead>
+                <tbody>
+                  {(ct.buildings ?? []).map((b) => (
+                    <tr key={b.bin}>
+                      <td className="name">{b.address}</td>
+                      <td className="dim">{b.bin}</td>
+                      <td>{b.borough}</td>
+                      <td>#{b.rank}</td>
+                      <td>{b.streak ? `${b.streak} cycles` : num(b.score)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </div>
 
-                  <div className="choices">
-                    <span className="choices-label">Callback</span>
-                    <form action={setCallback} className="gapform">
-                      <input type="hidden" name="contact_id" value={ct.id} />
-                      <input type="hidden" name="rep" value={rep} />
-                      <input type="hidden" name="path" value={base} />
-                      <input type="date" name="date" defaultValue={ct.callback_date ?? ""} />
-                      <button className="choice" type="submit">Set</button>
-                    </form>
-                    {/* Retiring someone used to be one-way — a misclick
-                        cost a contact until someone wrote SQL. */}
-                    {ct.dnc ? (
-                      <>
-                        <span className="choices-label">Retired</span>
-                        <form action={restoreContact} className="gapform">
-                          <input type="hidden" name="contact_id" value={ct.id} />
-                          <input type="hidden" name="rep" value={rep} />
-                          <input type="hidden" name="path" value={base} />
-                          <button className="choice" type="submit">Put back on the list</button>
-                        </form>
-                      </>
+        <div className="pcol pstick">
+          <div className="plog">
+            <p className="bigq">
+              {dropped ? `Moving to “${label[dropped]}”` : "How did it go?"}
+            </p>
+            {dropped ? (
+              <p className="note" style={{ margin: "-6px 0 12px" }}>
+                Nothing has moved yet. A card changes column because a call was logged,
+                so this needs the call that did it
+                {dropped === "booked_meeting"
+                  ? " — including the day the meeting actually happens."
+                  : "."}
+              </p>
+            ) : null}
+
+            {/* One call, one outcome, one row. Radios, not checkboxes: ticking
+                three of them used to post three rows and count as three calls. */}
+            <form action={logCall}>
+              {hidden}
+              <div className="ptags">
+                {OUTCOMES.map(([k, l]) => (
+                  <label key={k} className={`ptag ${TAG_CLASS[k]}`}>
+                    <input type="radio" name="outcome" value={k} required
+                      defaultChecked={dropped === k} />
+                    <span className="dot" />
+                    {l}
+                    {k === "follow_up" ? <span className="sub">asks for a date</span> : null}
+                    {k === "booked_meeting" ? <span className="sub">asks for a date</span> : null}
+                  </label>
+                ))}
+              </div>
+
+              {/* Shown by the tag above, and only by it. */}
+              <div className="gapform">
+                <label className="datefield datef fu">
+                  <span>Ring back on</span>
+                  <input type="date" name="callback_date" title="Ring this person again on" />
+                </label>
+                <label className="datefield datef win">
+                  <span>Meeting on</span>
+                  <input type="date" name="meeting_date"
+                    required={dropped === "booked_meeting"}
+                    title="The day the meeting actually happens — the date the Overview counts." />
+                </label>
+              </div>
+
+              <div className="gapform">
+                <input name="note" placeholder="Comments (optional)" />
+              </div>
+
+              <div className="gapform">
+                <label className="when">
+                  Called <input type="date" name="call_date" defaultValue={t} required />
+                </label>
+                <button className="choice on" type="submit" style={{ marginLeft: "auto" }}>Log call</button>
+              </div>
+            </form>
+          </div>
+
+          <h2>Earlier calls</h2>
+          {history.length ? (
+            <div className="tw">
+              <table>
+                <thead><tr>
+                  <th>Date</th><th>Outcome</th>
+                  <th style={{ textAlign: "left" }}>Comment</th><th></th>
+                </tr></thead>
+                <tbody>
+                  {history.map((c) => (
+                    String(sp.editCall) === String(c.id) ? (
+                      <tr key={c.id}>
+                        {/* One cell holding the whole form — a <form> can't wrap
+                            a <tr> without the browser fostering it out of the
+                            table, so it lives inside a single <td>. */}
+                        <td colSpan={4}>
+                          <form action={editCall} className="gapform">
+                            <input type="hidden" name="call_id" value={c.id} />
+                            {hidden}
+                            <label className="datefield">
+                              <span>Call date</span>
+                              <input type="date" name="call_date" defaultValue={c.call_date} required />
+                            </label>
+                            <select name="outcome" defaultValue={c.outcome} required>
+                              {OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                            </select>
+                            <input name="note" defaultValue={c.note ?? ""} placeholder="Comments" />
+                            {/* Prefilled from the meeting this call made, so
+                                moving a meeting is editing the call that booked
+                                it — the one place that keeps both rows in step. */}
+                            <label className="datefield">
+                              <span>Meeting on</span>
+                              <input type="date" name="meeting_date"
+                                defaultValue={meetingOf.get(c.id)?.meeting_date ?? ""} />
+                            </label>
+                            <label className="datefield">
+                              <span>Ring back on</span>
+                              <input type="date" name="callback_date" defaultValue={c.callback_date ?? ""} />
+                            </label>
+                            <button className="choice on" type="submit">Save</button>
+                            <a className="choice" href={rowHref(ct, null)}>Cancel</a>
+                          </form>
+                        </td>
+                      </tr>
                     ) : (
-                      <>
-                        <span className="choices-label">Do not call</span>
-                        <form action={setContactDnc} className="gapform">
-                          <input type="hidden" name="contact_id" value={ct.id} />
-                          <input type="hidden" name="rep" value={rep} />
-                          <input type="hidden" name="path" value={base} />
-                          <input name="reason" placeholder="why?" required />
-                          <button className="choice" type="submit">Retire</button>
-                        </form>
-                      </>
-                    )}
-                  </div>
+                      <tr key={c.id}>
+                        <td className="dim">
+                          {prettyDate(c.call_date)}
+                          {c.rep && c.rep !== rep ? <> · {c.rep}</> : null}
+                          {meetingOf.get(c.id) ? (
+                            <a className="drilled next" href="/meetings">
+                              meeting {prettyDate(meetingOf.get(c.id).meeting_date)}
+                            </a>
+                          ) : c.callback_date ? (
+                            <span className="next">ring back {prettyDate(c.callback_date)}</span>
+                          ) : null}
+                        </td>
+                        <td><Pill status={c.outcome} /></td>
+                        <td className="dim" style={{ textAlign: "left" }}>{c.note || "—"}</td>
+                        <td className="rowactions">
+                          <a className="choice" href={rowHref(ct, c.id)}>Edit</a>
+                          <form action={deleteCall}>
+                            <input type="hidden" name="call_id" value={c.id} />
+                            {hidden}
+                            <button className="choice" type="submit">Delete</button>
+                          </form>
+                        </td>
+                      </tr>
+                    )
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="note">No calls logged against this person yet.</p>
+          )}
+        </div>
+      </div>
     </>
   );
 }
@@ -615,7 +691,7 @@ export default async function CallWorkspace({ params, searchParams }) {
 
       {/* A write that the database refused. It says why in a sentence; the
           rep needs to read it, not a stack trace. */}
-      {sp.err ? (
+      {sp.err && !sp.open ? (
         <div className="card" style={{ marginBottom: 18, borderColor: "var(--warn-ink)" }}>
           <p style={{ margin: 0 }}>
             <b>That didn&rsquo;t save.</b> {sp.err}{" "}

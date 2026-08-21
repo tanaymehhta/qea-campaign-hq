@@ -11,7 +11,7 @@ import { db } from "../../lib/db";
  * trusted because it came from our own UI. RLS still blocks direct writes.
  */
 
-function done(formData, error) {
+function done(formData, error, ok) {
   // The form carries an encoded path (the rep name has a space); revalidatePath
   // matches on the real pathname, so an encoded one silently matches nothing.
   const path = formData.get("path") || "/calls";
@@ -30,6 +30,10 @@ function done(formData, error) {
   const q = new URLSearchParams();
   if (contact) q.set("open", contact);
   if (error) q.set("err", error.message);
+  // A write that worked used to say nothing at all, and a write that was
+  // refused said it at the top of the page — behind the scrim, under the open
+  // drawer. Both answers now travel back to the panel the rep is looking at.
+  else if (ok) q.set("ok", ok);
   // "replace" — a Server Action redirect pushes by default, which would give a
   // rep one history entry per logged call and a Back button they cannot use.
   redirect(`${path}?${q}${contact ? `#c-${contact}` : ""}`, "replace");
@@ -58,7 +62,7 @@ export async function logCall(formData) {
     p_callback: formData.get("callback_date") || null,
     p_meeting_date: formData.get("meeting_date") || null,
   });
-  done(formData, error);
+  done(formData, error, "logged");
 }
 
 /** Fixing a logged call. Same shape as logging one — one row, one outcome. */
