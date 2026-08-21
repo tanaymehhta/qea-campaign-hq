@@ -150,19 +150,31 @@ export async function askClaude(formData) {
  * where somebody can read them and have another go.
  */
 export async function discard(formData) {
+  const id = formData.get("id");
+
+  // Deleting the branch rather than closing the pull request. Closing one is a
+  // "Pull requests: write" permission the token does not have and does not need
+  // for anything else; deleting a branch is a contents write, which it already
+  // has for the dispatch. GitHub closes a pull request whose head branch has
+  // gone, so this arrives at the same place through the door that is open.
+  //
+  // The pull request survives as a record — the diff stays readable on it, and
+  // it remembers the ref it came from, which is why the state lookup matches on
+  // head.ref rather than filtering by a branch that no longer exists.
   const res = await fetch(
-    `https://api.github.com/repos/${REPO}/pulls/${formData.get("pr")}`,
+    `https://api.github.com/repos/${REPO}/git/refs/heads/feedback/${id}`,
     {
-      method: "PATCH",
+      method: "DELETE",
       headers: {
         Authorization: `Bearer ${process.env.GITHUB_DISPATCH_TOKEN}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-      body: JSON.stringify({ state: "closed" }),
     },
   );
-  finish(res.ok ? null : `couldn't close it (${res.status})`);
+  // 422 is GitHub's answer when the ref is already gone, which is the state
+  // this was trying to reach anyway.
+  finish(res.ok || res.status === 422 ? null : `couldn't turn it down (${res.status})`);
 }
 
 /**

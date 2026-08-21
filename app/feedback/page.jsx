@@ -121,7 +121,8 @@ export default async function Feedback({ searchParams }) {
             {/* Only after a run that produced nothing. Sending the feedback is
                 the start now, and pressing this while one is working would put
                 a second run on a branch the first is still pushing to. */}
-            {f.status === "open" && (!runs[f.id] || runs[f.id].phase === "failed") ? (
+            {f.status === "open" &&
+             (!runs[f.id] || ["failed", "closed"].includes(runs[f.id].phase)) ? (
               <form action={askClaude} className="gapform">
                 <input type="hidden" name="id" value={f.id} />
                 <button className="choice" type="submit">
@@ -179,6 +180,17 @@ function Run({ run, id }) {
           <a className="note" href={run.runUrl ?? actions} target="_blank" rel="noreferrer">
             watch it →
           </a>
+        </span>
+      </div>
+    );
+  }
+
+  if (run.phase === "unknown") {
+    return (
+      <div className="runline">
+        <b>Can&rsquo;t reach GitHub just now.</b>
+        <span className="note">
+          This card knows nothing until it can ask — reload in a moment. Nothing is lost.
         </span>
       </div>
     );
@@ -243,7 +255,7 @@ function Run({ run, id }) {
           <button className="choice yes" type="submit">Yes, put it live</button>
         </form>
         <form action={discard} className="gapform">
-          <input type="hidden" name="pr" value={run.prNumber} />
+          <input type="hidden" name="id" value={id} />
           <button className="choice no" type="submit">No</button>
         </form>
         <a className="choice" href={run.prUrl} target="_blank" rel="noreferrer">
