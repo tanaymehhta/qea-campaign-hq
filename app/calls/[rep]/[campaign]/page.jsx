@@ -71,11 +71,12 @@ const GLYPH_TINT = {
 // Log call, that is one call on the Overview — and if it is the first one,
 // one meeting too.
 //
-// The first two are both "no human answered", split on 21 Aug 2026 because the
-// difference decides the next call: a voicemail is one touch, a voicemail plus
-// an email is two, and only the second leaves something they can reply to.
-// Neither is a conversation — "Spoke to someone" excludes both — so the split
-// costs no tile its meaning.
+// The first three are all "no human answered", and they are three because the
+// difference decides the next move: a number nobody picks up and a mailbox
+// nobody replies to are different problems. 50 people on the UNSAFE pilot have
+// a phone and no email — a call is the only touch they can ever get — and 33
+// have an email and no phone. None of the three is a conversation, so "Spoke to
+// someone" excludes all three and no tile that counts a reach changes meaning.
 //
 // There were seven until 20 Aug and three of them were collapsed, which makes
 // this look like a reversal and it is only half of one. What was wrong then was
@@ -88,7 +89,8 @@ const GLYPH_TINT = {
 // button, which is where it sat when it was a checkbox.
 const OUTCOMES = [
   ["not_reached", "Didn't reach them / left a voicemail"],
-  ["emailed_and_called", "Left an email and made a phone call"],
+  ["left_email", "Left an email"],
+  ["made_call", "Made a phone call"],
   ["follow_up", "Follow up"],
   ["not_interested", "Not interested"],
   ["booked_meeting", "Booked a meeting"],
@@ -96,13 +98,13 @@ const OUTCOMES = [
 
 /** Which dot the chosen tag lights. Order and keys follow OUTCOMES. */
 const TAG_CLASS = {
-  not_reached: "miss", emailed_and_called: "mail",
+  not_reached: "miss", left_email: "mail", made_call: "rang",
   follow_up: "fu", not_interested: "no", booked_meeting: "win",
 };
 
 /**
- * The six columns are the six values statusOf() can return, in the order a
- * shift works them: everyone unrung, then the two kinds of tried-and-missed,
+ * The seven columns are the seven values statusOf() can return, in the order a
+ * shift works them: everyone unrung, then the three kinds of tried-and-missed,
  * then the two conversations that are still alive, then the one that isn't,
  * then the win.
  *
@@ -118,7 +120,8 @@ const TAG_CLASS = {
 const COLUMNS = [
   ["never_called", "To call", "Nobody left to dial in this view."],
   ["not_reached", "Didn't reach", "Nobody tried and missed."],
-  ["emailed_and_called", "Emailed + called", "Nobody has had both touches yet."],
+  ["left_email", "Emailed", "Nobody has been emailed and left there."],
+  ["made_call", "Called", "Nobody has been rung and left there."],
   ["follow_up", "Follow up", "Nothing to ring back."],
   ["not_interested", "Not interested", "Nobody has said no."],
   ["booked_meeting", "Booked meeting", "No meeting off the phone yet."],

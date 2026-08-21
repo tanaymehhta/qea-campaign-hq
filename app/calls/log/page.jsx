@@ -77,7 +77,7 @@ export default async function CallLogPage({ searchParams }) {
           tone={mine.length ? undefined : "muted"} note="one per press of Log call" />
         <Tile label="Got through" value={num(reached)} raw={reached}
           tone={reached ? undefined : "muted"}
-          note="a live conversation — the three tags that are not one of the two misses" />
+          note="a live conversation — the three tags that are not one of the three misses" />
         <Tile label="Meetings booked" value={num(booked)} raw={booked}
           tone={booked ? undefined : "muted"} note="calls tagged Booked a meeting" />
       </div>

@@ -53,19 +53,20 @@ the click and the list must be the same pile** (`NEXT_AGENT.md` §1).
 
 One press is one call. That is the whole action.
 
-### The five tags
+### The six tags
 
 | Tag | Stored as | Use it when |
 |---|---|---|
 | Didn't reach them / left a voicemail | `not_reached` | Nobody picked up. A voicemail counts here. |
-| Left an email and made a phone call | `emailed_and_called` | You rang **and** emailed, and still spoke to nobody. |
+| Left an email | `left_email` | You emailed. For 33 people on the UNSAFE pilot it is the only channel. |
+| Made a phone call | `made_call` | You rang. For 50 people it is the only channel. |
 | Follow up | `follow_up` | You spoke to a human, ring them back. |
 | Not interested | `not_interested` | You spoke to a human, they said no. |
 | Booked a meeting | `booked_meeting` | They agreed. The meeting date is required. |
 
-**Three of the five mean you got through.** The first two are the two ways of not getting
-through, and "Spoke to someone" excludes both — which is the only reason they could be
-split without any tile changing meaning.
+**Three of the six mean you got through.** The first three are the three ways of not
+getting through, and "Spoke to someone" excludes all of them — which is the only reason
+they can be split apart without any tile changing meaning.
 
 The valid list is `call_outcomes()` in the database (migration `20260821200000`). The check
 constraint on `phone_calls` and the guards inside `log_call` and `edit_call` all read that
@@ -75,9 +76,14 @@ column — an outcome with no column does not fall into a neighbour, the person 
 the board — and `NOT_REACHED` in `lib/calls.js` is the single definition of "got through".
 
 Added 21 Aug 2026, and it half-reverses the 20 Aug collapse. What was wrong then was three
-tags for one fact — "No answer", "Left voicemail", "Left email" — with a tile counting the
-wrong one. What is back now is one tag for a genuinely different action: two touches
-instead of none, and no tile counts it apart.
+tags for one fact — "No answer", "Left voicemail", "Left email" — with a tile called "No
+answer" counting the wrong one. What is back now is two tags for two genuinely different
+actions, and no tile counts either apart.
+
+They arrived as one combined tag that morning ("Left an email and made a phone call") and
+were split the same afternoon: a rep does one at a time, and a number nobody answers and a
+mailbox nobody replies to want different next moves. The one row on the combined tag —
+Richard Koenigsberg — became `made_call`.
 
 Whether a voicemail was left is now part of the first tag rather than a sentence in the
 note. What is still a sentence in the note is anything finer than these five — who the

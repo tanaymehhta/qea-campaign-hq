@@ -294,11 +294,13 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .p-referral,.p-open{color:var(--warn-ink);border-color:var(--warn-soft)}
 .p-unclassified,.p-auto_reply{color:var(--ink-3);border-style:dashed}
 .p-draft,.p-prospect,.p-planned,.p-scoping,.p-list_only,.p-not_now,.p-never_called,.p-not_reached,.p-dnc{color:var(--ink-3);border-style:dashed}
-/* Two touches and still no human: dashed like the other miss, but inked blue
-   so a board scan can tell it from a plain no-answer. Added 21 Aug 2026 with
-   the outcome itself. */
-.p-emailed_and_called{color:var(--s1);border-style:dashed;
+/* A touch that landed somewhere but reached nobody. Dashed like the other
+   misses, inked so a board scan can tell the three apart: blue for the email,
+   violet for the dial. */
+.p-left_email{color:var(--s1);border-style:dashed;
   border-color:color-mix(in srgb,var(--s1) 38%,transparent)}
+.p-made_call{color:var(--violet);border-style:dashed;
+  border-color:color-mix(in srgb,var(--violet) 38%,transparent)}
 
 /* ---- campaign group cards ---- */
 .gcard{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
@@ -886,6 +888,7 @@ html[data-busy="1"] .grid{opacity:.5}
 .ptag:has(input:checked){background:var(--wash-2);color:var(--ink-1);font-weight:600;
   box-shadow:inset 0 0 0 1px var(--ink-1);border-color:var(--ink-1)}
 .ptag.mail:has(input:checked) .dot{background:var(--s1)}
+.ptag.rang:has(input:checked) .dot{background:var(--violet)}
 .ptag.fu:has(input:checked) .dot{background:var(--warn-ink)}
 .ptag.no:has(input:checked) .dot{background:var(--crit)}
 .ptag.win:has(input:checked) .dot{background:var(--good)}
