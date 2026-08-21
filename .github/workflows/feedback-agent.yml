@@ -6,9 +6,23 @@
 # "someone typed something" and "an agent has write access to this repo".
 name: Feedback agent
 
+# The feedback id, in the run's title. It is the only way the dashboard can look
+# at the list of runs and say which one belongs to which card, and it is what
+# turns "something is running" into "yours is running".
+run-name: Feedback ${{ github.event.client_payload.id }}
+
 on:
   repository_dispatch:
     types: [feedback]
+
+# One at a time, queued rather than dropped. Two runs would not collide -- each
+# works on its own branch -- but they would both be editing the same files from
+# the same starting point, and the second would open a pull request that quietly
+# undoes the first. cancel-in-progress stays false: a queued request waits, it
+# does not shove the one already working off the machine.
+concurrency:
+  group: feedback-agent
+  cancel-in-progress: false
 
 permissions:
   contents: write

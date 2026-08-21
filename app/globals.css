@@ -562,6 +562,30 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
   animation:breathe 1.4s ease-in-out infinite}
 @keyframes breathe{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.pulse{animation:none;opacity:.7}}
+/* Tabular figures so a clock counting up does not shuffle the row sideways
+   every time it passes a nine. */
+.tick{font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-3)}
+/* The one action on the card that is a destination rather than a control. */
+.choice.go{border-color:var(--axis);color:var(--ink-1);font-weight:600}
+
+/* ---- the bar across the top of a preview ---- */
+/* Only ever rendered inside a Vercel preview of a feedback/* branch. It is the
+   loudest thing in this stylesheet on purpose: someone arriving here from a
+   link must not mistake a proposal for the live dashboard. */
+.pvbar{position:sticky;top:0;z-index:60;background:var(--axis);color:#fff;
+  box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.pvwrap{max-width:1180px;margin:0 auto;padding:10px 22px;display:flex;gap:14px;
+  align-items:center;flex-wrap:wrap}
+.pvtag{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.18);flex:none}
+.pvsaid{margin:0;font-size:13px;line-height:1.45;flex:1 1 260px;min-width:0}
+.pvsaid .note{color:rgba(255,255,255,.72)}
+.pvbar .note{color:rgba(255,255,255,.72)}
+.pvbar a.note:hover{color:#fff}
+.pvbar .choice{border-color:rgba(255,255,255,.45);color:#fff}
+.pvbar .choice:hover{background:rgba(255,255,255,.14);border-color:#fff}
+.pvbar .choice.pvgo{background:#fff;color:var(--axis);border-color:#fff;font-weight:600}
+.pvbar .choice.pvgo:hover{background:rgba(255,255,255,.88)}
 /* A screenshot on the review page: capped so a tall grab cannot own the row,
    and clickable through to the full image. */
 .shot{display:block;margin-top:12px;max-width:100%;max-height:340px;border-radius:10px;

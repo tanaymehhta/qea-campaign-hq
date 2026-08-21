@@ -70,13 +70,19 @@ export async function submitFeedback(formData) {
     if (error) finish(`the screenshot didn't upload: ${error.message}`);
   }
 
-  const { error } = await db.rpc("submit_feedback", {
+  const { data: id, error } = await db.rpc("submit_feedback", {
     p_page: page,
     p_rep: rep ?? "",
     p_body: body,
     p_screenshot: path ?? "",
   });
-  finish(error?.message, true);
+  if (error) finish(error.message);
+
+  // Saying it is asking for it. There is no second button any more: the work
+  // starts here, and if GitHub will not take the request the row still stands
+  // as a piece of feedback somebody can read.
+  const failed = await dispatch(id, { page, rep: rep || "someone", body });
+  finish(failed, true);
 }
 
 export async function setFeedbackStatus(formData) {
@@ -87,23 +93,19 @@ export async function setFeedbackStatus(formData) {
   finish(error?.message);
 }
 
-
 /**
- * Hand one piece of feedback to Claude, which runs in GitHub Actions and opens
- * a pull request. Deliberately a button someone presses and not a trigger on
- * insert: the box accepts anonymous writes, so this click is the only thing
- * standing between arbitrary typed text and an agent with commit rights.
+ * Ring GitHub's doorbell for one piece of feedback, and remember that we did.
  *
- * The branch is named after the feedback id on the far side, so pressing this
- * twice updates one pull request instead of opening a second one.
+ * Returns an error string rather than redirecting, because the two callers want
+ * to land somewhere different afterwards. Returns undefined when it worked.
+ *
+ * asked_at is written only after GitHub has accepted, so a refused dispatch
+ * leaves the card looking un-started rather than permanently working on a run
+ * that never began.
  */
-export async function askClaude(formData) {
+async function dispatch(id, { page, rep, body }) {
   const token = process.env.GITHUB_DISPATCH_TOKEN;
-  if (!token) finish("GITHUB_DISPATCH_TOKEN isn't set on this deployment");
-
-  const id = formData.get("id");
-  const { data, error } = await db.from("feedback").select("*").eq("id", id).single();
-  if (error) finish(`couldn't read that feedback back: ${error.message}`);
+  if (!token) return "saved, but GITHUB_DISPATCH_TOKEN isn't set, so nothing started";
 
   const res = await fetch(`https://api.github.com/repos/${REPO}/dispatches`, {
     method: "POST",
@@ -114,24 +116,71 @@ export async function askClaude(formData) {
     },
     body: JSON.stringify({
       event_type: "feedback",
-      client_payload: {
-        id: data.id,
-        page: data.page,
-        rep: data.rep || "someone",
-        body: data.body,
-      },
+      client_payload: { id, page, rep, body },
     }),
   });
-
   // 204 is the whole success response — GitHub accepts the dispatch and says
   // nothing else, so there is no run id to hand back and link to here.
-  if (!res.ok) finish(`GitHub wouldn't take it (${res.status}): ${await res.text()}`);
+  if (!res.ok) return `saved, but it didn't start (${res.status}): ${await res.text()}`;
 
-  // Written only once GitHub has taken it, so a rejected dispatch leaves the
-  // card looking unasked rather than permanently "working" on a run that never
-  // started. This is the only thing that distinguishes the two states.
-  const { error: markErr } = await db.rpc("mark_feedback_asked", { p_id: id });
-  if (markErr) finish(`it started, but we couldn't record that: ${markErr.message}`);
-
-  finish(null, false, "asked");
+  const { error } = await db.rpc("mark_feedback_asked", { p_id: id });
+  if (error) return `it started, but we couldn't record that: ${error.message}`;
 }
+
+/** The second attempt, from the card, after a run that produced nothing. */
+export async function askClaude(formData) {
+  const id = formData.get("id");
+  const { data, error } = await db.from("feedback").select("*").eq("id", id).single();
+  if (error) finish(`couldn't read that feedback back: ${error.message}`);
+
+  const failed = await dispatch(id, {
+    page: data.page,
+    rep: data.rep || "someone",
+    body: data.body,
+  });
+  finish(failed, false, true);
+}
+
+/**
+ * Put a proposed change on the live dashboard.
+ *
+ * Merging is the whole act: Vercel is watching main, so the deploy follows on
+ * its own. The feedback is marked done in the same breath — it was asked for,
+ * it was built, it shipped, and leaving it open would mean the count at the top
+ * of the page kept nagging about something already live.
+ *
+ * Called from two places that look nothing alike: the card on /feedback, and
+ * the banner across the top of the preview itself.
+ */
+export async function ship(formData) {
+  const token = process.env.GITHUB_DISPATCH_TOKEN;
+  const number = formData.get("pr");
+  const id = formData.get("id");
+
+  const res = await fetch(`https://api.github.com/repos/${REPO}/pulls/${number}/merge`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ merge_method: "squash" }),
+  });
+
+  if (!res.ok) {
+    const why = res.status === 403
+      ? "the token needs Pull requests: read and write for this"
+      : `${res.status}: ${(await res.text()).slice(0, 200)}`;
+    finish(`that didn't ship — ${why}`);
+  }
+
+  if (id) await db.rpc("set_feedback_status", { p_id: id, p_status: "done" });
+
+  // Always the list, never back to where the press came from: a preview page
+  // stops existing the moment its branch merges, so there is nothing to return
+  // to. Watching the card turn to "Shipped" is the confirmation.
+  revalidatePath("/feedback");
+  redirect("/feedback?shipped=1", "replace");
+}
+
+
