@@ -1,4 +1,7 @@
-import { db, num, pct, prettyDate, prettyWhen, listHref, pageSize } from "../../../lib/db";
+import {
+  db, num, pct, prettyDate, prettyWhen, listHref, pageSize,
+  responseCounts, reachedCounts,
+} from "../../../lib/db";
 import { Pill, PeopleTable, PersonLink, ShareDonut, tally } from "../../../components/ui";
 
 export const dynamic = "force-dynamic";
@@ -44,12 +47,21 @@ export default async function Campaign({ params, searchParams }) {
   };
   const drill = (metric) => listHref({ metric, range: "all", campaign: params.id });
 
-  const [{ data: steps }, { data: stepStats }, { data: replies }] = await Promise.all([
+  // The tile pair, from the two functions every other page now asks. This read
+  // `v_campaign_summary.replied ÷ leads` — the vendor's message counter over
+  // the size of the list — and the table at the foot of this page has always
+  // listed the messages behind it, robots and all. Two numbers on one page,
+  // one of them not what the tile was counting.
+  const lifetime = { from: null, to: null, source: null, campaignIds: [params.id] };
+  const [{ data: steps }, { data: stepStats }, { data: replies }, resp, reach] = await Promise.all([
     db.from("template_versions").select("*").eq("campaign_id", params.id)
       .order("step_index").order("last_seen", { ascending: false }),
     db.from("step_metrics").select("*").eq("campaign_id", params.id).order("step_index"),
     db.from("replies").select("*").eq("campaign_id", params.id).order("received_at", { ascending: false }).limit(20),
+    responseCounts(lifetime),
+    reachedCounts({ ...lifetime, rep: null }),
   ]);
+  const respRate = pct(resp.responded, reach.people);
 
   // latest version per step, plus how many versions have existed
   const latest = new Map();
@@ -97,9 +109,12 @@ export default async function Campaign({ params, searchParams }) {
           <div className="val">{num(c.sent)}</div>
           <div className="note">{num(c.bounced)} bounced{c.sent ? ` · ${pct(c.bounced, c.sent)}%` : ""}</div>
           <div className="drill">see who &rarr;</div></a>
-        <a className="tile plus" href={drill("replied")}><div className="lbl">Replies</div>
-          <div className={c.replied ? "val" : "val muted"}>{num(c.replied)}</div>
-          <div className="note">{c.leads ? `${pct(c.replied, c.leads)}% of leads` : "—"}</div>
+        <a className="tile plus" href={`/replies?view=responded&range=all&campaign=${params.id}`}>
+          <div className="lbl">Responses</div>
+          <div className={resp.responded ? "val" : "val muted"}>{num(resp.responded)}</div>
+          <div className="note">
+            {respRate == null ? "—" : `${respRate}% of the ${num(reach.people)} reached`}
+          </div>
           <div className="drill">see who &rarr;</div></a>
         <a className="tile plus" href={drill("meetings")}><div className="lbl">Meetings</div>
           <div className={c.meetings ? "val" : "val muted"}>{num(c.meetings)}</div>
@@ -133,7 +148,10 @@ export default async function Campaign({ params, searchParams }) {
               </div>
               <div className="stats">
                 {st
-                  ? <>{num(st.sent)} sent · {num(st.opened)} opened · {num(st.replied)} replied
+                  ? <>{num(st.sent)} sent · {num(st.opened)} opened ·{" "}
+                      <span title="The vendor's own count, and the only reply number that exists per step — our labels are attached to a message, not to the email that provoked it. It counts anything the vendor's auto-reply filter let through, so it will not match the Responses tile above.">
+                        {num(st.replied)} replied (vendor)
+                      </span>
                       {st.replies_automatic ? ` · ${num(st.replies_automatic)} auto` : ""}</>
                   : <span className="dim">no step data</span>}
               </div>
@@ -147,7 +165,14 @@ export default async function Campaign({ params, searchParams }) {
 
       {replies?.length ? (
         <>
-          <h2>Replies</h2>
+          <h2>Every inbound message</h2>
+          <p className="sub">
+            One row per message, machines included — this is the raw inbox, not the
+            Responses tile above, which counts people who wrote an answer.{" "}
+            <a className="drilled" href={`/replies?view=all&range=all&campaign=${params.id}`}>
+              open it by person
+            </a>
+          </p>
           <div className="card tw">
             <table>
               <thead><tr><th>Who</th><th>Company</th><th>Channel</th><th>Tag</th><th>When</th></tr></thead>
