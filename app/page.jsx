@@ -183,6 +183,10 @@ export default async function Overview({ searchParams }) {
   // mix of vendors is in scope, which is the whole reason for the swap.
   const interestedRate =
     pile.interested == null || !pile.responded ? null : pct(pile.interested, pile.responded);
+  // Responses over emails sent — the back of the funnel the tile sits at the
+  // front of, not over people reached (a person can be sent to more than once).
+  const responseRate =
+    pile.responded == null || !overall.sent ? null : pct(pile.responded, overall.sent);
 
   // ----------------------------------------------------------------- reached
   //
@@ -541,8 +545,16 @@ export default async function Overview({ searchParams }) {
           // comes back all-null on error rather than all-zero, because "nobody
           // wrote back" and "the question never reached the database" are
           // different sentences and only one of them is ever true here.
-          value={num(pile.responded)}
-          raw={pile.responded ?? undefined}
+          //
+          // The rate beside it is responses over emails sent — the front of the
+          // same funnel this tile sits at the back of. Count first, same as the
+          // label promises; do not pass `raw`, or the count-up tween would
+          // replace the pair with a bare integer.
+          value={
+            responseRate == null
+              ? num(pile.responded)
+              : <>{num(pile.responded)}<span className="pair"> / {responseRate}%</span></>
+          }
           tone={pile.responded ? undefined : "muted"}
           // The split, on the face of the tile. You should not have to click to
           // learn whether 31 responses were good news.
