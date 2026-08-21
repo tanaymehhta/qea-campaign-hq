@@ -142,6 +142,30 @@ export async function askClaude(formData) {
 }
 
 /**
+ * Say no to a proposed change.
+ *
+ * Closes the pull request and leaves the feedback open, because turning down
+ * one attempt is not the same as deciding the thing was never worth asking
+ * for — the card keeps its "try again", and the words that were typed stay
+ * where somebody can read them and have another go.
+ */
+export async function discard(formData) {
+  const res = await fetch(
+    `https://api.github.com/repos/${REPO}/pulls/${formData.get("pr")}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${process.env.GITHUB_DISPATCH_TOKEN}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({ state: "closed" }),
+    },
+  );
+  finish(res.ok ? null : `couldn't close it (${res.status})`);
+}
+
+/**
  * Put a proposed change on the live dashboard.
  *
  * Merging is the whole act: Vercel is watching main, so the deploy follows on

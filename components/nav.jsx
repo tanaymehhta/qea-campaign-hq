@@ -25,7 +25,7 @@ const LINKS = [
  * localStorage. Until someone picks one, `data-theme` is absent and the OS
  * preference wins — see the media query in globals.css.
  */
-export default function Nav({ synced, stale, conflicts }) {
+export default function Nav({ synced, stale, conflicts, review }) {
   const path = usePathname();
   const [theme, setTheme] = useState(null);
 
@@ -54,6 +54,15 @@ export default function Nav({ synced, stale, conflicts }) {
         </a>
       ))}
       <span className="spacer" />
+      {/* Changes finished and waiting on a yes or a no. It sits in the nav on
+          every page because the moment you find out something is ready should
+          not depend on remembering to go and look. */}
+      {review ? (
+        <a className="ready" href="/feedback?f=review">
+          <span className="pulse" aria-hidden="true" />
+          {review} to review
+        </a>
+      ) : null}
       <span className="sync">
         <span className={stale ? "dot stale" : "dot"} />
         {synced ? <>synced <b>{synced}</b></> : "never synced"}

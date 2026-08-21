@@ -567,6 +567,17 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
 .tick{font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-3)}
 /* The one action on the card that is a destination rather than a control. */
 .choice.go{border-color:var(--axis);color:var(--ink-1);font-weight:600}
+/* Yes and no: the same size, because the decision is genuinely two-sided and a
+   quieter "no" is a thumb on the scale. Only the colour separates them. */
+.choice.yes{border-color:var(--axis);font-weight:600}
+.choice.no{color:var(--ink-3)}
+.choice.no:hover{border-color:var(--crit);color:var(--crit)}
+
+/* Waiting on a yes or a no, said in the nav on every page. */
+.ready{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;
+  border:1px solid var(--axis);font-size:12px;font-weight:600;color:var(--ink-1);
+  margin-right:14px;white-space:nowrap}
+.ready:hover{background:var(--surface-2)}
 
 /* ---- the bar across the top of a preview ---- */
 /* Only ever rendered inside a Vercel preview of a feedback/* branch. It is the
