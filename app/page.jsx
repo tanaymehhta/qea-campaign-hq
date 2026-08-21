@@ -3,7 +3,8 @@ import {
   EMPTY, addInto, listHref, repList, responseCounts, reachedCounts,
   meetingCounts, meetingArgs, everyRow,
 } from "../lib/db";
-import { Tile, RangePicker, DailyBars, Reps, BounceCell, DrillCell } from "../components/ui";
+import { Tile, RangePicker, Reps, BounceCell, DrillCell } from "../components/ui";
+import SendsChart from "../components/sends-chart";
 
 // A dial needs its person and its day; the campaign behind the contact is the
 // second of the two doors a call can be a rep's through.
@@ -16,13 +17,17 @@ export default async function Overview({ searchParams }) {
   const w = windowFrom(sp);
   const t = today();
 
-  const [{ data: campaigns }, { groups, reps }, rows, mailbox, { data: proposals }, { data: calls }, { data: callCamps }] =
+  const [{ data: campaigns }, { groups, reps }, allRows, mailbox, { data: proposals }, { data: calls }, { data: callCamps }] =
     await Promise.all([
       // sender_emails is the edge that makes Instantly bounce placeable — see the
       // bounce section below. It is a text[] on the campaign, written by the sync.
       db.from("campaigns").select("id, source, name, status, sender_emails, open_tracking, last_synced"),
       repList(),
-      dailyRange(w.from, w.to),
+      // Every day there has ever been, not only the window's. `v_daily_facts`
+      // is 552 rows (23 Jun onward) and arrives in one page under the 1,000-row
+      // cap, so the window is a filter over this rather than a second query —
+      // and the chart, holding all of it, can change range without a page load.
+      dailyRange("2020-01-01", t),
       mailboxRange(w.from, w.to),
       // Meetings moved to `meeting_rows` below — they need the rep's scope,
       // which is not resolved until after the campaigns come back.
@@ -41,6 +46,9 @@ export default async function Overview({ searchParams }) {
         : db.from("phone_calls").select(CALL_COLS).is("deleted_at", null).gte("call_date", w.from).lte("call_date", w.to)),
       db.from("call_campaigns").select("id, owner"),
     ]);
+
+  // The window every tile below counts, taken out of the all-time read above.
+  const rows = allRows.filter((r) => r.metric_date >= w.from && r.metric_date <= w.to);
 
   const { data: members } = await db.from("campaign_group_members").select("campaign_id, group_id");
   const groupOf = new Map((members ?? []).map((m) => [m.campaign_id, m.group_id]));
@@ -334,44 +342,25 @@ export default async function Overview({ searchParams }) {
       .map((c) => groupOf.get(c.id))
   );
 
-  // The chart follows the range picker exactly: Today / a picked day = one
-  // bar, 7/30/90 = that many days, All time = from the first day with data.
-  const SPAN = { 7: 7, 30: 30, 90: 90 };
-  const chartTo = w.range === "day" ? w.from : t;
-  let chartFrom =
-    w.range === "today" ? t
-    : w.range === "day" ? w.from
-    : SPAN[w.range] ? shift(t, -(SPAN[w.range] - 1))
-    : null; // all time — resolved from the data below
-  const chartRows = await dailyRange(chartFrom ?? "2020-01-01", chartTo);
-  if (!chartFrom) {
-    const dates = chartRows.filter((r) => inScope(r.campaign_id) && r.sent).map((r) => r.metric_date);
-    chartFrom = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : shift(chartTo, -6);
-  }
+  // The chart is handed every day, once, and slices them itself — which is why
+  // its five ranges do not reload the page. Dense from the first day with a
+  // send to today, so an empty Tuesday is a gap in the shape rather than a day
+  // that quietly does not exist. Scoped by the same `inScope` rule as the
+  // tiles; overlay rows (no campaign_id, bounce only) carry no `sent` and drop
+  // out with it.
   const perDay = new Map();
-  for (let d = chartFrom; d <= chartTo; d = shift(d, 1)) {
-    perDay.set(d, { date: d, instantly: 0, lemlist: 0 });
-  }
-  for (const r of chartRows) {
+  for (const r of allRows) {
     const c = cById.get(r.campaign_id);
-    const slot = perDay.get(r.metric_date);
-    if (c && slot && inScope(r.campaign_id)) slot[c.source] += r.sent ?? 0;
+    if (!c || !inScope(r.campaign_id) || !r.sent) continue;
+    const slot = perDay.get(r.metric_date) ?? { d: r.metric_date, i: 0, l: 0 };
+    slot[c.source === "lemlist" ? "l" : "i"] += r.sent;
+    perDay.set(r.metric_date, slot);
   }
-
-  // Sends happen on weekdays; empty Sat/Sun columns are dead width. Display
-  // only — if a weekend ever does send, the columns come back on their own.
-  const isWeekend = (d) => [0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay());
-  const allDays = [...perDay.values()];
-  const weekdaysOnly = allDays.filter((x) => !isWeekend(x.date));
-  const weekendsEmpty =
-    weekdaysOnly.length > 0 &&
-    allDays.filter((x) => isWeekend(x.date)).every((x) => !x.instantly && !x.lemlist);
-  const chartDays = weekendsEmpty ? weekdaysOnly : allDays;
-  const chartLabel =
-    w.range === "today" ? "Today"
-    : w.range === "day" ? prettyDate(w.from)
-    : SPAN[w.range] ? `Last ${SPAN[w.range]} days`
-    : "All time";
+  const firstSend = [...perDay.keys()].sort()[0] ?? shift(t, -6);
+  const chartDays = [];
+  for (let d = firstSend; d <= t; d = shift(d, 1)) {
+    chartDays.push(perDay.get(d) ?? { d, i: 0, l: 0 });
+  }
 
   // A campaign, to everyone who reads this page, is a group — the thing the
   // table below lists and the thing a rep says they own. The 35 rows underneath
@@ -616,18 +605,17 @@ export default async function Overview({ searchParams }) {
         />
       </div>
 
-      <h2 style={{ marginTop: 0 }} id="chart">
-        {chartLabel}{weekendsEmpty ? " — weekdays" : ""}
-      </h2>
-      {/* Same picker as the one at the top, same URL param — either one moves
-          both. The anchor lands the reload back here instead of at the top. */}
-      <RangePicker
+      <h2 style={{ marginTop: 0 }} id="chart">Emails sent per day</h2>
+      {/* The second range picker is gone: this card carries its own, and its
+          own is the one that does not reload the page. Clicking it still
+          writes the URL, so the tiles above follow and the link still
+          shares. */}
+      <SendsChart
+        days={chartDays}
+        range={w.range}
+        dayPick={w.range === "day" ? w.from : null}
         base={here({ rep: rep === "all" ? "" : rep })}
-        current={w.range}
-        anchor="chart"
-        note={weekendsEmpty ? "empty weekends hidden" : null}
       />
-      <DailyBars days={chartDays} />
 
       <h2>By campaign — {w.range === "day" ? prettyDate(w.from) : w.label.toLowerCase()}</h2>
       <div className="card tw banded">

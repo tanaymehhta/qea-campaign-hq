@@ -1,4 +1,5 @@
 import { num, pct, prettyDate, prettyWhen, personHref, PAGE_SIZES } from "../lib/db";
+import SoftLink from "./soft-link";
 
 export function Pill({ status }) {
   return <span className={`pill p-${status ?? "unknown"}`}>{(status ?? "unknown").replace(/_/g, " ")}</span>;
@@ -30,12 +31,16 @@ export function PersonLink({ email, name, fallback = "—" }) {
   return href ? <a href={href}>{label}</a> : <span>{label}</span>;
 }
 
-/** A segmented control. Options are links, so every state is a real URL. */
+/**
+ * A segmented control. Options are links, so every state is a real URL — and
+ * they are taken through the router rather than as document navigations, so
+ * picking one does not scroll you back to the top. See SoftLink.
+ */
 export function Seg({ options, current, hrefFor }) {
   return (
     <div className="seg">
       {options.map(([k, label]) => (
-        <a key={k} href={hrefFor(k)} className={String(current) === String(k) ? "on" : ""}>{label}</a>
+        <SoftLink key={k} href={hrefFor(k)} className={String(current) === String(k) ? "on" : ""}>{label}</SoftLink>
       ))}
     </div>
   );
@@ -51,7 +56,7 @@ export function Reps({ reps, current, hrefFor, big, subtitleFor }) {
   return (
     <div className={big ? "reps big" : "reps"}>
       {[all, ...reps].map((r, i) => (
-        <a
+        <SoftLink
           key={r.id}
           href={hrefFor(r.id)}
           className={current === r.id ? "on" : ""}
@@ -68,7 +73,7 @@ export function Reps({ reps, current, hrefFor, big, subtitleFor }) {
             {big && r.id !== "all" ? <><br />{r.name.split(" ").slice(1).join(" ")}</> : null}
           </span>
           <span className="role">{subtitleFor ? subtitleFor(r) : r.role}</span>
-        </a>
+        </SoftLink>
       ))}
     </div>
   );
@@ -243,9 +248,9 @@ export function RangePicker({ base, current, day, note, anchor }) {
       <Seg options={opts} current={current} hrefFor={(k) => q(`range=${k}`)} />
       {day ? (
         <div className="seg">
-          <a href={q(`d=${day.prev}`)}>&larr;</a>
-          <a href={q(`d=${day.current}`)} className={current === "day" ? "on" : ""}>{prettyDate(day.current)}</a>
-          <a href={q(`d=${day.next}`)}>&rarr;</a>
+          <SoftLink href={q(`d=${day.prev}`)}>&larr;</SoftLink>
+          <SoftLink href={q(`d=${day.current}`)} className={current === "day" ? "on" : ""}>{prettyDate(day.current)}</SoftLink>
+          <SoftLink href={q(`d=${day.next}`)}>&rarr;</SoftLink>
         </div>
       ) : null}
       {note ? <span className="note">{note}</span> : null}
@@ -326,64 +331,3 @@ export function PeopleTable({ rows, count, size, page, hrefFor, campaignOf }) {
   );
 }
 
-/** "Wed 6 Aug" without the weekday, for tight axis labels. */
-const shortDate = (iso) =>
-  new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })
-    .format(new Date(`${iso}T12:00:00Z`));
-
-/**
- * Stacked daily bars, Instantly over lemlist. No library — it's two divs.
- * Long windows scroll inside the card (newest day in view first) instead of
- * overflowing the page; every column keeps enough width for its date label,
- * and each colored segment carries its own hover tooltip.
- */
-export function DailyBars({ days }) {
-  const max = Math.max(1, ...days.map((d) => d.instantly + d.lemlist));
-  const wide = days.length > 16;
-  return (
-    <div className="card">
-      <div className="legend">
-        <span><i style={{ background: "var(--s1)" }} />Instantly</span>
-        <span><i style={{ background: "var(--s2)" }} />lemlist</span>
-        <span className="dim">emails sent per day{wide ? " · scroll for older days" : ""}</span>
-      </div>
-      <div className="bscroll">
-        <div className="binner" style={wide ? { minWidth: days.length * 46 } : undefined}>
-          <div className="bars">
-            {days.map((d, i) => {
-              const total = d.instantly + d.lemlist;
-              const when = prettyDate(d.date);
-              return (
-                <div className="bcol" key={d.date}
-                  title={`${when} — ${num(total)} sent (${num(d.instantly)} Instantly, ${num(d.lemlist)} lemlist)`}>
-                  <div className={total ? "bval" : "bval dim"}>{total ? num(total) : "—"}</div>
-                  <div
-                    className="bstack"
-                    style={{ height: `${(total / max) * 100}%`, animationDelay: `${0.1 + Math.min(i, 20) * 0.03}s` }}
-                  >
-                    {d.instantly ? (
-                      <span className="bar" style={{ flex: d.instantly }}
-                        title={`${when} — ${num(d.instantly)} Instantly`} />
-                    ) : null}
-                    {d.lemlist ? (
-                      <span className={d.instantly ? "bar lem" : "bar lem only"} style={{ flex: d.lemlist }}
-                        title={`${when} — ${num(d.lemlist)} lemlist`} />
-                    ) : null}
-                    {!total ? <span className="bar off" style={{ height: 3 }} /> : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="bx">
-            {days.map((d) => (
-              <span key={d.date} title={prettyDate(d.date)}>
-                {wide ? shortDate(d.date) : prettyDate(d.date).replace(/,/, "")}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}

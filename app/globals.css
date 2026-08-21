@@ -92,7 +92,6 @@
 }
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes growBar{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 @keyframes growWide{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @keyframes breathe{0%,100%{box-shadow:0 0 0 0 rgba(12,163,12,.35)}50%{box-shadow:0 0 0 4px rgba(12,163,12,0)}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
@@ -391,23 +390,6 @@ details[open] > summary .chev{transform:rotate(180deg)}
 /* ---- bar chart ---- */
 /* rtl on the scroller starts it at the right edge — the newest day — with
    older days a scroll away; ltr on the inner keeps the columns in date order. */
-.bscroll{overflow-x:auto;direction:rtl}
-.binner{direction:ltr}
-.bars{display:flex;align-items:flex-end;gap:7px;height:154px;padding-top:8px}
-.bcol{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
-.bstack{width:100%;max-width:46px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;
-  transform-origin:bottom;animation:growBar .6s cubic-bezier(.22,.8,.3,1) both}
-.bar{display:block;background:var(--s1);border-radius:4px 4px 0 0;min-height:3px}
-.bar.lem{background:var(--s2);border-radius:0}
-.bar.lem.only{border-radius:4px 4px 0 0}
-.bar.off{background:var(--grid);border-radius:4px 4px 0 0}
-.bval{font-size:11.5px;font-variant-numeric:tabular-nums;margin-bottom:6px;font-weight:600}
-.bx{display:flex;gap:7px;margin-top:9px;border-top:1px solid var(--axis);padding-top:8px}
-.bx span{flex:1;text-align:center;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.legend{display:flex;gap:18px;margin:0 0 14px;font-size:12.5px;color:var(--ink-2);flex-wrap:wrap}
-.legend span{display:inline-flex;align-items:center;gap:7px}
-.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
 
 /* ---- share donut: what a long table is made of, before you read it ---- */
 .donut{display:flex;align-items:center;gap:30px;flex-wrap:wrap;margin-bottom:14px}
@@ -616,3 +598,67 @@ html[data-busy="1"] .leadsplit{cursor:progress}
 .frow:hover{background:var(--wash)}
 .frow.waiting .box{border-color:var(--s1)}
 .frow.waiting.v .box{border-color:var(--violet)}
+
+/* ---- while the server is answering ----
+   Same idiom as the leads table above, for the same reason. A range or rep
+   click is a router push now, so the page stays exactly where it is — which
+   also means nothing moves for the half second the queries take. The tiles
+   belong to the previous question until the next one lands; dimming them is
+   the whole feedback. The chart does not dim: it holds every day already and
+   has re-drawn before the request left. */
+html[data-busy="1"] .grid{opacity:.5}
+.grid{transition:opacity .16s ease}
+
+/* ---- emails sent per day ----
+   The bars are a canvas of small tiles rather than divs, because the range
+   picker changes the number of columns and a div per day cannot re-flow from
+   7 columns to 43 — it can only be replaced. Everything around the canvas is
+   ordinary DOM: the axis, the crosshair and the readout, so they inherit the
+   theme and the type without being re-implemented in fillText. */
+.card.sends{padding:16px 18px 14px}
+.sendhead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  flex-wrap:wrap;margin-bottom:14px}
+.sends .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.sends .hero{font-size:38px;font-weight:600;letter-spacing:-.03em;line-height:1.05;margin-top:6px;
+  font-variant-numeric:tabular-nums}
+.sends .sdelta{font-size:12.5px;color:var(--ink-3);margin-top:5px}
+.sends .sdelta.up{color:var(--good-ink)}
+.sends .sdelta.down{color:var(--ink-2)}
+
+/* The active pill is its own element so it slides between options instead of
+   one background switching off as another switches on. */
+.spills{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+  background:var(--seg);border:1px solid var(--border);
+  border-radius:11px;padding:3px;align-self:flex-start}
+.sknob{position:absolute;left:3px;top:3px;bottom:3px;background:var(--surface-1);border-radius:8px;
+  box-shadow:var(--seg-on);transition:transform .32s cubic-bezier(.22,1.18,.36,1),opacity .16s}
+.spills button{position:relative;flex:1;height:32px;padding:0 13px;font-size:12.5px;border:none;
+  background:transparent;color:var(--ink-2);cursor:pointer;border-radius:8px;white-space:nowrap;
+  transition:color .16s}
+.spills button[aria-selected="true"]{color:var(--ink-1);font-weight:600}
+.spills button:hover{color:var(--ink-1)}
+
+.plotrow{display:flex;gap:8px}
+.sy{position:relative;width:38px;height:var(--plot-h)}
+.sy span{position:absolute;right:0;transform:translateY(-50%);font-size:10.5px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums}
+.splot{position:relative;flex:1;height:var(--plot-h)}
+.sends{--plot-h:clamp(150px,20vh,178px)}
+.splot canvas{position:absolute;inset:0;width:100%;height:100%}
+.sgrid{position:absolute;inset:0;pointer-events:none}
+.sgrid i{position:absolute;left:0;right:0;border-top:1px dashed var(--grid)}
+.sgrid i.base{border-top:1.5px solid var(--axis)}
+.scross{position:absolute;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--s1) 40%,transparent);
+  opacity:0;pointer-events:none;transition:opacity .16s ease-out}
+.stip{position:absolute;transform:translate(-50%,-116%);background:var(--surface-1);
+  border:1px solid var(--border);border-radius:10px;padding:6px 10px;white-space:nowrap;
+  box-shadow:var(--lift);opacity:0;pointer-events:none;transition:opacity .16s ease-out;z-index:2}
+.stip b{display:block;font-size:11px;font-weight:500;color:var(--ink-3)}
+.stip span{display:block;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:1px}
+.shit{position:absolute;inset:0;cursor:crosshair}
+.sx{position:relative;height:14px;margin:9px 0 0 46px;border-top:1px solid var(--grid);padding-top:9px;
+  transition:opacity .18s ease-out}
+.sx span{position:absolute;transform:translateX(-50%);font-size:10.5px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.snote{font-size:12px;color:var(--ink-3);margin-top:14px}
+@media (max-width:560px){.sends .hero{font-size:30px}.spills button{padding:0 9px;font-size:12px}}
