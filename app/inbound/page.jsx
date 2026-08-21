@@ -5,7 +5,6 @@ import { money, dateWindow } from "../../lib/pipeline";
 import { ALL_REPS, REGIONS, repById } from "../../lib/inbound/routing";
 import { cap, errorReason, isCreditError, RUNNING_CHIP } from "../../lib/inbound/words";
 import { RelevanceToggle, RestartButton, ReachedOut } from "./controls";
-import { loadTouches } from "../../lib/inbound/touched";
 import { Live } from "./live";
 import { Running } from "./running";
 import {
@@ -222,7 +221,7 @@ function CompanyCard({ lead, i, touch, rep }) {
   );
 }
 
-function CompanyTable({ rows, touches, rep }) {
+function CompanyTable({ rows, rep }) {
   return (
     <div className="card tw">
       <table>
@@ -267,8 +266,8 @@ function CompanyTable({ rows, touches, rep }) {
                   it reads rather than presses — the control lives on the card
                   and on the company page. */}
               <td className="dim" style={{ textAlign: "left" }}>
-                {touches[l.id]
-                  ? `${repById(touches[l.id].by)?.name.split(" ")[0] ?? touches[l.id].by} · ${prettyWhen(touches[l.id].at)}`
+                {l.touch
+                  ? `${repById(l.touch.by)?.name.split(" ")[0] ?? l.touch.by} · ${prettyWhen(l.touch.at)}`
                   : "—"}
               </td>
             </tr>
@@ -295,9 +294,6 @@ export default async function Inbound({ searchParams }) {
 
   const show = VIEWS[searchParams?.show] ? searchParams.show : "all";
   const { companies, traffic, excluded } = await loadQueue();
-  // Who has already picked each account up. Read once for the page rather than
-  // per card: forty cards is forty reads of the same small file otherwise.
-  const touches = await loadTouches();
 
   const inRange = filterLeads(companies, { rep: null, range, from, to });
   // What the header counts and what the list shows are the same set, minus the
@@ -497,7 +493,7 @@ export default async function Inbound({ searchParams }) {
           {num(filterLeads(companies, { rep, range: "all" }).length)}.
         </div>
       ) : as === "table" ? (
-        <CompanyTable rows={rows} touches={touches} rep={rep} />
+        <CompanyTable rows={rows} rep={rep} />
       ) : (
         lanes.map((lane) => (
           <section key={lane.id} id={lane.id}>
@@ -505,7 +501,7 @@ export default async function Inbound({ searchParams }) {
             {lane.rows.length ? (
               <div className="i-grid">
                 {lane.rows.map((l, i) => (
-                  <CompanyCard key={l.id} lead={l} i={i} touch={touches[l.id]} rep={rep} />
+                  <CompanyCard key={l.id} lead={l} i={i} touch={l.touch} rep={rep} />
                 ))}
               </div>
             ) : (
