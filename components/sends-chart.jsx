@@ -26,9 +26,9 @@ import { useRouter } from "next/navigation";
  * decoration either — it is what makes a column count change legible while it
  * is happening, because the tiles re-flow instead of stretching.
  *
- * One hue, --s1, the same blue the sent column wears everywhere else. The
- * vendor split lives in the hover readout: lemlist is being retired, and a
- * second colour on every bar to carry a share that is heading for zero is a
+ * One hue, --crit, at a teammate's request (feedback 99115538). The vendor
+ * split lives in the hover readout: lemlist is being retired, and a second
+ * colour on every bar to carry a share that is heading for zero is a
  * decoration the number does not need.
  */
 
@@ -152,7 +152,7 @@ export default function SendsChart({ days, range, dayPick, base }) {
     const readInk = () => {
       const s = getComputedStyle(document.documentElement);
       a.ink = {
-        bar: s.getPropertyValue("--s1").trim() || "#2a78d6",
+        bar: s.getPropertyValue("--crit").trim() || "#d03b3b",
         rest: s.getPropertyValue("--wash-2").trim() || "rgba(11,11,11,.045)",
         text: s.getPropertyValue("--ink-1").trim() || "#0b0b0b",
         font: getComputedStyle(document.body).fontFamily,
