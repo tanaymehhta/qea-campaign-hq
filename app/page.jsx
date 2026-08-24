@@ -67,13 +67,11 @@ export default async function Overview({ searchParams }) {
   const shownGroups = myGroupIds ? groups.filter((g) => myGroupIds.has(g.id)) : groups;
 
   const overall = { ...EMPTY };
-  const byTool = { instantly: { ...EMPTY }, lemlist: { ...EMPTY } };
   const byGroup = new Map();
   for (const r of rows) {
     const c = cById.get(r.campaign_id);
     if (!c || !inScope(r.campaign_id)) continue;
     addInto(overall, r);
-    if (byTool[c.source]) addInto(byTool[c.source], r);
     const gid = groupOf.get(r.campaign_id);
     if (!gid) continue;
     if (!byGroup.has(gid)) byGroup.set(gid, { ...EMPTY });
@@ -399,14 +397,14 @@ export default async function Overview({ searchParams }) {
   for (const r of allRows) {
     const c = cById.get(r.campaign_id);
     if (!c || !inScope(r.campaign_id) || !r.sent) continue;
-    const slot = perDay.get(r.metric_date) ?? { d: r.metric_date, i: 0, l: 0 };
-    slot[c.source === "lemlist" ? "l" : "i"] += r.sent;
+    const slot = perDay.get(r.metric_date) ?? { d: r.metric_date, i: 0 };
+    slot.i += r.sent;
     perDay.set(r.metric_date, slot);
   }
   const firstSend = [...perDay.keys()].sort()[0] ?? shift(t, -6);
   const chartDays = [];
   for (let d = firstSend; d <= t; d = shift(d, 1)) {
-    chartDays.push(perDay.get(d) ?? { d, i: 0, l: 0 });
+    chartDays.push(perDay.get(d) ?? { d, i: 0 });
   }
 
   // A campaign, to everyone who reads this page, is a group — the thing the
@@ -472,7 +470,7 @@ export default async function Overview({ searchParams }) {
         <h1>Overview</h1>
         <p className="sub">
           {rep === "all" ? (
-            <>Everything sent across Instantly and lemlist. {live} of {shownGroups.length} campaigns
+            <>Everything sent across every campaign. {live} of {shownGroups.length} campaigns
               are live as of {prettyWhen(syncedAt)}.</>
           ) : (
             <>{rep} owns {shownGroups.length} campaign{shownGroups.length === 1 ? "" : "s"},{" "}
@@ -521,7 +519,7 @@ export default async function Overview({ searchParams }) {
                  reach), and a tile that grew by a channel without saying so is
                  how "1,839" and "2,393" came to be two answers to one question.
                  The calls part is only printed when there is one. */
-              : `First touches — ${num(reached.instantly)} Instantly · ${num(reached.lemlist)} lemlist${
+              : `First touches — ${num((reached.people ?? 0) - (reached.calls ?? 0))} by email${
                   reached.calls ? ` · ${num(reached.calls)} phoned` : ""
                 }`
           }
@@ -532,7 +530,6 @@ export default async function Overview({ searchParams }) {
           label="Emails sent"
           value={num(overall.sent)}
           raw={overall.sent}
-          note={`${num(byTool.instantly.sent)} Instantly · ${num(byTool.lemlist.sent)} lemlist`}
           href={drill("sent")}
         />
         <Tile

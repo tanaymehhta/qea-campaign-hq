@@ -312,8 +312,8 @@ export default async function Replies({ searchParams }) {
                         feed carries `messagePreview` and nothing else — usually
                         the greeting and no more — so what is above is a fragment
                         and labelling from it is guessing. The full text does
-                        exist behind a second call, per contact, which is not
-                        being built: lemlist is being retired.
+                        exist behind a second call, per contact, which was
+                        never built: lemlist is retired and no longer synced.
 
                         Instantly needs no such warning any more. Its whole
                         message is stored now, quoted thread and all. */}

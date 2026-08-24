@@ -231,13 +231,13 @@ export default async function List({ searchParams }) {
 
       {ignoresWindow ? (
         <div className="warnbox w">
-          Neither Instantly nor lemlist timestamps this event, so it cannot be filtered to
+          Instantly does not timestamp this event, so it cannot be filtered to
           a date range. This is the lifetime list, not {w.label.toLowerCase()}.
         </div>
       ) : null}
 
       {/* Only where the two denominators actually differ. In a scope whose
-          campaigns all carry a pixel — Chicago Retrofit, every lemlist group —
+          campaigns all carry a pixel — Chicago Retrofit, every retired lemlist group —
           there is no second denominator to be confused by, and a box saying
           "0 people between them" is noise pretending to be rigour. */}
       {vendorSends && vendorSends > count ? (

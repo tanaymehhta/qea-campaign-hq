@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function Health({ searchParams }) {
   const t = today();
   const err = searchParams?.err;
-  const [{ data: accounts }, { data: runs }, { data: unclean }, { data: campaigns }, rows, { data: drift }, { data: groupDrift }, { data: recon }, { data: broken }, { data: ownerless }, { reps }] = await Promise.all([
+  const [{ data: accounts }, { data: runs }, { data: unclean }, { data: campaigns }, rows, { data: groupDrift }, { data: recon }, { data: broken }, { data: ownerless }, { reps }] = await Promise.all([
     db.from("email_accounts").select("*").order("email"),
     db.from("sync_runs").select("*").order("started_at", { ascending: false }).limit(12),
     // Every run that did not finish clean, however old. The log below shows the
@@ -22,7 +22,6 @@ export default async function Health({ searchParams }) {
       .order("started_at", { ascending: false }).limit(20),
     db.from("v_campaign_summary").select("*"),
     dailyRange(t, t),
-    db.from("v_metric_drift").select("*").order("metric_date", { ascending: false }),
     db.from("v_group_status_drift").select("*"),
     db.from("v_reconciliation").select("*").order("difference", { ascending: false }),
     db.from("v_invariants").select("*").order("rule"),
@@ -269,38 +268,6 @@ export default async function Health({ searchParams }) {
                   <td className="dim">{b.source}</td>
                   <td className="bad" style={{ textAlign: "left" }}>{b.rule.replace(/_/g, " ")}</td>
                   <td className="dim" style={{ textAlign: "left" }}>{b.detail}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <h2>lemlist rebuild</h2>
-      <p className="sub" style={{ marginTop: -8 }}>
-        A narrower check, kept because the one above cannot see what it sees. lemlist's
-        per-day counts are rebuilt from the named-people table on every sync; if that
-        rebuild broke, the lifetime totals would break with it in the same direction and
-        the comparison above would stay green. This reads the event stream instead.
-        It covers lemlist only &mdash; Instantly writes no bounce activity at all, so
-        there is nothing on that side to compare against.
-      </p>
-      <div className="card tw">
-        {!drift?.length ? (
-          <p className="empty" style={{ padding: 0 }}>Clean — every lemlist tile count matches its named rows.</p>
-        ) : (
-          <table>
-            <thead><tr><th style={{ textAlign: "left" }}>Campaign</th><th>Date</th>
-              <th>Sent (tile / rows)</th><th>Bounced</th><th>LI sent</th><th>LI accepted</th></tr></thead>
-            <tbody>
-              {drift.map((d) => (
-                <tr key={`${d.campaign_id}-${d.metric_date}`}>
-                  <td className="name" style={{ textAlign: "left" }}>{d.name}</td>
-                  <td className="dim">{d.metric_date}</td>
-                  <td className={d.dm_sent !== d.act_sent ? "bad" : "dim"}>{d.dm_sent} / {d.act_sent}</td>
-                  <td className={d.dm_bounced !== d.act_bounced ? "bad" : "dim"}>{d.dm_bounced} / {d.act_bounced}</td>
-                  <td className={d.dm_linkedin_sent !== d.act_linkedin_sent ? "bad" : "dim"}>{d.dm_linkedin_sent} / {d.act_linkedin_sent}</td>
-                  <td className={d.dm_linkedin_accepted !== d.act_linkedin_accepted ? "bad" : "dim"}>{d.dm_linkedin_accepted} / {d.act_linkedin_accepted}</td>
                 </tr>
               ))}
             </tbody>

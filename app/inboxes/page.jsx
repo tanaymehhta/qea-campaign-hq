@@ -73,7 +73,7 @@ export default async function Inboxes({ searchParams }) {
       </div>
 
       <h2>Send volume per mailbox</h2>
-      <p className="sub">Instantly only — lemlist has no per-mailbox send-volume endpoint.</p>
+      <p className="sub">Instantly only.</p>
       <RangePicker base="/inboxes" current={w.range} />
       <div className="card tw">
         <table>

@@ -26,10 +26,8 @@ import { useRouter } from "next/navigation";
  * decoration either — it is what makes a column count change legible while it
  * is happening, because the tiles re-flow instead of stretching.
  *
- * One hue, --s1, the same blue the sent column wears everywhere else. The
- * vendor split lives in the hover readout: lemlist is being retired, and a
- * second colour on every bar to carry a share that is heading for zero is a
- * decoration the number does not need.
+ * One hue, --s1, the same blue the sent column wears everywhere else. There
+ * is one sender now, so there is nothing for a second colour to carry.
  */
 
 const RANGES = [["today", "Today"], ["7", "7 days"], ["30", "30 days"], ["90", "90 days"], ["all", "All time"]];
@@ -108,14 +106,13 @@ export default function SendsChart({ days, range, dayPick, base }) {
     // only — if a weekend ever does send, the columns come back on their own.
     const weekdays =
       rows.some((d) => !isWeekend(d.d)) &&
-      rows.filter((d) => isWeekend(d.d)).every((d) => !d.i && !d.l);
+      rows.filter((d) => isWeekend(d.d)).every((d) => !d.i);
     return { rows: weekdays ? rows.filter((d) => !isWeekend(d.d)) : rows, prev, label, weekdays };
   }, [days, shown, dayPick]);
 
-  const total = view.rows.reduce((a, d) => a + d.i + d.l, 0);
-  const prevTotal = view.prev.reduce((a, d) => a + d.i + d.l, 0);
+  const total = view.rows.reduce((a, d) => a + d.i, 0);
+  const prevTotal = view.prev.reduce((a, d) => a + d.i, 0);
   const delta = view.prev.length && prevTotal ? Math.round(((total - prevTotal) / prevTotal) * 100) : null;
-  const lem = view.rows.reduce((a, d) => a + d.l, 0);
 
   // ---- everything the animation loop reads, kept out of React --------------
   const anim = useRef({
@@ -127,7 +124,7 @@ export default function SendsChart({ days, range, dayPick, base }) {
   // New slice: keep whatever is on screen as the "from", even mid-flight.
   useEffect(() => {
     const a = anim.current;
-    const vals = view.rows.map((d) => d.i + d.l);
+    const vals = view.rows.map((d) => d.i);
     const top = niceTop(Math.max(1, ...vals) * 1.16);
     const now = performance.now();
     const cur = curve(a, now);
@@ -292,11 +289,8 @@ export default function SendsChart({ days, range, dayPick, base }) {
     const x = a.tipX.step(dt), y = a.tipY.step(dt);
     cross.style.opacity = 1; cross.style.left = `${x}px`;
     tip.style.opacity = 1; tip.style.left = `${clamp(x, 60, W - 60)}px`; tip.style.top = `${y}px`;
-    const sent = row.i + row.l;
     tip.firstChild.textContent = pretty(row.d);
-    tip.lastChild.textContent = row.l
-      ? `${fmt(sent)} sent · ${fmt(row.i)} Instantly · ${fmt(row.l)} lemlist`
-      : `${fmt(sent)} sent`;
+    tip.lastChild.textContent = `${fmt(row.i)} sent`;
   }
 
   // Date labels are DOM, not canvas: they crossfade on a range change while the
@@ -390,7 +384,6 @@ export default function SendsChart({ days, range, dayPick, base }) {
         {view.rows.length ? `${view.label.toLowerCase()} · ${view.rows.length} day${view.rows.length === 1 ? "" : "s"}` : "No sending days in this view"}
         {view.weekdays ? " · empty weekends hidden" : ""}
         {shown === "today" ? " · sends still in progress" : ""}
-        {lem ? ` · ${fmt(lem)} of them lemlist` : ""}
       </div>
     </div>
   );

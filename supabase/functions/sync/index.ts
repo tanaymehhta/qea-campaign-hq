@@ -1,6 +1,6 @@
 // QEA Campaign HQ — sync
 //
-// Pulls Instantly and lemlist into Supabase. Idempotent: every write is an
+// Pulls Instantly into Supabase. Idempotent: every write is an
 // upsert keyed on (campaign, date), so running twice equals running once and a
 // missed run heals itself on the next pass.
 //
@@ -16,7 +16,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const TZ = "America/New_York";
 const INSTANTLY = "https://api.instantly.ai/api/v2";
-const LEMLIST = "https://api.lemlist.com/api";
 
 // Every write in this file is `await db.from(x).upsert(...)` with the `error`
 // half discarded — thirteen sites, without exception. A row rejected by a
@@ -122,10 +121,8 @@ async function writeActivities(rows: any[]): Promise<number> {
   return n;
 }
 
-// The six words `campaigns.status` accepts, plus lemlist's synonyms for them.
+// The six words `campaigns.status` accepts.
 const CAMPAIGN_STATUS = ["running", "paused", "draft", "completed", "errored"];
-const LEMLIST_STATUS = (raw: string) =>
-  raw === "ended" ? "completed" : CAMPAIGN_STATUS.includes(raw) ? raw : "unknown";
 
 const INSTANTLY_STATUS: Record<number, string> = {
   0: "draft", 1: "running", 2: "paused", 3: "completed", 4: "running", "-1": "errored",
@@ -501,144 +498,6 @@ async function syncInstantly(from: string, to: string, deep: boolean) {
   return wrote;
 }
 
-// -------------------------------------------------------------------- lemlist
-
-// lemlist activity type -> our own event vocabulary.
-//
-// linkedinVisitDone is deliberately absent: viewing someone's profile is not a
-// connection request, and counting it as one inflated "LinkedIn requests sent".
-const ACTIVITY_MAP: Record<string, string> = {
-  emailsSent: "sent",
-  emailsOpened: "opened",
-  emailsClicked: "clicked",
-  emailsReplied: "replied",
-  emailsBounced: "bounced",
-  emailsFailed: "bounced",
-  outOfOffice: "auto_reply",
-  emailsUnsubscribed: "unsubscribed",
-  linkedinSent: "linkedin_sent",
-  linkedinInviteDone: "linkedin_sent",
-  linkedinInviteAccepted: "linkedin_accepted",
-  linkedinReplied: "replied",
-  linkedinInterested: "replied",
-};
-
-const REPLY_TYPES = new Set(["emailsReplied", "linkedinReplied", "outOfOffice"]);
-
-async function syncLemlist(from: string, to: string, deep: boolean) {
-  const key = await secret("LEMLIST_API_KEY");
-  const H = { Authorization: `Basic ${btoa(`:${key}`)}` };
-  let wrote = 0;
-
-  // --- campaigns
-  const campaigns: any[] = [];
-  for (let page = 0; page < 20; page++) {
-    const list = await getJSON(`${LEMLIST}/campaigns?limit=100&offset=${page * 100}`, H);
-    if (!Array.isArray(list) || !list.length) break;
-    campaigns.push(...list);
-    if (list.length < 100) break;
-  }
-
-  const idOf = new Map<string, string>();
-  for (const c of campaigns) {
-    const { data } = await db.from("campaigns").upsert({
-      source: "lemlist", source_campaign_id: c._id, name: c.name,
-      // lemlist's word for finished is "ended", which is not one of the six the
-      // column accepts, so five campaigns it knew perfectly well were done read
-      // back as "unknown" — a shrug where there was a real answer. `status_raw`
-      // below keeps lemlist's own word, so nothing is lost by translating here.
-      status: LEMLIST_STATUS(c.status),
-      status_raw: c.status, started_on: (c.createdAt ?? "").slice(0, 10) || null,
-      raw: c, last_synced: new Date().toISOString(),
-    }, { onConflict: "source,source_campaign_id" }).select("id").single();
-    if (data) { idOf.set(c._id, data.id); wrote++; }
-  }
-
-  // --- lifetime totals (stats needs an explicit window, so use a wide one)
-  for (const [srcId, cid] of idOf) {
-    try {
-      const q = new URLSearchParams({ startDate: "2020-01-01", endDate: shift(to, 1) });
-      const s = await getJSON(`${LEMLIST}/campaigns/${srcId}/stats?${q}`, H);
-      // lemlist's /stats endpoint disagrees with itself across windows, so only
-      // leadTotal is taken from it. Every message metric (sent, delivered,
-      // bounced, opened, clicked, replied) is derived from the activity stream
-      // by refresh_lemlist_totals().
-      await db.from("campaign_totals").upsert({
-        campaign_id: cid, as_of: new Date().toISOString(),
-        leads: s.leadTotal ?? 0, raw: s,
-      }, { onConflict: "campaign_id" });
-      wrote++;
-    } catch (_) { /* a campaign with no sequence returns Bad params — skip it */ }
-  }
-
-  // --- daily, built from the activity stream (one pass, all campaigns)
-  const replyRows: any[] = [];
-  const activityRows: any[] = [];
-  for (let offset = 0; offset < 20000; offset += 100) {
-    const q = new URLSearchParams({
-      limit: "100", offset: String(offset),
-      startDate: `${from}T00:00:00.000Z`, endDate: `${shift(to, 1)}T00:00:00.000Z`,
-    });
-    const acts = await getJSON(`${LEMLIST}/activities?${q}`, H);
-    if (!Array.isArray(acts) || !acts.length) break;
-
-    for (const a of acts) {
-      const event = ACTIVITY_MAP[a.type];
-      const cid = idOf.get(a.campaignId);
-      if (!cid) continue;
-      const date = etDate(a.createdAt);
-      const email = a.leadEmail ?? a.email ?? null;
-      const name =
-        [a.leadFirstName ?? a.firstName, a.leadLastName ?? a.lastName].filter(Boolean).join(" ") || null;
-      const company = a.leadCompanyName ?? a.companyName ?? null;
-
-      if (event) {
-        // lemlist timestamps every single event, so unlike Instantly its rows
-        // survive a date filter intact.
-        activityRows.push({
-          campaign_id: cid, source: "lemlist", source_activity_id: a._id,
-          event_type: event, occurred_at: a.createdAt, activity_date: date,
-          email, name, company,
-        });
-      }
-
-      if (REPLY_TYPES.has(a.type)) {
-        replyRows.push({
-          campaign_id: cid, source: "lemlist", source_message_id: a._id,
-          lead_email: email,
-          lead_name: name,
-          company,
-          channel: a.type.startsWith("linkedin") ? "linkedin" : "email",
-          received_at: a.createdAt, subject: a.subject ?? null,
-          body: a.messagePreview ?? null,
-          sentiment: a.type === "outOfOffice" ? "auto_reply" : "unclassified",
-        });
-      }
-    }
-    if (acts.length < 100) break;
-  }
-
-  if (replyRows.length) {
-    await db.from("replies").upsert(replyRows, {
-      onConflict: "source,source_message_id", ignoreDuplicates: true,
-    });
-    wrote += replyRows.length;
-  }
-  if (activityRows.length) wrote += await writeActivities(activityRows);
-
-  // daily_metrics used to be tallied here in memory from the same page loop
-  // above — a second, independent count of the same feed. Two readings of one
-  // paginated feed can disagree with each other (a page fetched while lemlist
-  // is still writing new activity can skip or shuffle rows), and an additive
-  // tally never gets revisited once wrong. Deriving it in SQL from what
-  // `activities` actually holds, *after* activities is written, makes it a
-  // single source of truth: it can only ever be behind until the next sync
-  // recomputes it, never permanently wrong.
-  const { data: recomputed } = await db.rpc("refresh_lemlist_daily_metrics", { p_from: from, p_to: to });
-  wrote += recomputed ?? 0;
-  return wrote;
-}
-
 // --------------------------------------------------------------------- entry
 
 Deno.serve(async (req) => {
@@ -652,7 +511,7 @@ Deno.serve(async (req) => {
   const deep = mode !== "incremental";
 
   const { data: run } = await db.from("sync_runs")
-    .insert({ source: "both", mode, status: "running" }).select("id").single();
+    .insert({ source: "instantly", mode, status: "running" }).select("id").single();
 
   const detail: Record<string, unknown> = { from, to, mode };
   let wrote = 0, status = "ok", err: string | null = null;
@@ -663,39 +522,12 @@ Deno.serve(async (req) => {
   } catch (e) {
     status = "partial"; err = `instantly: ${e.message}`; detail.instantly_error = e.message;
   }
-  try {
-    const l = await syncLemlist(from, to, deep);
-    detail.lemlist_rows = l; wrote += l;
-  } catch (e) {
-    status = status === "partial" ? "error" : "partial";
-    err = [err, `lemlist: ${e.message}`].filter(Boolean).join(" | ");
-    detail.lemlist_error = e.message;
-  }
-  // These three used to record their failure in `detail` and leave `status`
-  // at 'ok'. A run where every lemlist derivation failed reported success.
+  // `regroup` used to record its failure in `detail` and leave `status` at
+  // 'ok'. A run where the derivation failed reported success.
   try {
     detail.grouped = await regroup();
   } catch (e) {
     detail.group_error = e.message;
-    status = status === "ok" ? "partial" : status;
-  }
-
-  try {
-    const { data: n } = await db.rpc("refresh_lemlist_totals");
-    detail.lemlist_totals_refreshed = n;
-  } catch (e) {
-    detail.totals_error = e.message;
-    status = status === "ok" ? "partial" : status;
-  }
-
-  // lemlist's per-person counters are rebuilt from the cumulative activity log
-  // rather than accumulated in the loop above: an incremental run only sees a
-  // two-day window, and upserting that would overwrite a lifetime count with it.
-  try {
-    const { data: n } = await db.rpc("refresh_lemlist_people");
-    detail.lemlist_people_refreshed = n;
-  } catch (e) {
-    detail.people_error = e.message;
     status = status === "ok" ? "partial" : status;
   }
 

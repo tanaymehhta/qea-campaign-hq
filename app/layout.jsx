@@ -9,7 +9,7 @@ import { readyToReview } from "../lib/github";
 
 export const metadata = {
   title: "QEA Campaign HQ",
-  description: "Live outreach results across Instantly and lemlist.",
+  description: "Live outreach results from Instantly.",
 };
 
 export const dynamic = "force-dynamic";
@@ -59,9 +59,9 @@ export default async function RootLayout({ children }) {
               moment you'll say it — not after navigating somewhere else. */}
           <FeedbackBox />
           <p className="foot">
-            Synced from Instantly and lemlist every 30 minutes. All dates in America/New_York.
+            Synced from Instantly every 30 minutes. All dates in America/New_York.
             Reply counts are a floor, not a total — replies sent outside the original sequence, and
-            CC&rsquo;d third-party replies, never surface in lemlist.
+            CC&rsquo;d third-party replies, never surface in the vendor&rsquo;s feed.
           </p>
         </div>
         <MeshFooter />
