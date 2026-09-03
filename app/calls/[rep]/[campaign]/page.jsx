@@ -620,6 +620,10 @@ export default async function CallWorkspace({ params, searchParams }) {
   const sp = searchParams ?? {};
   const filter = FILTERS[sp.f] ? sp.f : null;
   const showAll = sp.v === "all";
+  // Default order is the strategic one below; ?sort=date asks for the other
+  // one — most recently called first — same direction callLog() and the
+  // history table already use, so "recent" means the same thing everywhere.
+  const sortByDate = sp.sort === "date";
   // Board is the view; ?view=list is the old row list, kept while the board
   // earns its keep. No param to preserve across a write this way, which is
   // why app/calls/actions.js needs no change to keep the rep where they were.
@@ -696,6 +700,7 @@ export default async function CallWorkspace({ params, searchParams }) {
     if (f) q.set("f", f);
     if (v === "all") q.set("v", "all");
     if (view === "list") q.set("view", "list");
+    if (sortByDate) q.set("sort", "date");
     return `${base}${q.size ? `?${q}` : ""}#list`;
   };
   // The view toggle keeps the filter and the show-everyone state — switching
@@ -705,6 +710,17 @@ export default async function CallWorkspace({ params, searchParams }) {
     if (filter) q.set("f", filter);
     if (showAll) q.set("v", "all");
     if (want === "list") q.set("view", "list");
+    if (sortByDate) q.set("sort", "date");
+    return `${base}${q.size ? `?${q}` : ""}#list`;
+  };
+  // Same toggle shape as the view links above — flips ?sort=date, keeps
+  // everything else the same URL already carries.
+  const sortHref = (want) => {
+    const q = new URLSearchParams();
+    if (filter) q.set("f", filter);
+    if (showAll) q.set("v", "all");
+    if (view === "list") q.set("view", "list");
+    if (want === "date") q.set("sort", "date");
     return `${base}${q.size ? `?${q}` : ""}#list`;
   };
 
@@ -717,6 +733,7 @@ export default async function CallWorkspace({ params, searchParams }) {
     if (filter) q.set("f", filter);
     if (showAll) q.set("v", "all");
     if (view === "list") q.set("view", "list");
+    if (sortByDate) q.set("sort", "date");
     q.set("open", ct.id);
     if (callId) q.set("editCall", callId);
     return `${base}?${q}#c-${ct.id}`;
@@ -736,12 +753,22 @@ export default async function CallWorkspace({ params, searchParams }) {
 
   // Follow-ups due sort to the top with a marker; beneath them, buildings
   // carried descending — the strategic point of this list: the top 32
-  // engineers reach 50% of the buildings.
-  list.sort((a, b) =>
-    (s.is.due(b) - s.is.due(a)) ||
-    (b.buildings_count - a.buildings_count) ||
-    ((a.best_rank ?? 9e9) - (b.best_rank ?? 9e9))
-  );
+  // engineers reach 50% of the buildings. ?sort=date asks for the other
+  // reading instead: most recently called first, never-called last, same
+  // direction as callLog()'s call_date order.
+  if (sortByDate) {
+    list.sort((a, b) => {
+      const ad = s.callsOf(a)[0]?.call_date ?? "";
+      const bd = s.callsOf(b)[0]?.call_date ?? "";
+      return bd.localeCompare(ad);
+    });
+  } else {
+    list.sort((a, b) =>
+      (s.is.due(b) - s.is.due(a)) ||
+      (b.buildings_count - a.buildings_count) ||
+      ((a.best_rank ?? 9e9) - (b.best_rank ?? 9e9))
+    );
+  }
 
   const statusOf = (ct) =>
     ct.dnc ? "dnc" : !s.callsOf(ct).length ? "never_called" : s.lastOutcome(ct);
@@ -754,6 +781,7 @@ export default async function CallWorkspace({ params, searchParams }) {
     if (filter) q.set("f", filter);
     if (showAll) q.set("v", "all");
     if (view === "list") q.set("view", "list");
+    if (sortByDate) q.set("sort", "date");
     q.set("n", String(n));
     return `${base}?${q}#list`;
   };
@@ -904,6 +932,12 @@ export default async function CallWorkspace({ params, searchParams }) {
         <div className="seg">
           <a className={view === "board" ? "on" : ""} href={viewHref("board")}>Kanban</a>
           <a className={view === "list" ? "on" : ""} href={viewHref("list")}>List</a>
+        </div>
+        {/* Same pile, different order — the strategic default (follow-ups due,
+            then buildings carried) or most recently called first. */}
+        <div className="seg">
+          <a className={sortByDate ? "" : "on"} href={sortHref(null)}>Priority</a>
+          <a className={sortByDate ? "on" : ""} href={sortHref("date")}>Most recent</a>
         </div>
       </div>
       <div className="segrow">
