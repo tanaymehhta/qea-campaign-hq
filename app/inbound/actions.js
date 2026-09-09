@@ -181,6 +181,21 @@ export async function setCompanyRelevant(formData) {
 }
 
 /**
+ * A reminder a rep leaves on the account — a different name to contact, how
+ * it relates to another company on file. Same shape as setCompanyRelevant:
+ * one form, one RPC that validates itself.
+ */
+export async function setCompanyNotes(formData) {
+  const id = formData.get("id");
+  const { error } = await db.rpc("inbound_set_company_notes", {
+    p_company: id,
+    p_note: formData.get("note"),
+  });
+  refresh(id, null);
+  back(error?.message);
+}
+
+/**
  * "I have looked at this and reached out."
  *
  * The one fact on these pages that no run can produce, so a person types it.

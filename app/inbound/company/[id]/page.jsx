@@ -5,7 +5,7 @@ import { money } from "../../../../lib/pipeline";
 import { REGIONS, repById } from "../../../../lib/inbound/routing";
 import { verdict, bullets, cap, isApiError, isCreditError, errorReason, researchChip, RUNNING_CHIP } from "../../../../lib/inbound/words";
 import { Research } from "../../research";
-import { RankButtons, ReadyToggle, RelevanceToggle, RestartButton, ReachedOut } from "../../controls";
+import { RankButtons, ReadyToggle, RelevanceToggle, RestartButton, ReachedOut, CompanyNotes } from "../../controls";
 import { touchOf } from "../../../../lib/inbound/touched";
 import { Live } from "../../live";
 import { Running } from "../../running";
@@ -333,6 +333,12 @@ export default async function Company({ params, searchParams }) {
                   </ul>
                 </div>
               ) : null}
+            </div>
+          </Section>
+
+          <Section title="Notes">
+            <div className="i-card">
+              <CompanyNotes companyId={c.id} note={c.notes} />
             </div>
           </Section>
 
