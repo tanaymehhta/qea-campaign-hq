@@ -1,4 +1,4 @@
-import { movePerson, setPersonReady, setCompanyRelevant, restartCompany, setReachedOut } from "./actions";
+import { movePerson, setPersonReady, setCompanyRelevant, setCompanyNotes, restartCompany, setReachedOut } from "./actions";
 import { ALL_REPS, repById } from "../../lib/inbound/routing";
 import { prettyWhen } from "../../lib/db";
 
@@ -144,6 +144,25 @@ export function RelevanceToggle({ companyId, relevant }) {
                 : "Put it back in the queue and research it on the next run"}>
         {relevant ? "Move to not relevant" : "Mark relevant"}
       </button>
+    </form>
+  );
+}
+
+/**
+ * A reminder a rep leaves on the account.
+ *
+ * Nothing the pipeline produces belongs here — a different name to try, or
+ * that this account is really a division of one already on file. Saved
+ * whole on submit, same as any other field in this section; there is no
+ * autosave to fight with a rep who is still typing.
+ */
+export function CompanyNotes({ companyId, note }) {
+  return (
+    <form action={setCompanyNotes} className="i-notes">
+      <input type="hidden" name="id" value={companyId} />
+      <textarea name="note" defaultValue={note ?? ""} rows={3} maxLength={2000}
+                placeholder="A different name or contact to try, how this fits into a larger company — anything worth remembering." />
+      <button type="submit" className="i-quiet">Save note</button>
     </form>
   );
 }

@@ -503,6 +503,17 @@ a.i-stat:active { transform: scale(.99); }
                max-height: 300px; overflow: auto; }
 .i-quote .borrowed { font-size: 12px; color: var(--ink-3); line-height: 1.45; margin-bottom: 6px; }
 
+/* The reminder a rep leaves on an account — a plain form, no field label
+   needed beyond the section heading above it. */
+.i-notes { display: flex; flex-direction: column; gap: 10px; max-width: 74ch; }
+.i-notes textarea {
+  font: inherit; font-size: 13.5px; line-height: 1.55; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--page); color: var(--ink-1); resize: vertical;
+}
+.i-notes textarea:focus { outline: none; border-color: var(--axis); }
+.i-notes button { align-self: flex-start; }
+
 /* ── the draft, on the person page ───────────────────────────────────────── */
 
 .i-mail input, .i-mail textarea {
