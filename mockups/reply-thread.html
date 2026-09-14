@@ -1,0 +1,371 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Reply thread — collapsed stack + sequence rail</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  MOCKUP ONLY — standalone, no imports, no Supabase, no build step, nothing
+  in app/ touched. Three ways to combine the collapsed stack (B) with the
+  sequence rail (C): every send folds to one line, and every line says which
+  step of the campaign it was. They differ only in where the step label sits.
+
+  Data is real: Thedy Joseph, Excel Roofing & Solar (osedki@excelroofing.ca),
+  Roof Campaign — Mark Dolan. Six messages, 13 Aug to 10 Sept 2026, taken
+  from the stored Instantly body.
+
+  All three assume the same prerequisite: a splitter that turns one r.body
+  into [{from, at, text}] by cutting on the "On <date>, <name> wrote:" lines
+  and stripping the ">" depth markers.
+-->
+<style>
+  :root{
+    --bg:#fbfbfc; --card:#fff; --line:#e9e9ec; --line2:#f2f2f4;
+    --ink:#1c1c1e; --ink2:#4a4a4f; --mute:#8e8e93;
+    --good:#0b7a3c; --good-bg:#e9f7ef; --good-line:#c9ecd8;
+    --blue:#2554c7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 24px 90px}
+  h1{font-size:25px;font-weight:600;letter-spacing:-.02em;margin:0 0 6px}
+  .sub{margin:0 0 20px;color:var(--mute);font-size:13.5px;max-width:72ch;line-height:1.55}
+  h2{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--mute);
+    font-weight:600;margin:34px 0 6px}
+  .note{margin:0 0 14px;font-size:13px;color:var(--ink2);max-width:72ch;line-height:1.55}
+  code{font-size:12.5px;background:#f0f0f2;padding:1px 4px;border-radius:4px}
+
+  .row{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .head{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line2)}
+  .glyph{width:32px;height:32px;border-radius:50%;background:#ececed;color:var(--ink2);
+    display:grid;place-items:center;font-size:12px;font-weight:600}
+  .who{font-weight:600;font-size:14.5px}
+  .line{font-size:12.5px;color:var(--mute);margin-top:2px}
+  .pill{margin-left:auto;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;
+    background:var(--good-bg);color:var(--good);border:1px solid var(--good-line)}
+
+  .msg-text{font-size:13.5px;line-height:1.62;color:var(--ink2);white-space:pre-line}
+  .msg-text a{color:var(--blue)}
+  .from{font-size:13px;font-weight:500;color:var(--ink2);flex:none}
+  .them .from{font-weight:600;color:var(--good)}
+  .at{font-size:11.5px;color:var(--mute);flex:none}
+  .peek{color:var(--mute);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;flex:1;min-width:0}
+  details[open] .peek{visibility:hidden}
+  summary{cursor:pointer;list-style:none}
+  summary::-webkit-details-marker{display:none}
+
+  /* ── 1. rail column ──────────────────────────────────────── */
+  .v1 .body{padding:4px 0 6px}
+  .v1 details{display:grid;grid-template-columns:118px 1fr;border-bottom:1px solid var(--line2)}
+  .v1 details:last-child{border-bottom:0}
+  .v1 summary{display:contents}
+  .v1 .lbl{padding:11px 14px 11px 16px;text-align:right;font-size:11.5px;color:var(--mute);
+    border-right:1px solid var(--line);line-height:1.4}
+  .v1 .lbl b{display:block;font-size:12px;color:var(--ink2);font-weight:600}
+  .v1 .peekwrap{display:flex;align-items:baseline;gap:10px;padding:11px 16px}
+  .v1 .open-body{grid-column:2;padding:0 16px 16px}
+  .v1 .them .lbl{background:var(--good-bg)}
+  .v1 .them .lbl b{color:var(--good)}
+  .v1 .them .peekwrap,.v1 .them .open-body{background:var(--good-bg)}
+  .v1 .them .lbl{border-right-color:var(--good-line)}
+
+  /* ── 2. inline chip ──────────────────────────────────────── */
+  .v2 .body{padding:6px 16px 10px}
+  .v2 details{border-bottom:1px solid var(--line2)}
+  .v2 details:last-child{border-bottom:0}
+  .v2 summary{display:flex;align-items:baseline;gap:10px;padding:11px 0}
+  .v2 .chip{flex:none;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--mute);background:#f2f2f4;border-radius:5px;padding:2px 7px}
+  .v2 summary .at{margin-left:auto}
+  .v2 .open-body{padding:0 0 15px 0}
+  .v2 .them summary{background:var(--good-bg);margin:0 -16px;padding:11px 16px}
+  .v2 .them .chip{background:var(--good-line);color:var(--good)}
+  .v2 .them .open-body{background:var(--good-bg);margin:0 -16px;padding:0 16px 15px}
+
+  /* ── 3. numbered gutter ──────────────────────────────────── */
+  .v3 .body{padding:14px 16px 16px}
+  .v3 .stem{position:relative;padding-left:32px}
+  .v3 .stem:before{content:"";position:absolute;left:10px;top:12px;bottom:14px;width:2px;background:var(--line)}
+  .v3 details{position:relative;border-bottom:1px solid var(--line2)}
+  .v3 details:last-child{border-bottom:0}
+  .v3 summary{display:flex;align-items:baseline;gap:10px;padding:10px 0}
+  .v3 .n{position:absolute;left:-32px;top:8px;width:22px;height:22px;border-radius:50%;
+    background:var(--card);border:1px solid var(--line);color:var(--mute);
+    display:grid;place-items:center;font-size:11px;font-weight:600}
+  .v3 .them .n{background:var(--good);border-color:var(--good);color:#fff}
+  .v3 summary .at{margin-left:auto}
+  .v3 .open-body{padding:0 0 15px}
+  .v3 .them .msg-text{background:var(--good-bg);border:1px solid var(--good-line);
+    border-radius:10px;padding:11px 13px;color:var(--ink)}
+
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;
+    margin-bottom:6px;background:var(--card)}
+  .seg button{padding:6px 13px;border:0;background:none;font-size:13px;color:var(--mute);cursor:pointer}
+  .seg button.on{background:#f0f0f2;color:var(--ink);font-weight:600}
+  .hide{display:none}
+</style>
+
+<div class="wrap">
+  <h1>Collapsed stack, with the step named</h1>
+  <p class="sub">
+    Same thread three ways. In all of them each message folds to one line — which step
+    it was, the first line, the date — their reply is open and tinted, and clicking any
+    line unfolds it in place. Oldest at the top so the sequence runs downward and their
+    answer lands last. They differ only in where the step label lives.
+  </p>
+
+  <div class="seg">
+    <button class="on" data-v="1">1 · Rail column</button>
+    <button data-v="2">2 · Inline chip</button>
+    <button data-v="3">3 · Numbered gutter</button>
+  </div>
+
+  <!-- ══ 1 ══════════════════════════════════════════════════ -->
+  <section data-view="1" class="v1">
+    <h2>1 · Rail column</h2>
+    <p class="note">
+      A fixed left column carries the step and the date; the right is the fold line.
+      Dates line up under each other, so the gaps between sends are legible without
+      reading. Costs 118px of width and the row needs a grid.
+    </p>
+    <div class="row">
+      <div class="head">
+        <span class="glyph">TJ</span>
+        <span><div class="who">Thedy Joseph</div>
+        <div class="line">Excel Roofing &amp; Solar · Roof Campaign — Mark Dolan · 6 messages</div></span>
+        <span class="pill">interested</span>
+      </div>
+      <div class="body">
+        <details><summary>
+          <span class="lbl"><b>Step 1</b>13 Aug, 15:13</span>
+          <span class="peekwrap"><span class="from">Mark</span><span class="peek">I'm Mark from QEA Tech. You roof commercial buildings around Maple Ridge…</span></span>
+        </summary><div class="open-body"><div class="msg-text">Hey Thedy,
+
+I'm Mark from QEA Tech.
+
+You roof commercial buildings around Maple Ridge, British Columbia. The owner rarely knows what is really going on with the roof until it is opened up.
+
+We fly drones over the roof and capture thermal images. We measure exactly where the wet insulation sits, how much of the roof is at risk of failing, and how much energy it is losing.
+
+Here is what you get:
+
+- Reports on the roof's energy loss, its issues and risks, and the fixes, each with the cost, the energy saved, and the payback
+- A measurable 3D model of the roof with the real drone images, accurate to 1 cm
+- A secure portal with a dashboard of how the roof is performing
+
+We have scanned Amazon's warehouse roofs around the world, and over 400 roofs this year alone.
+
+Would this be useful to you?
+
+<a href="#">Book a call with me →</a></div></div></details>
+
+        <details><summary>
+          <span class="lbl"><b>Step 2</b>24 Aug, 19:34</span>
+          <span class="peekwrap"><span class="from">Mark</span><span class="peek">Just following up on my last note, no worries if it slipped by…</span></span>
+        </summary><div class="open-body"><div class="msg-text">Hey Thedy,
+
+Just following up on my last note, no worries if it slipped by. I know this is a busy season.
+
+We've done a lot of roofs like the ones you work on.
+
+If it's easier, check out our product on the website: <a href="#">qeatech.com/roofassure</a>
+
+Thanks</div></div></details>
+
+        <details><summary>
+          <span class="lbl"><b>Step 3</b>28 Aug, 16:54</span>
+          <span class="peekwrap"><span class="from">Mark</span><span class="peek">Figured it might help to show you how this actually works…</span></span>
+        </summary><div class="open-body"><div class="msg-text">Hey Thedy,
+
+Figured it might help to show you how this actually works.
+
+<a href="#">Book a call with me →</a></div></div></details>
+
+        <details><summary>
+          <span class="lbl"><b>Step 4</b>2 Sept, 15:53</span>
+          <span class="peekwrap"><span class="from">Mark</span><span class="peek">If this is useful but now's not the time, maybe we can find a time later…</span></span>
+        </summary><div class="open-body"><div class="msg-text">Hey Thedy,
+
+If this is useful but now's not the time, maybe we can find a time later in the summer when things quiet down?</div></div></details>
+
+        <details><summary>
+          <span class="lbl"><b>Step 5</b>8 Sept, 08:36</span>
+          <span class="peekwrap"><span class="from">Mark</span><span class="peek">If you aren't the right person who handles roof repairs and replacements…</span></span>
+        </summary><div class="open-body"><div class="msg-text">Hey Thedy,
+
+If you aren't the right person who handles roof repairs and replacements, can you point me to the right person in your company that does?
+
+Sorry for the repeated follow ups.
+
+Have a good day.
+
+Mark</div></div></details>
+
+        <details class="them" open><summary>
+          <span class="lbl"><b>Replied</b>10 Sept, 19:34</span>
+          <span class="peekwrap"><span class="from">Thedy Joseph</span><span class="peek">It has been busy , we have some time tomorrow…</span></span>
+        </summary><div class="open-body"><div class="msg-text">Hi Mark,
+
+It has been busy , we have some time tomorrow if that works for your schedule</div></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 2 ══════════════════════════════════════════════════ -->
+  <section data-view="2" class="v2 hide">
+    <h2>2 · Inline chip</h2>
+    <p class="note">
+      The step is a small chip at the head of each line, date pushed to the right edge.
+      No column, no grid — the flattest of the three and the closest to the row list on
+      the page already. Dates do not align, so the rhythm of the sequence is harder to see.
+    </p>
+    <div class="row">
+      <div class="head">
+        <span class="glyph">TJ</span>
+        <span><div class="who">Thedy Joseph</div>
+        <div class="line">Excel Roofing &amp; Solar · Roof Campaign — Mark Dolan · 6 messages</div></span>
+        <span class="pill">interested</span>
+      </div>
+      <div class="body">
+        <details><summary><span class="chip">Step 1</span><span class="from">Mark</span><span class="peek">I'm Mark from QEA Tech. You roof commercial buildings around Maple Ridge…</span><span class="at">13 Aug</span></summary>
+          <div class="open-body"><div class="msg-text">Hey Thedy,
+
+I'm Mark from QEA Tech.
+
+You roof commercial buildings around Maple Ridge, British Columbia. The owner rarely knows what is really going on with the roof until it is opened up.
+
+We fly drones over the roof and capture thermal images. We measure exactly where the wet insulation sits, how much of the roof is at risk of failing, and how much energy it is losing.
+
+We have scanned Amazon's warehouse roofs around the world, and over 400 roofs this year alone.
+
+Would this be useful to you?
+
+<a href="#">Book a call with me →</a></div></div></details>
+
+        <details><summary><span class="chip">Step 2</span><span class="from">Mark</span><span class="peek">Just following up on my last note, no worries if it slipped by…</span><span class="at">24 Aug</span></summary>
+          <div class="open-body"><div class="msg-text">Hey Thedy,
+
+Just following up on my last note, no worries if it slipped by. I know this is a busy season.
+
+We've done a lot of roofs like the ones you work on.
+
+If it's easier, check out our product on the website: <a href="#">qeatech.com/roofassure</a>
+
+Thanks</div></div></details>
+
+        <details><summary><span class="chip">Step 3</span><span class="from">Mark</span><span class="peek">Figured it might help to show you how this actually works…</span><span class="at">28 Aug</span></summary>
+          <div class="open-body"><div class="msg-text">Hey Thedy,
+
+Figured it might help to show you how this actually works.
+
+<a href="#">Book a call with me →</a></div></div></details>
+
+        <details><summary><span class="chip">Step 4</span><span class="from">Mark</span><span class="peek">If this is useful but now's not the time, maybe we can find a time later…</span><span class="at">2 Sept</span></summary>
+          <div class="open-body"><div class="msg-text">Hey Thedy,
+
+If this is useful but now's not the time, maybe we can find a time later in the summer when things quiet down?</div></div></details>
+
+        <details><summary><span class="chip">Step 5</span><span class="from">Mark</span><span class="peek">If you aren't the right person who handles roof repairs and replacements…</span><span class="at">8 Sept</span></summary>
+          <div class="open-body"><div class="msg-text">Hey Thedy,
+
+If you aren't the right person who handles roof repairs and replacements, can you point me to the right person in your company that does?
+
+Sorry for the repeated follow ups.
+
+Have a good day.
+
+Mark</div></div></details>
+
+        <details class="them" open><summary><span class="chip">Replied</span><span class="from">Thedy Joseph</span><span class="peek">It has been busy , we have some time tomorrow…</span><span class="at">10 Sept, 19:34</span></summary>
+          <div class="open-body"><div class="msg-text">Hi Mark,
+
+It has been busy , we have some time tomorrow if that works for your schedule</div></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 3 ══════════════════════════════════════════════════ -->
+  <section data-view="3" class="v3 hide">
+    <h2>3 · Numbered gutter</h2>
+    <p class="note">
+      The step becomes a numbered node on a spine down the left, their reply the filled
+      one at the end. The count is visible at a glance — five circles then a green one —
+      without any word for it. Only holds a number, so a step with a name
+      (<code>sub_campaign_label</code>, a subsequence) has nowhere to put it.
+    </p>
+    <div class="row">
+      <div class="head">
+        <span class="glyph">TJ</span>
+        <span><div class="who">Thedy Joseph</div>
+        <div class="line">Excel Roofing &amp; Solar · Roof Campaign — Mark Dolan · 6 messages</div></span>
+        <span class="pill">interested</span>
+      </div>
+      <div class="body">
+        <div class="stem">
+          <details><summary><span class="n">1</span><span class="from">Mark</span><span class="peek">I'm Mark from QEA Tech. You roof commercial buildings around Maple Ridge…</span><span class="at">13 Aug, 15:13</span></summary>
+            <div class="open-body"><div class="msg-text">Hey Thedy,
+
+I'm Mark from QEA Tech.
+
+You roof commercial buildings around Maple Ridge, British Columbia. The owner rarely knows what is really going on with the roof until it is opened up.
+
+We fly drones over the roof and capture thermal images. We measure exactly where the wet insulation sits, how much of the roof is at risk of failing, and how much energy it is losing.
+
+We have scanned Amazon's warehouse roofs around the world, and over 400 roofs this year alone.
+
+Would this be useful to you?
+
+<a href="#">Book a call with me →</a></div></div></details>
+
+          <details><summary><span class="n">2</span><span class="from">Mark</span><span class="peek">Just following up on my last note, no worries if it slipped by…</span><span class="at">24 Aug, 19:34</span></summary>
+            <div class="open-body"><div class="msg-text">Hey Thedy,
+
+Just following up on my last note, no worries if it slipped by. I know this is a busy season.
+
+We've done a lot of roofs like the ones you work on.
+
+If it's easier, check out our product on the website: <a href="#">qeatech.com/roofassure</a>
+
+Thanks</div></div></details>
+
+          <details><summary><span class="n">3</span><span class="from">Mark</span><span class="peek">Figured it might help to show you how this actually works…</span><span class="at">28 Aug, 16:54</span></summary>
+            <div class="open-body"><div class="msg-text">Hey Thedy,
+
+Figured it might help to show you how this actually works.
+
+<a href="#">Book a call with me →</a></div></div></details>
+
+          <details><summary><span class="n">4</span><span class="from">Mark</span><span class="peek">If this is useful but now's not the time, maybe we can find a time later…</span><span class="at">2 Sept, 15:53</span></summary>
+            <div class="open-body"><div class="msg-text">Hey Thedy,
+
+If this is useful but now's not the time, maybe we can find a time later in the summer when things quiet down?</div></div></details>
+
+          <details><summary><span class="n">5</span><span class="from">Mark</span><span class="peek">If you aren't the right person who handles roof repairs and replacements…</span><span class="at">8 Sept, 08:36</span></summary>
+            <div class="open-body"><div class="msg-text">Hey Thedy,
+
+If you aren't the right person who handles roof repairs and replacements, can you point me to the right person in your company that does?
+
+Sorry for the repeated follow ups.
+
+Have a good day.
+
+Mark</div></div></details>
+
+          <details class="them" open><summary><span class="n">↩</span><span class="from">Thedy Joseph</span><span class="peek">It has been busy , we have some time tomorrow…</span><span class="at">10 Sept, 19:34</span></summary>
+            <div class="open-body"><div class="msg-text">Hi Mark,
+
+It has been busy , we have some time tomorrow if that works for your schedule</div></div></details>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-view]').forEach(s => s.classList.toggle('hide', s.dataset.view !== b.dataset.v));
+  });
+</script>

@@ -952,3 +952,31 @@ html[data-busy="1"] .grid{opacity:.5}
 .pstick .rowactions{justify-content:flex-end}
 .pstick td .next{display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px}
 .pstick td a.next{text-decoration:underline}
+
+/* ── the thread inside a reply row ───────────────────────────────────────────
+   One stored reply is six messages: the answer, then every send quoted under
+   it. lib/thread.mjs splits them; this stacks them oldest first, each folded
+   to a line — which send it was, how it opened, when — with their answer open
+   at the bottom. The nesting is real <details> inside the row's own, so a
+   folded send costs one line and nothing runs on the client. */
+.thr details{border-bottom:1px solid var(--grid)}
+.thr details:last-child{border-bottom:0}
+.thr > summary,.thr details > summary{display:flex;align-items:baseline;gap:10px;
+  padding:11px 0;cursor:pointer;list-style:none}
+.thr details > summary::-webkit-details-marker{display:none}
+.thr .step{flex:0 0 auto;font-size:10.5px;font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink-3);background:var(--wash-2);
+  border-radius:5px;padding:2px 7px}
+.thr .said{flex:0 0 auto;font-size:12.5px;color:var(--ink-2)}
+.thr .peek{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12.5px;color:var(--ink-3)}
+.thr details[open] > summary .peek{visibility:hidden}
+.thr .at{flex:0 0 auto;margin-left:auto;font-size:11.5px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums}
+.thr .text{font-size:13.5px;color:var(--ink-2);line-height:1.62;white-space:pre-line;
+  padding-bottom:14px}
+/* Theirs, which is the message the row is actually about and the only one the
+   buttons below can label. */
+.thr .them > summary{background:var(--tint-n);margin:0 -20px;padding-left:20px;padding-right:20px}
+.thr .them .said{font-weight:600;color:var(--ink-1)}
+.thr .them .text{margin:0 -20px;padding:0 20px 14px;background:var(--tint-n);color:var(--ink-1)}

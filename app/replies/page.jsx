@@ -5,22 +5,33 @@ import {
   logMeetingHref,
 } from "../../lib/db";
 import { PersonLink, Pill, Chev, Reps, RangePicker } from "../../components/ui";
+import { splitThread } from "../../lib/thread.mjs";
 import { classifyReply } from "../conflicts/actions";
 
 export const dynamic = "force-dynamic";
 
-// Three answers, not five. Settled 20 Aug 2026 by Tanay after reading all 135
-// replies in one sitting: a reply is interest, a refusal, or a machine. The
-// schema still allows `referral` and `not_now`, and nothing is lost by dropping
-// the buttons — not one row in the table has ever used either (measured the
-// same day). The two referrals found in the lemlist inbox, Jennifer
-// Berthelot-Jelovic passing us to BranchPattern and John Forester naming Jason
-// Kilgo, he filed as Interested.
+// Five answers, as of 14 Sep 2026. It was three from 20 Aug, on the grounds
+// that a reply is interest, a refusal, or a machine and no row had ever used
+// `referral` or `not_now` — true when it was measured, and it stopped being
+// true the moment these replies started reaching HubSpot.
+//
+// Both new words mean "chase this, but it is not a deal yet". A referral names
+// somebody who has not written to us; "not now" names a date that has not
+// arrived. Filed as Interested they became deals nobody could work: SunFlow's
+// carried the name of the company that had just declined and pointed us at
+// Colleen instead, and was deleted by hand within the hour.
+//
+// They still count in the Interested tile — response_people asks "worth a
+// follow-up", and both are. They do not reach HubSpot, which asks the narrower
+// question. Same column, two readers, and the pill on each row says which of
+// the three words actually applies.
 //
 // `unclassified` is deliberately not a button. It is the state of mail nobody
 // has read yet, which is a fact about us rather than an answer from them.
 const LABELS = [
   ["interested", "Interested"],
+  ["referral", "Referral"],
+  ["not_now", "Not now"],
   ["not_interested", "Not interested"],
   ["auto_reply", "Automatic"],
 ];
@@ -36,6 +47,12 @@ const LABELS = [
 const VIEWS = {
   responded:      { label: "Total responses", count: (c) => c.responded },
   interested:     { label: "Interested",      count: (c) => c.interested },
+  // Still `responded - interested`, and still exactly the refusals — because
+  // `referral` and `not_now` went *inside* the interested flag rather than
+  // beside it. Had they been given a bucket of their own, this subtraction
+  // would have quietly filed both as refusals and the parts would have gone on
+  // adding up, which is what would have stopped anybody noticing. That is the
+  // reason for widening the flag instead: the arithmetic cannot drift.
   not_interested: { label: "Not interested",  count: (c) => (c.responded == null ? null : c.responded - c.interested) },
   needs_label:    { label: "Still to read",   count: (c) => c.needs_label },
   all:            { label: "Everything",      count: (c) => c.people },
@@ -43,16 +60,72 @@ const VIEWS = {
 
 const BLURB = {
   responded: "Everyone who wrote back and meant it — the interested and the not interested together. This is the homepage number.",
-  interested: "People with an interested message anywhere in their thread. One yes wins, even if they later said no.",
+  interested: "People worth a follow-up — interested, referred us on, or asked us to come back later. One yes wins, even if they later said no. Only the plain Interested ones become HubSpot deals; the pills on each row say which is which.",
   not_interested: "People who answered and said no. They are responses — someone read the mail and replied — they are just not leads.",
-  needs_label: "Nobody has read these yet, so they count in no tile. The three buttons are how they leave this list.",
+  needs_label: "Nobody has read these yet, so they count in no tile. The buttons are how they leave this list.",
   all: "Every inbound message on file, both tools, machines included. Nothing is hidden here — it is just not what a tile click opens.",
 };
 
 // A person can hold several labels across a thread; show them all rather than
 // picking one, because which one "wins" differs per pile and a single pill
 // would have to lie about at least one of them.
-const PILL_ORDER = ["interested", "not_interested", "unclassified", "auto_reply"];
+const PILL_ORDER = ["interested", "referral", "not_now", "not_interested", "unclassified", "auto_reply"];
+
+// One row of `replies` is the whole conversation: the answer on top and every
+// send quoted underneath it, five levels of ">" deep. That is what this page
+// used to print verbatim. lib/thread.mjs splits it; here each message folds to
+// a line and their answer stays open, because that is the one the buttons
+// under it label.
+//
+// The chip counts the sends *found in the quote*, so it says "Send 3", never
+// "Step 3": if a step of the campaign went unquoted — a client that trims, a
+// reply to an older mail — the campaign's third step and the third message
+// here are not the same thing, and only one of them is something this row can
+// prove.
+function Thread({ body, leadEmail, receivedAt, leadName, source }) {
+  const parts = splitThread(body ?? "", leadEmail ?? "");
+
+  if (!parts.length) {
+    return (
+      <div className="dim" style={{ fontSize: 12.5 }}>
+        {source === "lemlist" ? "lemlist recorded the subject only" : "No message body recorded"}
+      </div>
+    );
+  }
+
+  // Nothing to fold — a reply with no quoted history, which is most of them.
+  // Reads exactly as it did before rather than as a one-item accordion.
+  if (parts.length === 1) {
+    return <div className="thr"><div className="text" style={{ paddingBottom: 0 }}>{parts[0].text}</div></div>;
+  }
+
+  let sends = 0;
+  return (
+    <div className="thr">
+      {parts.map((m, i) => {
+        const label = m.mine ? `Send ${++sends}` : i === parts.length - 1 ? "Replied" : "They wrote";
+        // Only the newest part is the message this row *is*, and only it can be
+        // dated from the row. Every other date was read out of the quote header.
+        const at = m.at ?? (i === parts.length - 1 ? receivedAt : null);
+        return (
+          <details key={i} open={i === parts.length - 1} className={m.mine ? "" : "them"}>
+            <summary>
+              <span className="step">{label}</span>
+              <span className="said">{m.from || (m.mine ? "Us" : leadName || leadEmail)}</span>
+              {/* The greeting is the same on every send and would be the whole
+                  preview on a folded line, so the fold starts at the sentence. */}
+              <span className="peek">
+                {m.text.replace(/^(?:hi|hey|hello|dear)\b[^\n]{0,40}\n+/i, "").replace(/\s+/g, " ").slice(0, 120)}
+              </span>
+              <span className="at">{at ? prettyWhen(at) : m.when}</span>
+            </summary>
+            <div className="text">{m.text}</div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
 
 export default async function Replies({ searchParams }) {
   const sp = searchParams ?? {};
@@ -292,15 +365,8 @@ export default async function Replies({ searchParams }) {
                         {prettyWhen(r.received_at)}
                       </span>
                     </div>
-                    {r.body?.trim() ? (
-                      <div style={{ fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6, whiteSpace: "pre-line" }}>
-                        {r.body.trim()}
-                      </div>
-                    ) : (
-                      <div className="dim" style={{ fontSize: 12.5 }}>
-                        {r.source === "lemlist" ? "lemlist recorded the subject only" : "No message body recorded"}
-                      </div>
-                    )}
+                    <Thread body={r.body} leadEmail={r.lead_email} receivedAt={r.received_at}
+                            leadName={p.lead_name} source={r.source} />
                     <div className="dim" style={{ fontSize: 12.5, marginTop: 10 }}>
                       {[
                         subById.get(r.campaign_id)?.sub_campaign_label || subById.get(r.campaign_id)?.name,
