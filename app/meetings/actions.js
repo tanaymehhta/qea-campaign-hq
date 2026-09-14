@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "../../lib/db";
+import { requireUser } from "../../lib/auth";
 
 /**
  * Where to land after a write, and the database's own sentence if it refused.
@@ -25,6 +26,19 @@ function back(formData) {
   if (range && range !== "all") q.set("range", range);
   if (formData.get("removed")) q.set("removed", "1");
   return `/meetings${q.size ? `?${q}` : ""}`;
+}
+
+/** The name this write is signed with. See app/calls/actions.js — same rule,
+ *  and done() takes its arguments the other way round in this file. */
+async function signedBy(formData) {
+  const user = await requireUser();
+  if (!user.rep_name) {
+    done(new Error(
+      `${user.email} has no rep name yet, so this cannot be recorded under anyone. ` +
+      `Ask Tanay to add the row in app_users.`,
+    ), formData);
+  }
+  return user.rep_name;
 }
 
 function done(error, formData, ok) {
@@ -57,7 +71,10 @@ export async function logMeeting(formData) {
     p_group: formData.get("group") || null,
     p_evidence: formData.get("evidence") ?? "chat",
     p_note: formData.get("note") ?? "",
-    p_logged_by: formData.get("logged_by") ?? "",
+    // Was a free-text "Logged by" box next to the form. Who logged a meeting
+    // is not something the person logging it should be able to type (11a); the
+    // input at meetings/page.jsx:405 is now ignored.
+    p_logged_by: await signedBy(formData),
   });
   done(error, formData, "logged=1");
 }

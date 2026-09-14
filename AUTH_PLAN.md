@@ -81,6 +81,50 @@ page changes nothing.
 
 ---
 
+## 2b. What changed on 14 Sep, and what is built
+
+Tanay overruled two decisions in section 3. Read this before section 3, which is
+now partly wrong and is kept for its reasoning rather than its conclusions.
+
+**Everyone with a QEA account is allowed in, and everyone is an admin.** So:
+
+- `app_users` is no longer an allowlist. It survives as the **email → rep_name
+  map**, which is the only thing connecting a Microsoft login to the owner
+  strings in the data, and without which nobody can sign a write. The gate is
+  now Entra's "this organizational directory only" and nothing else.
+- The `role` column was **not built**. Nothing is left for it to distinguish.
+- The per-page permission table in section 3 is dead. So are 11b (calls
+  ownership) and 11d (nav by role). `/health`, `/inboxes`, `/conflicts` and
+  `/inbound/system` are open to everyone signed in.
+- The `requireAdmin()` TODO on the inbound restart button (12.4) resolves to
+  `requireUser()` — everyone is an admin, so the button is open to everyone who
+  can sign in.
+
+**Built and verified against the stub (steps 6–9, 11a):**
+
+| | |
+|---|---|
+| `20260914114500_a_login_needs_a_name_to_sign_with.sql` | applied; 4 rows; anon reads `[]` from it |
+| `lib/auth.js` | `sessionClient()`, `currentUser()`, `requireUser()`, `requireRepName()` |
+| `app/login/` + `app/auth/callback` + `app/auth/signout` | one Microsoft button; POST-only signout |
+| `middleware.js` | every route redirects to `/login`; static assets pass |
+| `app/calls/actions.js` | all 7 `p_rep` now from the session, not the form |
+| `app/meetings/actions.js` | `p_logged_by` from the session |
+| `components/nav.jsx` | who you are signed in as, and a way out |
+
+**Not done: steps 10 and 14.** The anon key is still live, still hardcoded at
+`lib/db.js:9`, and production still answers 200 to a stranger.
+
+**`@supabase/ssr` is pinned to 0.7.0**, the last release whose peer range
+(`^2.43.4`) accepts the `supabase-js@2.45.4` pin. Upgrading either means
+upgrading both.
+
+**Section 1.4 is stale.** `Tanay` is no longer an owner string in any table —
+`20260820180000_qea_resellers_and_lber_move_to_mark_vasu` moved his last group
+on 20 Aug. The migration's assertion hard-codes him as the one exception.
+
+---
+
 ## 3. Decisions — settled, do not reopen
 
 **Service: Supabase Auth with the Azure (Entra ID) provider.** The allowlist has

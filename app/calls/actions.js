@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "../../lib/db";
+import { requireUser } from "../../lib/auth";
 
 /**
  * The Calls write path. Same shape as app/conflicts/actions.js: every write
@@ -40,6 +41,32 @@ function done(formData, error, ok) {
 }
 
 /**
+ * The name this write is signed with.
+ *
+ * It used to be `formData.get("rep")` — a hidden field, which meant the browser
+ * decided who made the call. That is the difference between the per-rep numbers
+ * being true and being a claim the page made (AUTH_PLAN 1.5, 11a).
+ *
+ * The hidden inputs are still in the forms and are now simply ignored. Leaving
+ * them costs nothing and removing them touches five JSX files for no change in
+ * behaviour; the fix that matters is that the server stopped reading them.
+ *
+ * A signed-in person with no rep_name cannot sign anything, and is told so on
+ * the row they were working rather than shown a crash screen. done() redirects,
+ * so this never returns in that case.
+ */
+async function signedBy(formData) {
+  const user = await requireUser();
+  if (!user.rep_name) {
+    done(formData, new Error(
+      `${user.email} has no rep name yet, so this cannot be recorded under anyone. ` +
+      `Ask Tanay to add the row in app_users.`,
+    ));
+  }
+  return user.rep_name;
+}
+
+/**
  * One call in, one row out.
  *
  * This used to read `formData.getAll("outcome")` and insert once per ticked
@@ -55,7 +82,7 @@ function done(formData, error, ok) {
 export async function logCall(formData) {
   const { error } = await db.rpc("log_call", {
     p_contact: formData.get("contact_id"),
-    p_rep: formData.get("rep") ?? "",
+    p_rep: await signedBy(formData),
     p_call_date: formData.get("call_date"),
     p_outcome: formData.get("outcome"),
     p_note: formData.get("note") ?? "",
@@ -69,7 +96,7 @@ export async function logCall(formData) {
 export async function editCall(formData) {
   const { error } = await db.rpc("edit_call", {
     p_call: formData.get("call_id"),
-    p_rep: formData.get("rep") ?? "",
+    p_rep: await signedBy(formData),
     p_call_date: formData.get("call_date"),
     p_outcome: formData.get("outcome"),
     p_note: formData.get("note") ?? "",
@@ -98,7 +125,7 @@ export async function adoptOrphanCall(formData) {
     p_call: formData.get("call_id"),
     p_campaign: formData.get("campaign_id"),
     p_full_name: formData.get("full_name") ?? "",
-    p_rep: formData.get("rep") ?? "",
+    p_rep: await signedBy(formData),
     p_org: formData.get("org_name") ?? "",
     p_role: formData.get("role") ?? "",
     p_phone: formData.get("phone") ?? "",
@@ -110,7 +137,7 @@ export async function adoptOrphanCall(formData) {
 export async function setContactDnc(formData) {
   const { error } = await db.rpc("set_contact_dnc", {
     p_contact: formData.get("contact_id"),
-    p_rep: formData.get("rep") ?? "",
+    p_rep: await signedBy(formData),
     p_reason: formData.get("reason") ?? "",
   });
   done(formData, error);
@@ -119,7 +146,7 @@ export async function setContactDnc(formData) {
 export async function updateContactDetail(formData) {
   const { error } = await db.rpc("update_contact_detail", {
     p_contact: formData.get("contact_id"),
-    p_rep: formData.get("rep") ?? "",
+    p_rep: await signedBy(formData),
     p_field: formData.get("field"),
     p_value: formData.get("value") ?? "",
   });
@@ -129,7 +156,7 @@ export async function updateContactDetail(formData) {
 export async function setCallback(formData) {
   const { error } = await db.rpc("set_callback", {
     p_contact: formData.get("contact_id"),
-    p_rep: formData.get("rep") ?? "",
+    p_rep: await signedBy(formData),
     p_date: formData.get("date") || null,
   });
   done(formData, error);
@@ -139,7 +166,7 @@ export async function setCallback(formData) {
 export async function restoreContact(formData) {
   const { error } = await db.rpc("restore_contact", {
     p_contact: formData.get("contact_id"),
-    p_rep: formData.get("rep") ?? "",
+    p_rep: await signedBy(formData),
   });
   done(formData, error);
 }

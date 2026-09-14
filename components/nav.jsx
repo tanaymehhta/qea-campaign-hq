@@ -25,7 +25,7 @@ const LINKS = [
  * localStorage. Until someone picks one, `data-theme` is absent and the OS
  * preference wins — see the media query in globals.css.
  */
-export default function Nav({ synced, stale, conflicts, review }) {
+export default function Nav({ synced, stale, conflicts, review, who }) {
   const path = usePathname();
   const [theme, setTheme] = useState(null);
 
@@ -67,6 +67,24 @@ export default function Nav({ synced, stale, conflicts, review }) {
         <span className={stale ? "dot stale" : "dot"} />
         {synced ? <>synced <b>{synced}</b></> : "never synced"}
       </span>
+      {/* Who the writes will be signed as. The email is the title rather than
+          the label because the two Marks are told apart by their addresses and
+          nothing else, and a call logged as the wrong Mark is invisible. A
+          person with no rep_name is shown in muted type: they can read
+          everything and sign nothing. */}
+      {who ? (
+        <form method="post" action="/auth/signout"
+              style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span title={who.email}
+                style={{ fontSize: 12, color: who.rep_name ? "var(--ink-2)" : "var(--ink-3)" }}>
+            {who.display_name}{who.rep_name ? "" : " (no rep name)"}
+          </span>
+          <button type="submit" className="theme" title={`Sign out of ${who.email}`}
+                  aria-label="Sign out" style={{ fontSize: 11 }}>
+            ⏻
+          </button>
+        </form>
+      ) : null}
       <button
         className="theme"
         onClick={flip}

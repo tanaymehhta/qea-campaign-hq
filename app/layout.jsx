@@ -6,6 +6,7 @@ import FeedbackBox from "../components/feedback";
 import MeshFooter from "../components/mesh-footer";
 import PreviewBanner from "../components/preview-banner";
 import { readyToReview } from "../lib/github";
+import { currentUser } from "../lib/auth";
 
 export const metadata = {
   title: "QEA Campaign HQ",
@@ -28,10 +29,12 @@ async function lastSync() {
 }
 
 export default async function RootLayout({ children }) {
-  const [s, { count: conflicts }, review] = await Promise.all([
+  const [s, { count: conflicts }, review, who] = await Promise.all([
     lastSync(),
     db.from("v_conflicts").select("*", { count: "exact", head: true }),
     readyToReview(db),
+    // Null on /login, which this layout also wraps.
+    currentUser(),
   ]);
   const ageMin = s?.finished_at
     ? Math.round((Date.now() - new Date(s.finished_at).getTime()) / 60000)
@@ -53,6 +56,7 @@ export default async function RootLayout({ children }) {
             stale={stale}
             conflicts={conflicts ?? 0}
             review={review}
+            who={who}
           />
           {children}
           {/* On every page, because the moment you notice something is the
