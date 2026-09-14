@@ -9,13 +9,29 @@
 //   nightly               — last 14 days, plus templates, steps and mailboxes.
 //   weekly                — last 90 days.
 //   backfill              — explicit ?from=YYYY-MM-DD&to=YYYY-MM-DD
+//   hubspot               — no Instantly pull at all; only pushes interested
+//                           leads to HubSpot. `?only=<email>` narrows it to
+//                           one person, `?dry=1` reports without writing, and
+//                           `?since=YYYY-MM-DD` overrides the go-live floor
+//                           (`?since=1970-01-01` is the backfill).
 //
 // Auth: send the project's service-role key (or anon key) as a Bearer token.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { pushInterested } from "./hubspot.ts";
 
 const TZ = "America/New_York";
 const INSTANTLY = "https://api.instantly.ai/api/v2";
+
+// Replies older than this are not pushed to HubSpot by the scheduled run.
+//
+// Every reply ever marked interested satisfies "interested and has no deal",
+// and most of them are months old and were dealt with by hand long ago.
+// Without a floor, the first scheduled run after switch-on would empty that
+// entire history into the pipeline in one pass — which may well be wanted, but
+// is a decision somebody makes on purpose, not a side effect of turning the
+// schedule on. The backfill is the same code with `?since=1970-01-01`.
+const HUBSPOT_GO_LIVE = "2026-09-14T00:00:00Z";
 
 // Every write in this file is `await db.from(x).upsert(...)` with the `error`
 // half discarded — thirteen sites, without exception. A row rejected by a
@@ -509,6 +525,9 @@ Deno.serve(async (req) => {
       : mode === "weekly" ? shift(to, -90)
       : shift(to, -1));
   const deep = mode !== "incremental";
+  // A mode that pulls nothing. It exists so the HubSpot push can be run and
+  // watched on its own without a full Instantly sync riding along behind it.
+  const hubspotOnly = mode === "hubspot";
 
   const { data: run } = await db.from("sync_runs")
     .insert({ source: "instantly", mode, status: "running" }).select("id").single();
@@ -516,19 +535,40 @@ Deno.serve(async (req) => {
   const detail: Record<string, unknown> = { from, to, mode };
   let wrote = 0, status = "ok", err: string | null = null;
 
-  try {
-    const i = await syncInstantly(from, to, deep);
-    detail.instantly_rows = i; wrote += i;
-  } catch (e) {
-    status = "partial"; err = `instantly: ${e.message}`; detail.instantly_error = e.message;
+  if (!hubspotOnly) {
+    try {
+      const i = await syncInstantly(from, to, deep);
+      detail.instantly_rows = i; wrote += i;
+    } catch (e) {
+      status = "partial"; err = `instantly: ${e.message}`; detail.instantly_error = e.message;
+    }
   }
   // `regroup` used to record its failure in `detail` and leave `status` at
   // 'ok'. A run where the derivation failed reported success.
-  try {
-    detail.grouped = await regroup();
-  } catch (e) {
-    detail.group_error = e.message;
-    status = status === "ok" ? "partial" : status;
+  if (!hubspotOnly) {
+    try {
+      detail.grouped = await regroup();
+    } catch (e) {
+      detail.group_error = e.message;
+      status = status === "ok" ? "partial" : status;
+    }
+  }
+
+  // Instantly said interested; HubSpot gets a deal. Caught, never thrown: a
+  // HubSpot outage costs the sync this step and nothing else, because every
+  // number on the dashboard came from the block above and none of it from here.
+  // Nothing is crossed off on failure, so the next run simply tries again.
+  if (hubspotOnly || mode === "incremental") {
+    try {
+      detail.hubspot = await pushInterested(db, await secret("HUBSPOT_TOKEN"), {
+        only: url.searchParams.get("only"),
+        since: url.searchParams.get("since") ?? HUBSPOT_GO_LIVE,
+        dryRun: url.searchParams.get("dry") === "1",
+      });
+    } catch (e: any) {
+      detail.hubspot_error = e.message;
+      status = status === "ok" ? "partial" : status;
+    }
   }
 
   // A rejected row is not a healthy run, whatever else went right.
