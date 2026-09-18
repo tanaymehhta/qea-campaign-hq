@@ -273,6 +273,21 @@ td .alias{display:block;color:var(--ink-3);font-size:12px;margin-top:1px}
 .banded .band th:nth-child(3){background:var(--band-dh);color:var(--crit)}
 .banded .band th:nth-child(4){background:var(--band-oh);color:var(--good)}
 
+/* Numbers read easier centered under their header than pinned to the right
+   edge of the column — the name and status columns keep their own
+   alignment, only the metric columns (Sent onward) shift. */
+.banded :is(th,td):nth-child(n+3){text-align:center}
+
+/* ~15% roomier: the grouped table carries three colour bands and a bold
+   total row, so it reads best with more air than the plain tables. */
+.banded thead th{padding:14px 11.5px}
+.banded td{padding:12.5px 11.5px}
+.banded th:first-child,.banded td:first-child{padding-left:28px}
+.banded th:last-child,.banded td:last-child{padding-right:28px}
+.banded .band th{padding:11.5px}
+.banded tr.tot td{padding-top:14px}
+.banded table{font-size:15px}
+
 .dim{color:var(--ink-3)}
 .bad{color:var(--crit);font-weight:600}
 .mid{color:var(--serious);font-weight:600}
@@ -642,6 +657,7 @@ details.rail > summary::-webkit-details-marker{display:none}
   details.rail{position:static}
   details.rail > summary{display:flex;align-items:center;gap:8px}
   details.rail[open] > summary{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--grid)}
+  details.rail[open] .railbody{animation:slideDown .3s cubic-bezier(.22,.8,.3,1) both}
 }
 .railbody{display:flex;flex-direction:column;gap:17px}
 .facet h4{margin:0 0 7px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
