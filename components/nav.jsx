@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 const LINKS = [
   ["/", "Overview"],
+  ["/chat", "Chat"],
   ["/meetings", "Meetings"],
   ["/calls", "Calls"],
   ["/inbound", "Inbound"],
