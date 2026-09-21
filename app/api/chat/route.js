@@ -1,10 +1,11 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { isStepCount, ToolLoopAgent } from "ai";
 import { currentUser } from "../../../lib/auth";
-import { addMessage, createThread, getThread, listMessages, personNotes } from "../../../lib/hq-chat";
+import { addMessage, createThread, getThread, listMessages, personNotes, proposalInProgress } from "../../../lib/hq-chat";
 import { instructionsFor } from "../../../lib/hq-prompt";
 import { assistantText } from "../../../lib/hq-reply";
-import { forcedCall, toolsFor } from "../../../lib/hq-tools";
+import { proposalRoute, toolsFor } from "../../../lib/hq-tools";
+import { draftProposal } from "../../../lib/proposal";
 import { loadVaultIndex } from "../../../lib/vault-store";
 
 export const runtime = "nodejs";
@@ -54,8 +55,30 @@ export async function POST(req) {
   const notes = await personNotes(user.email);
   const headers = { "X-Thread-Id": threadId, "content-type": "text/plain; charset=utf-8" };
 
-  const forced = forcedCall(text);
-  if (forced) {
+  const open = await proposalInProgress(user.email, threadId).catch(() => false);
+  const turn = proposalRoute(text, open);
+  if (turn.to === "refuse") {
+    const reply = "A proposal needs a client and an address you named. I will not invent either, and no file was written.";
+    await addMessage(threadId, "assistant", reply);
+    return new Response(reply, { headers });
+  }
+  if (turn.to === "service") {
+    let output;
+    try {
+      output = await draftProposal({
+        threadId,
+        email: user.email,
+        message: turn.message,
+        fresh: turn.fresh,
+      });
+    } catch (err) {
+      output = { refused: true, message: safeError(err) };
+    }
+    const reply = assistantText({ userText: text, resultText: "", outputs: output ? [output] : [] });
+    await addMessage(threadId, "assistant", reply);
+    return new Response(reply, { headers });
+  }
+  if (turn.to === "other") {
     const tools = toolsFor({
       email: user.email,
       repName: user.rep_name,
@@ -64,7 +87,7 @@ export async function POST(req) {
     });
     let output;
     try {
-      output = await tools[forced.name].execute(forced.input);
+      output = await tools[turn.call.name].execute(turn.call.input);
     } catch (err) {
       output = { refused: true, message: safeError(err) };
     }
