@@ -1,5 +1,5 @@
 import { requireUser } from "../../lib/auth";
-import { getThread, listMessages, listThreads, personNotes } from "../../lib/hq-chat";
+import { getThread, listMessages, listThreads } from "../../lib/hq-chat";
 import ChatBox from "./chat";
 
 export const dynamic = "force-dynamic";
@@ -24,20 +24,19 @@ export default async function ChatPage({ searchParams }) {
   const requested = searchParams?.t;
   const thread = requested ? await getThread(user.email, requested) : null;
   const messages = thread ? await listMessages(thread.id) : [];
-  const notes = await personNotes(user.email);
 
-  // One row instead of the sidebar: a new chat, the earlier ones folded into a
-  // menu, and the note. The page below it is nothing but the thread.
+  // No row of buttons: one quiet line naming the chat you are in, and the menu
+  // behind it holds the new chat and the earlier ones. Nothing to look at when
+  // there is nothing to switch to.
   return (
     <main className="chatmode">
+      {/* the row stays even when it is empty: it is the grid's first track */}
       <div className="chathead">
-        <a className="choice" href="/chat">New chat</a>
         {threads.length ? (
           <details className="threads">
-            <summary>
-              Earlier chats <b style={{ color: "var(--ink-3)", fontWeight: 400 }}>{threads.length}</b>
-            </summary>
+            <summary>{thread?.title || "New chat"}</summary>
             <div className="menu">
+              <a href="/chat" className={thread ? "" : "on"}>New chat</a>
               {threads.map((t) => (
                 <a key={t.id} href={`/chat?t=${t.id}`} className={t.id === thread?.id ? "on" : ""}>
                   {t.title || "Chat"}
@@ -46,9 +45,6 @@ export default async function ChatPage({ searchParams }) {
             </div>
           </details>
         ) : null}
-        <p className="note">
-          {notes.trim() ? "A note is saved for you." : "Nothing saved about you yet."}
-        </p>
       </div>
       <ChatBox thread={thread} messages={messages} accepted={Boolean(thread?.accepted_at)} />
     </main>

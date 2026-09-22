@@ -1,6 +1,7 @@
-import { db, num, prettyDate, prettyWhen } from "../../lib/db";
+import { db, num, prettyDate, prettyWhen, today, repList } from "../../lib/db";
 import { Tile, Pill, PersonLink } from "../../components/ui";
 import FacetRail, { SoftLink, LeadSearch } from "../../components/facet-rail";
+import AddLead from "./add";
 
 export const dynamic = "force-dynamic";
 
@@ -50,9 +51,10 @@ const PAGE = 100;
 export default async function Leads({ searchParams }) {
   const sp = searchParams ?? {};
 
-  const [{ data: groups }, { data: callCampaigns }] = await Promise.all([
+  const [{ data: groups }, { data: callCampaigns }, { reps }] = await Promise.all([
     db.from("campaign_groups").select("id, slug, display_name, sort_order").order("sort_order"),
     db.from("call_campaigns").select("id, slug, display_name").order("created_at"),
+    repList(),
   ]);
 
   // The two kinds of list a person can be on, in one picker. They are different
@@ -307,6 +309,28 @@ export default async function Leads({ searchParams }) {
         />
       </div>
 
+      {/* A write the database refused, said in its own sentence — the same
+          shape /meetings and /calls use, because the sentence is written once
+          in SQL and every page that can trip it shows exactly that. */}
+      {sp.err ? (
+        <div className="card" style={{ marginBottom: 18, borderColor: "var(--warn-ink)" }}>
+          <p style={{ margin: 0 }}>
+            <b>That didn&rsquo;t save.</b> {sp.err} <a href="/leads">dismiss</a>
+          </p>
+        </div>
+      ) : null}
+      {sp.added ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <p style={{ margin: 0 }}>
+            Added. They are on the list below — and if you ticked the meeting, it is on{" "}
+            <a href="/meetings">Meetings</a> and in the KPI. <a href="/leads">see everyone</a>
+          </p>
+        </div>
+      ) : null}
+
+      <AddLead groups={groups ?? []} reps={(reps ?? []).map((r) => r.id)} today={today()}
+        defaultOpen={!!sp.err} />
+
       {twins?.length ? (
         <div className="card" style={{ marginBottom: 18 }}>
           <p style={{ margin: 0 }}>
@@ -427,8 +451,21 @@ export default async function Leads({ searchParams }) {
                         {r.callback_date && !r.first_contacted_at ? (
                           <div className="said">call back {prettyDate(r.callback_date)}</div>
                         ) : null}
-                        {!r.first_contacted_at && !r.calls ? (
+                        {!r.first_contacted_at && !r.calls && !r.meetings ? (
                           <span className="pill p-never_called">not yet</span>
+                        ) : null}
+                        {/* The biggest thing that can have happened to somebody,
+                            and until 21 Aug this page could not see it at all:
+                            a meeting was logged, every number on /meetings moved,
+                            and their row here read exactly as before. */}
+                        {r.meetings ? (
+                          <div style={{ marginTop: r.first_contacted_at || r.calls ? 6 : 0 }}>
+                            <Pill status={r.meeting_status} />
+                            <div className="said">
+                              {r.meetings === 1 ? "meeting" : `${num(r.meetings)} meetings`}
+                              {r.last_meeting_date ? ` · ${prettyDate(r.last_meeting_date)}` : ""}
+                            </div>
+                          </div>
                         ) : null}
                       </td>
                       {/* Null is not a status. Somebody the tools know who was

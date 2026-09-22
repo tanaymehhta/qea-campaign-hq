@@ -6,10 +6,13 @@ import { useEffect, useState } from "react";
 const LINKS = [
   ["/", "Overview"],
   ["/chat", "Chat"],
+  ["/meetings", "Meetings"],
   ["/calls", "Calls"],
   ["/inbound", "Inbound"],
+  ["/pipeline", "Pipeline"],
   ["/campaigns", "Campaigns"],
   ["/leads", "Leads"],
+  ["/replies", "Replies"],
   ["/inboxes", "Inboxes"],
   ["/conflicts", "Conflicts"],
   ["/health", "Health"],

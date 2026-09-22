@@ -1021,19 +1021,19 @@ html[data-busy="1"] .grid{opacity:.5}
    ============================================================ */
 .wrap:has(.chatmode){min-height:100vh;display:flex;flex-direction:column;padding-bottom:26px}
 .wrap:has(.chatmode) .fb,.wrap:has(.chatmode) .foot{display:none}
+.wrap:has(.chatmode) nav.top{border-bottom:none}
 .chatmode{flex:1;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
 
 /* the one row that replaced the sidebar */
-.chathead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  padding-bottom:12px;border-bottom:1px solid var(--grid)}
-.chathead .note{margin-left:auto;margin-block:0;font-size:12px;color:var(--ink-3)}
+.chathead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px}
+.chathead:empty{padding:0}
 details.threads{position:relative}
-details.threads > summary{list-style:none;cursor:pointer;font-size:12px;height:32px;padding:0 12px;
-  border-radius:9px;border:1px solid var(--border);background:var(--surface-1);color:var(--ink-2);
-  display:inline-flex;align-items:center;gap:7px;transition:background .16s,border-color .16s,color .16s}
+details.threads > summary{list-style:none;cursor:pointer;font-size:12.5px;color:var(--ink-3);
+  display:inline-flex;align-items:center;gap:6px;padding:2px 0;transition:color .16s}
 details.threads > summary::-webkit-details-marker{display:none}
-details.threads > summary:hover{background:var(--wash-2);color:var(--ink-1);border-color:var(--axis)}
-details.threads .menu{position:absolute;z-index:5;top:38px;left:0;min-width:240px;max-height:320px;
+details.threads > summary::after{content:"\2304";font-size:11px;line-height:1;transform:translateY(-2px)}
+details.threads[open] > summary,details.threads > summary:hover{color:var(--ink-1)}
+details.threads .menu{position:absolute;z-index:5;top:26px;left:0;min-width:240px;max-height:320px;
   overflow:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r);
   background:var(--surface-1);box-shadow:var(--lift-lg);
   animation:slideDown .24s cubic-bezier(.22,.8,.3,1) both}
@@ -1067,9 +1067,8 @@ details.threads .menu a.on{color:var(--ink-1);font-weight:600}
   color:var(--ink-2);font-size:13px;animation:fadeUp .4s cubic-bezier(.22,.8,.3,1) both}
 .thinking .orb{width:7px;height:7px;border-radius:50%;background:var(--s1);
   animation:breathe 1.2s ease-out infinite}
-.thinking .word{display:inline-block;animation:thinkword 2.2s ease both}
-@keyframes thinkword{0%{opacity:0;transform:translateY(5px)}12%,88%{opacity:1;transform:none}
-  100%{opacity:0;transform:translateY(-5px)}}
+.thinking .word{display:inline-block;animation:thinkword .32s cubic-bezier(.22,.8,.3,1) both}
+@keyframes thinkword{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 
 /* the opening */
 .chatopen{margin:auto 0;display:flex;flex-direction:column;gap:18px;padding-block:12px}

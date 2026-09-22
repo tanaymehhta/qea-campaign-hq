@@ -16,16 +16,51 @@ const CHIPS = [
 ];
 
 // Said one at a time while the model works, so a long answer never looks stuck.
+// Dealt from a shuffled deck rather than read in order: the wait sounds different
+// every time, and it never runs out.
 const STATUS = [
-  "Working",
   "Thinking",
   "Reading your campaigns",
   "Checking the numbers",
-  "Pulling the thread together",
-  "Finding the final answer",
-  "Almost there",
+  "Counting the sends",
+  "Asking the database nicely",
+  "Untangling the thread",
+  "Interrogating a spreadsheet",
+  "Looking for the receipts",
+  "Consulting the mailboxes",
+  "Squinting at a bounce rate",
+  "Doing the maths twice",
+  "Chasing a lead down a hallway",
+  "Waking up HubSpot",
+  "Bribing Instantly for data",
+  "Reading between the follow-ups",
+  "Finding out who actually replied",
+  "Sorting the maybes from the nos",
+  "Warming up an opinion",
+  "Assembling something defensible",
+  "Pretending to be certain",
+  "Checking that twice, it looked wrong",
+  "Rummaging through August",
+  "Counting roofers",
+  "Arguing with a timestamp",
+  "Politely ignoring the spam folder",
+  "Following a hunch",
+  "Writing, then deleting, then writing",
+  "Nearly there, honestly",
+  "Making it sound like a human wrote it",
+  "One more look and I am done",
 ];
 
+/** A fresh shuffle, never opening on the word the last deck closed with. */
+function deal(last) {
+  const deck = STATUS.slice();
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  if (deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];
+  return deck;
+}
 /** The model writes **bold**. Showing the asterisks is worse than showing neither. */
 function Bold({ text }) {
   const parts = String(text).split(/\*\*(.+?)\*\*/gs);
@@ -126,16 +161,16 @@ const words = (text) => text.match(/\S+\s*/g) || [];
  * words are only the fallback for the stretch where nothing is being called.
  */
 function Thinking({ label }) {
-  const [i, setI] = useState(0);
+  const [deck, setDeck] = useState(deal);
   useEffect(() => {
-    const id = setInterval(() => setI((n) => n + 1), 2200);
+    const id = setInterval(() => setDeck((d) => (d.length > 1 ? d.slice(1) : deal(d[0]))), 2200);
     return () => clearInterval(id);
   }, []);
-  const word = label || STATUS[i % STATUS.length];
+  const word = label || deck[0];
   return (
     <div className="thinking">
       <span className="orb" />
-      <span className="word" key={label || i}>{word}</span>
+      <span className="word" key={word}>{word}</span>
     </div>
   );
 }
