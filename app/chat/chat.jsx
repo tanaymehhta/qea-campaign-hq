@@ -26,6 +26,50 @@ const STATUS = [
   "Almost there",
 ];
 
+/** The model writes **bold**. Showing the asterisks is worse than showing neither. */
+function Bold({ text }) {
+  const parts = String(text).split(/\*\*(.+?)\*\*/gs);
+  return (
+    <>
+      {parts.map((part, index) => (index % 2 ? <strong key={index}>{part}</strong> : <span key={index}>{part}</span>))}
+    </>
+  );
+}
+
+/**
+ * The proposal recap is a fenced block whose columns only line up in a
+ * monospace face. Everything outside the fences is ordinary prose.
+ */
+function Written({ text }) {
+  const parts = String(text).split(/```[a-z]*\n?([\s\S]*?)```/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 2 ? (
+          <pre
+            key={index}
+            style={{
+              margin: "10px 0",
+              padding: "12px 14px",
+              overflowX: "auto",
+              whiteSpace: "pre",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: 12,
+              lineHeight: 1.6,
+              background: "var(--ink-9, rgba(0,0,0,.04))",
+              borderRadius: 10,
+            }}
+          >
+            {part.replace(/\n+$/, "")}
+          </pre>
+        ) : (
+          <Bold key={index} text={part} />
+        ),
+      )}
+    </>
+  );
+}
+
 function MessageText({ text, accepted, onAccept }) {
   const nodes = [];
   let last = 0;
@@ -59,7 +103,7 @@ function MessageText({ text, accepted, onAccept }) {
   if (last < text.length) nodes.push(text.slice(last));
   return (
     <>
-      {nodes.map((node, index) => (typeof node === "string" ? <span key={index}>{node}</span> : node))}
+      {nodes.map((node, index) => (typeof node === "string" ? <Written key={index} text={node} /> : node))}
       {draft && !accepted ? (
         <button type="button" className="choice" style={{ marginTop: 8 }} onClick={onAccept}>
           Mark this draft final
@@ -277,9 +321,9 @@ export default function ChatBox({ thread, messages, accepted }) {
                   <AskSteps items={asks.items} busy={busy} onSend={send} />
                 </>
               ) : (
-                <p className="say">
+                <div className="say">
                   <MessageText text={m.content} accepted={accepted} onAccept={accept} />
-                </p>
+                </div>
               )}
             </div>
           );
@@ -302,11 +346,11 @@ export default function ChatBox({ thread, messages, accepted }) {
                 <AskSteps items={asking.items} busy={busy} onSend={send} />
               </>
             ) : (
-              <p className="say">
+              <div className="say">
                 {revealed.slice(0, -1).join("")}
                 <span className="wordin">{revealed[revealed.length - 1]}</span>
                 {revealed.length < all.length || busy ? <span className="cursor" /> : null}
-              </p>
+              </div>
             )}
           </div>
         ) : null}
