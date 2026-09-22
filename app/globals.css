@@ -996,3 +996,102 @@ html[data-busy="1"] .grid{opacity:.5}
 .thr .them > summary{background:var(--tint-n);margin:0 -20px;padding-left:20px;padding-right:20px}
 .thr .them .said{font-weight:600;color:var(--ink-1)}
 .thr .them .text{margin:0 -20px;padding:0 20px 14px;background:var(--tint-n);color:var(--ink-1)}
+
+/* ============================================================
+   Chat — the page is the thread
+   The composer is pinned to the foot of the viewport and the thread takes
+   whatever is left, so nothing on this one page scrolls except the answers.
+   `:has()` rather than a route check in the layout: the page says it is a
+   chat by rendering `.chatmode`, and the two blocks the layout puts on every
+   page — the feedback disclosure and the sync note — stand down for it.
+   ============================================================ */
+.wrap:has(.chatmode){min-height:100vh;display:flex;flex-direction:column;padding-bottom:26px}
+.wrap:has(.chatmode) .fb,.wrap:has(.chatmode) .foot{display:none}
+.chatmode{flex:1;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+
+/* the one row that replaced the sidebar */
+.chathead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding-bottom:12px;border-bottom:1px solid var(--grid)}
+.chathead .note{margin-left:auto;margin-block:0;font-size:12px;color:var(--ink-3)}
+details.threads{position:relative}
+details.threads > summary{list-style:none;cursor:pointer;font-size:12px;height:32px;padding:0 12px;
+  border-radius:9px;border:1px solid var(--border);background:var(--surface-1);color:var(--ink-2);
+  display:inline-flex;align-items:center;gap:7px;transition:background .16s,border-color .16s,color .16s}
+details.threads > summary::-webkit-details-marker{display:none}
+details.threads > summary:hover{background:var(--wash-2);color:var(--ink-1);border-color:var(--axis)}
+details.threads .menu{position:absolute;z-index:5;top:38px;left:0;min-width:240px;max-height:320px;
+  overflow:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r);
+  background:var(--surface-1);box-shadow:var(--lift-lg);
+  animation:slideDown .24s cubic-bezier(.22,.8,.3,1) both}
+details.threads .menu a{display:block;padding:8px 10px;border-radius:8px;font-size:13px;
+  color:var(--ink-2);line-height:1.35;transition:background .14s,color .14s}
+details.threads .menu a:hover{background:var(--wash-2);color:var(--ink-1)}
+details.threads .menu a.on{color:var(--ink-1);font-weight:600}
+
+/* the thread */
+.thread{overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;
+  display:flex;flex-direction:column;gap:18px;padding-block:24px 6px}
+.thread::-webkit-scrollbar{width:8px}
+.thread::-webkit-scrollbar-thumb{background:var(--grid);border-radius:var(--r-pill)}
+.turn{display:flex;flex-direction:column;gap:5px;max-width:74ch;
+  animation:fadeUp .5s cubic-bezier(.22,.8,.3,1) both}
+.turn.me{align-self:flex-end;align-items:flex-end;max-width:min(54ch,88%)}
+.turn .who{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.turn .say{margin:0;white-space:pre-wrap;line-height:1.6;font-size:14.5px}
+.turn.me .say{background:var(--wash-2);border:1px solid var(--border);padding:11px 15px;
+  border-radius:var(--r) var(--r) var(--r-sm) var(--r)}
+.turn .say a{text-decoration:underline;text-underline-offset:2px;color:var(--s1)}
+.wordin{animation:wordin .22s ease-out both}
+@keyframes wordin{from{opacity:0;filter:blur(2px)}to{opacity:1;filter:none}}
+.cursor{display:inline-block;width:6px;height:1em;vertical-align:-1px;margin-left:2px;
+  background:var(--s1);animation:caret 1.05s steps(2,start) infinite}
+@keyframes caret{0%,100%{opacity:1}50%{opacity:0}}
+
+/* what it says while it works */
+.thinking{align-self:flex-start;display:inline-flex;align-items:center;gap:9px;padding:8px 14px;
+  border-radius:var(--r-pill);border:1px solid var(--border);background:var(--surface-1);
+  color:var(--ink-2);font-size:13px;animation:fadeUp .4s cubic-bezier(.22,.8,.3,1) both}
+.thinking .orb{width:7px;height:7px;border-radius:50%;background:var(--s1);
+  animation:breathe 1.2s ease-out infinite}
+.thinking .word{display:inline-block;animation:thinkword 2.2s ease both}
+@keyframes thinkword{0%{opacity:0;transform:translateY(5px)}12%,88%{opacity:1;transform:none}
+  100%{opacity:0;transform:translateY(-5px)}}
+
+/* the opening */
+.chatopen{margin:auto 0;display:flex;flex-direction:column;gap:18px;padding-block:12px}
+.chatopen.gone{animation:chatfade .32s ease forwards}
+@keyframes chatfade{to{opacity:0;transform:translateY(-8px)}}
+.chatopen h1{margin:0;font-size:clamp(22px,4.4vw,30px);font-weight:600;letter-spacing:-.02em;
+  line-height:1.15;text-wrap:balance;animation:fadeUp .55s cubic-bezier(.22,.8,.3,1) both}
+.chatopen p{margin:0;color:var(--ink-2);font-size:14px;max-width:52ch;
+  animation:fadeUp .55s .06s cubic-bezier(.22,.8,.3,1) both}
+.chatopen .chips{display:flex;flex-wrap:wrap;gap:6px}
+.chatopen .chip{font-size:12px;height:32px;padding:0 13px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-1);color:var(--ink-2);
+  display:inline-flex;align-items:center;gap:7px;animation:fadeUp .5s cubic-bezier(.22,.8,.3,1) both;
+  transition:background .16s,border-color .16s,color .16s,transform .18s cubic-bezier(.22,.8,.3,1)}
+.chatopen .chip:hover{background:var(--wash-2);color:var(--ink-1);border-color:var(--axis);
+  transform:translateY(-1px)}
+.chatopen .chip:active{transform:translateY(0) scale(.97)}
+.chatopen .chip .tick{width:6px;height:6px;border-radius:50%;background:var(--s1);flex:none}
+.chatopen .chip .tick.v{background:var(--violet)}
+.chatopen .chip .tick.g{background:var(--good)}
+.chatopen .chip .tick.w{background:var(--warn)}
+
+/* the composer */
+.composer{padding-block:12px 4px}
+.composer .field{display:flex;align-items:flex-end;gap:10px;background:var(--surface-1);
+  border:1px solid var(--border);border-radius:var(--r);padding:8px 8px 8px 16px;
+  transition:border-color .2s,box-shadow .28s cubic-bezier(.22,.8,.3,1)}
+.composer .field:focus-within{border-color:var(--axis);box-shadow:var(--lift)}
+.composer textarea{flex:1;border:0;background:transparent;resize:none;outline:none;font:inherit;
+  font-size:14.5px;line-height:1.55;padding:9px 0;min-height:40px;max-height:190px;color:var(--ink-1)}
+.composer textarea::placeholder{color:var(--ink-3)}
+.composer .send{flex:none;width:40px;height:40px;border-radius:var(--r-sm);cursor:pointer;
+  border:1px solid var(--axis);background:var(--ink-1);color:var(--page);display:grid;place-items:center;
+  transition:transform .2s cubic-bezier(.22,.8,.3,1),opacity .2s,background .2s,border-color .2s}
+.composer .send svg{width:18px;height:18px;transition:transform .25s cubic-bezier(.22,.8,.3,1)}
+.composer .send:hover:not(:disabled) svg{transform:translateY(-3px)}
+.composer .send:active:not(:disabled){transform:scale(.9)}
+.composer .send:disabled{opacity:.3;cursor:default}
+.composer .hint{margin:8px 2px 0;font-size:11.5px;color:var(--ink-3)}

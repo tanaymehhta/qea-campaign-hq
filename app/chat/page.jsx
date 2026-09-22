@@ -26,33 +26,30 @@ export default async function ChatPage({ searchParams }) {
   const messages = thread ? await listMessages(thread.id) : [];
   const notes = await personNotes(user.email);
 
+  // One row instead of the sidebar: a new chat, the earlier ones folded into a
+  // menu, and the note. The page below it is nothing but the thread.
   return (
-    <main style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16, alignItems: "start" }}>
-      <aside className="card" style={{ padding: 12 }}>
-        <a className="choice" href="/chat" style={{ display: "inline-flex", alignItems: "center", marginBottom: 10 }}>
-          New chat
-        </a>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {threads.map((t) => (
-            <a
-              key={t.id}
-              href={`/chat?t=${t.id}`}
-              style={{
-                fontSize: 13,
-                lineHeight: 1.35,
-                color: t.id === thread?.id ? "var(--ink-1)" : "var(--ink-2)",
-                fontWeight: t.id === thread?.id ? 600 : 400,
-                textDecoration: "none",
-              }}
-            >
-              {t.title || "Chat"}
-            </a>
-          ))}
-        </div>
-        <p style={{ fontSize: 11.5, color: "var(--ink-3)", margin: "14px 0 0", lineHeight: 1.45 }}>
+    <main className="chatmode">
+      <div className="chathead">
+        <a className="choice" href="/chat">New chat</a>
+        {threads.length ? (
+          <details className="threads">
+            <summary>
+              Earlier chats <b style={{ color: "var(--ink-3)", fontWeight: 400 }}>{threads.length}</b>
+            </summary>
+            <div className="menu">
+              {threads.map((t) => (
+                <a key={t.id} href={`/chat?t=${t.id}`} className={t.id === thread?.id ? "on" : ""}>
+                  {t.title || "Chat"}
+                </a>
+              ))}
+            </div>
+          </details>
+        ) : null}
+        <p className="note">
           {notes.trim() ? "A note is saved for you." : "Nothing saved about you yet."}
         </p>
-      </aside>
+      </div>
       <ChatBox thread={thread} messages={messages} accepted={Boolean(thread?.accepted_at)} />
     </main>
   );

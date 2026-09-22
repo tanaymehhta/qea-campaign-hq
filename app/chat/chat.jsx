@@ -1,9 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
-const CHIPS = ["Create a proposal", "Research a campaign", "Create a meeting brief"];
+// Four openers, each with the dot that means what it means everywhere else:
+// blue is email, violet is the phone, green is the outcome you want, amber
+// needs a human.
+const CHIPS = [
+  ["Create a proposal", ""],
+  ["Research a campaign", "v"],
+  ["Create a meeting brief", "g"],
+  ["Which replies need me today?", "w"],
+];
+
+// Said one at a time while the model works, so a long answer never looks stuck.
+const STATUS = [
+  "Working",
+  "Thinking",
+  "Reading your campaigns",
+  "Checking the numbers",
+  "Pulling the thread together",
+  "Finding the final answer",
+  "Almost there",
+];
 
 function MessageText({ text, accepted, onAccept }) {
   const nodes = [];
@@ -43,22 +62,76 @@ function MessageText({ text, accepted, onAccept }) {
   );
 }
 
+/** Split into words, keeping the whitespace that follows each one. */
+const words = (text) => text.match(/\S+\s*/g) || [];
+
+/** The pill, with a word that changes every couple of seconds. */
+function Thinking() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setI((n) => n + 1), 2200);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="thinking">
+      <span className="orb" />
+      <span className="word" key={i}>{STATUS[i % STATUS.length]}</span>
+    </div>
+  );
+}
+
 export default function ChatBox({ thread, messages, accepted }) {
   const router = useRouter();
   const [draft, setDraft] = useState("");
   const [sent, setSent] = useState("");
-  const [pending, setPending] = useState("");
   const [busy, setBusy] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState("");
+  const box = useRef(null);
+  const area = useRef(null);
+
+  // The answer streams in whole — `target` is everything received so far, and
+  // `shown` walks through it one word at a time so text never lands in blocks.
+  const target = useRef("");
+  const shown = useRef(0);
+  const [, tick] = useReducer((n) => n + 1, 0);
+
+  useEffect(() => {
+    if (!busy) return undefined;
+    const id = setInterval(() => {
+      if (shown.current < words(target.current).length) {
+        shown.current += 1;
+        tick();
+      }
+    }, 26);
+    return () => clearInterval(id);
+  }, [busy]);
+
+  const bottom = () => {
+    const el = box.current;
+    if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+  };
+  useEffect(bottom);
+
+  function grow(el) {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 190)}px`;
+  }
 
   async function send(text) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
+    if (messages.length === 0) {
+      setLeaving(true);
+      await new Promise((done) => setTimeout(done, 320));
+    }
     setBusy(true);
     setError("");
     setSent(trimmed);
-    setPending("");
     setDraft("");
+    target.current = "";
+    shown.current = 0;
+    if (area.current) area.current.style.height = "auto";
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -77,7 +150,13 @@ export default function ChatBox({ thread, messages, accepted }) {
         const { done, value } = await reader.read();
         if (done) break;
         acc += decoder.decode(value, { stream: true });
-        setPending(acc);
+        target.current = acc;
+        tick();
+      }
+      // Let the words catch up with the answer before the server render
+      // replaces them, so the last sentence is not swallowed.
+      while (shown.current < words(target.current).length) {
+        await new Promise((done) => setTimeout(done, 26));
       }
       if (id && id !== thread?.id) router.push(`/chat?t=${id}`);
       router.refresh();
@@ -85,8 +164,10 @@ export default function ChatBox({ thread, messages, accepted }) {
       setError(err.message);
     } finally {
       setBusy(false);
+      setLeaving(false);
       setSent("");
-      setPending("");
+      target.current = "";
+      shown.current = 0;
     }
   }
 
@@ -110,62 +191,113 @@ export default function ChatBox({ thread, messages, accepted }) {
     }
   }
 
-  const empty = messages.length === 0 && !busy;
+  const all = words(target.current);
+  const revealed = all.slice(0, shown.current);
+  const streaming = revealed.length > 0;
+  const empty = messages.length === 0 && !busy && !sent;
 
   return (
-    <div>
-      {empty ? (
-        <div className="card" style={{ textAlign: "center", padding: "48px 28px" }}>
-          <h1 style={{ fontSize: 22, margin: "0 0 16px", letterSpacing: "-.01em" }}>
-            How can I help you?
-          </h1>
-          <div className="choices" style={{ justifyContent: "center" }}>
-            {CHIPS.map((label) => (
-              <button key={label} type="button" className="choice" onClick={() => send(label)}>
-                {label}
-              </button>
-            ))}
+    <>
+      <div className="thread" ref={box} aria-live="polite">
+        {empty ? (
+          <div className={`chatopen${leaving ? " gone" : ""}`}>
+            <h1>What are we working on?</h1>
+            <p>
+              Campaigns, replies, briefs and proposals. Every answer comes from your own
+              campaigns — not a guess.
+            </p>
+            <div className="chips">
+              {CHIPS.map(([label, hue], i) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="chip"
+                  style={{ animationDelay: `${0.12 + i * 0.06}s` }}
+                  onClick={() => send(label)}
+                >
+                  <span className={`tick ${hue}`} />
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {messages.map((m) => (
-            <p key={m.id} style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-              <b style={{ fontSize: 12, color: "var(--ink-3)" }}>{m.role === "user" ? "You" : "QEA"}</b>
-              <br />
+        ) : null}
+
+        {messages.map((m) => (
+          <div key={m.id} className={`turn${m.role === "user" ? " me" : ""}`}>
+            {m.role === "user" ? null : <span className="who">QEA</span>}
+            <p className="say">
               <MessageText text={m.content} accepted={accepted} onAccept={accept} />
             </p>
-          ))}
-          {sent ? (
-            <p style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-              <b style={{ fontSize: 12, color: "var(--ink-3)" }}>You</b>
-              <br />
-              {sent}
+          </div>
+        ))}
+
+        {sent ? (
+          <div className="turn me">
+            <p className="say">{sent}</p>
+          </div>
+        ) : null}
+
+        {busy && !streaming ? <Thinking /> : null}
+
+        {streaming ? (
+          <div className="turn">
+            <span className="who">QEA</span>
+            <p className="say">
+              {revealed.slice(0, -1).join("")}
+              <span className="wordin">{revealed[revealed.length - 1]}</span>
+              {revealed.length < all.length || busy ? <span className="cursor" /> : null}
             </p>
-          ) : null}
-          {pending ? (
-            <p style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-              <b style={{ fontSize: 12, color: "var(--ink-3)" }}>QEA</b>
-              <br />
-              <MessageText text={pending} accepted={accepted} onAccept={accept} />
-            </p>
-          ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <form
+        className="composer"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(draft);
+        }}
+      >
+        <div className="field">
+          <textarea
+            id="chat-message"
+            ref={area}
+            rows={1}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              grow(e.target);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send(draft);
+              }
+            }}
+            placeholder="Ask about a campaign, a brief, or a proposal"
+            aria-label="Message"
+          />
+          <button className="send" type="submit" disabled={busy || !draft.trim()} aria-label="Send">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
         </div>
-      )}
-
-      {error ? (
-        <p role="alert" style={{ color: "var(--crit)", fontSize: 13 }}>{error}</p>
-      ) : null}
-
-      <form className="gapform" style={{ marginTop: 12 }} onSubmit={(e) => { e.preventDefault(); send(draft); }}>
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask about a campaign, a brief, or a proposal"
-          aria-label="Message"
-        />
-        <button className="choice go" type="submit" disabled={busy}>Send</button>
+        {error ? (
+          <p role="alert" className="hint" style={{ color: "var(--crit)" }}>{error}</p>
+        ) : (
+          <p className="hint">Enter sends · Shift + Enter for a new line</p>
+        )}
       </form>
-    </div>
+    </>
   );
 }
