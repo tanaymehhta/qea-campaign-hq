@@ -49,6 +49,14 @@ function safeError(err) {
   return msg.slice(0, 300) || "The model call failed.";
 }
 
+/** Everything this person has typed on the thread, for the did-they-name-it guard. */
+function saidByUser(history) {
+  return history
+    .filter((message) => message.role === "user")
+    .map((message) => message.content)
+    .join("\n");
+}
+
 /**
  * One route for every person. The email comes from the session, and every
  * thread read or write includes that email. The body cannot name another user.
@@ -93,11 +101,6 @@ export async function POST(req) {
 
   const open = await proposalInProgress(user.email, threadId).catch(() => false);
   const turn = proposalRoute(text, open);
-  if (turn.to === "refuse") {
-    const reply = "A proposal needs a client and an address you named. I will not invent either, and no file was written.";
-    await addMessage(threadId, "assistant", reply);
-    return new Response(reply, { headers });
-  }
   if (turn.to === "service") {
     return streamed(headers, async (say) => {
       say(DOING.draft_proposal);
@@ -125,6 +128,7 @@ export async function POST(req) {
         repName: user.rep_name,
         threadId,
         userText: text,
+        saidByUser: saidByUser(history),
       });
       let output;
       try {
@@ -165,6 +169,7 @@ export async function POST(req) {
         repName: user.rep_name,
         threadId,
         userText: text,
+        saidByUser: saidByUser(history),
       }),
       stopWhen: isStepCount(6),
     });
