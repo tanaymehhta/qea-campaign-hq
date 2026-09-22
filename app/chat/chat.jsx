@@ -180,8 +180,10 @@ export default function ChatBox({ thread, messages, accepted }) {
         tick();
       }
       // Let the words catch up with the answer before the server render
-      // replaces them, so the last sentence is not swallowed.
-      while (shown.current < words(target.current).length) {
+      // replaces them, so the last sentence is not swallowed. A block of
+      // questions is the exception: it becomes the steps, so typing it out
+      // first only shows the rep the list they were not meant to read.
+      while (!parseQuestions(target.current) && shown.current < words(target.current).length) {
         await new Promise((done) => setTimeout(done, 26));
       }
       if (id && id !== thread?.id) router.push(`/chat?t=${id}`);
@@ -229,6 +231,8 @@ export default function ChatBox({ thread, messages, accepted }) {
   const all = words(target.current);
   const revealed = all.slice(0, shown.current);
   const streaming = revealed.length > 0;
+  // The steps stand in for the streamed block from the first frame.
+  const asking = streaming ? parseQuestions(target.current) : null;
   const empty = messages.length === 0 && !busy && !sent;
 
   return (
@@ -292,11 +296,18 @@ export default function ChatBox({ thread, messages, accepted }) {
         {streaming ? (
           <div className="turn">
             <span className="who">QEA</span>
-            <p className="say">
-              {revealed.slice(0, -1).join("")}
-              <span className="wordin">{revealed[revealed.length - 1]}</span>
-              {revealed.length < all.length || busy ? <span className="cursor" /> : null}
-            </p>
+            {asking ? (
+              <>
+                {asking.intro ? <p className="say">{asking.intro}</p> : null}
+                <AskSteps items={asking.items} busy={busy} onSend={send} />
+              </>
+            ) : (
+              <p className="say">
+                {revealed.slice(0, -1).join("")}
+                <span className="wordin">{revealed[revealed.length - 1]}</span>
+                {revealed.length < all.length || busy ? <span className="cursor" /> : null}
+              </p>
+            )}
           </div>
         ) : null}
       </div>
