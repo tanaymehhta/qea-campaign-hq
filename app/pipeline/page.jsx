@@ -177,7 +177,16 @@ function Requeue({ id }) {
   );
 }
 
-export default async function Pipeline({ searchParams }) {
+/**
+ * The board, rendered either at `/pipeline` or as the Pipeline tab of
+ * `/inbound`. `base` is wherever it is standing: every link back to itself is
+ * built from it, so the tab does not fall out of Inbound when you change the
+ * view or the window.
+ */
+export default async function Pipeline({ searchParams, base = "/pipeline" }) {
+  const [path, carried = ""] = base.split("?");
+  const self = (q) => [path, [carried, q].filter(Boolean).join("&")].filter(Boolean).join("?");
+  const carry = carried ? carried.split("&").map((pair) => pair.split("=")) : [];
   const view = VIEWS.some(([k]) => k === searchParams?.view) ? searchParams.view : "runs";
   const range = RUN_RANGES.some(([k]) => k === searchParams?.range) ? searchParams.range : "7";
   const from = searchParams?.from ?? null;
@@ -226,7 +235,7 @@ export default async function Pipeline({ searchParams }) {
 
       <div className="ib-tabs">
         {VIEWS.map(([k, l]) => (
-          <a key={k} href={k === "runs" ? "/pipeline" : `/pipeline?view=${k}`}
+          <a key={k} href={k === "runs" ? self() : self(`view=${k}`)}
             className={view === k ? "on" : ""}>{l}</a>
         ))}
       </div>
@@ -243,19 +252,20 @@ export default async function Pipeline({ searchParams }) {
 
           <div className="segrow">
             <Seg options={RUN_RANGES} current={win.custom ? null : range}
-                 hrefFor={(k) => `/pipeline?range=${k}`} />
+                 hrefFor={(k) => self(`range=${k}`)} />
 
             {/* The browser ships the calendar. Two date inputs and a GET form
                 keep this a server component with no picker library and no
                 client JavaScript, and the window ends up in the URL, so a
                 window worth arguing about can be pasted to somebody else. */}
-            <form className="ib-dates" method="GET">
+            <form className="ib-dates" method="GET" action={path}>
+              {carry.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
               <label>From <input type="date" name="from" max={TODAY()}
                                  defaultValue={win.from ?? ""} /></label>
               <label>To <input type="date" name="to" max={TODAY()}
                                defaultValue={win.to ?? ""} /></label>
               <button type="submit">Apply</button>
-              {win.custom ? <a href="/pipeline?range=7">Clear</a> : null}
+              {win.custom ? <a href={self("range=7")}>Clear</a> : null}
             </form>
 
             <span className="note">
@@ -276,7 +286,7 @@ export default async function Pipeline({ searchParams }) {
           ))}
           {!log.executions.length ? (
             <div className="ib-not-run">
-              No runs in this window. <a href="/pipeline?range=all">All time</a> holds{" "}
+              No runs in this window. <a href={self("range=all")}>All time</a> holds{" "}
               {num(log.total)}.
             </div>
           ) : null}

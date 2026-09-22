@@ -7,6 +7,7 @@ import { cap, errorReason, isCreditError, RUNNING_CHIP } from "../../lib/inbound
 import { RelevanceToggle, RestartButton, ReachedOut } from "./controls";
 import { Live } from "./live";
 import { Running } from "./running";
+import Pipeline from "../pipeline/page";
 import {
   loadQueue, filterLeads, byLane, pageOf, pathOf, CO_LANES, RANGES, VIEWS, tally, share,
 } from "../../lib/inbound/queue";
@@ -279,7 +280,34 @@ function CompanyTable({ rows, rep }) {
   );
 }
 
+/**
+ * Two questions about one thing: the companies waiting for a rep, and whether
+ * the machine that found them is working. They were two entries in the nav and
+ * are one page with two tabs — the pipeline board is rendered here, told where
+ * it is standing so its own links stay inside this page.
+ */
+function InboundTabs({ tab }) {
+  return (
+    <div className="ib-tabs">
+      <a href="/inbound" className={tab === "queue" ? "on" : ""}>Queue</a>
+      <a href="/inbound?tab=pipeline" className={tab === "pipeline" ? "on" : ""}>Pipeline</a>
+    </div>
+  );
+}
+
 export default async function Inbound({ searchParams }) {
+  const tab = searchParams?.tab === "pipeline" ? "pipeline" : "queue";
+  // Answered before the queue is loaded: the two tabs ask the database
+  // different questions, and neither should pay for the other's.
+  if (tab === "pipeline") {
+    return (
+      <div className="i-page">
+        <InboundTabs tab="pipeline" />
+        <Pipeline searchParams={searchParams} base="/inbound?tab=pipeline" />
+      </div>
+    );
+  }
+
   // Every one of the three has to be checked against its own set. An id that no
   // longer exists — a stale bookmark, a renamed rep — used to reach `chip.name`
   // on a null and 500 the whole queue, which is a bad answer to a typo.
@@ -318,6 +346,7 @@ export default async function Inbound({ searchParams }) {
 
   return (
     <div className="i-page">
+      <InboundTabs tab="queue" />
       {/* This page was a photograph: it never asked the database a second time,
           so a restart pressed here could not have changed it however long you
           stared. The interval exists for as long as the work does. */}
