@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useReducer, useRef, useState } from "react";
+import AskSteps from "../../components/ask-steps";
+import { parseQuestions } from "../../lib/ask-steps";
 
 // Four openers, each with the dot that means what it means everywhere else:
 // blue is email, violet is the phone, green is the outcome you want, amber
@@ -35,8 +37,18 @@ function MessageText({ text, accepted, onAccept }) {
     if (match[1]) {
       const name = match[2];
       nodes.push(
-        <a key={i++} href={`/api/chat/file/${match[1]}?name=${encodeURIComponent(name)}`}>
-          Download {name}
+        <a
+          key={i++}
+          className="filechip"
+          download={name}
+          href={`/api/chat/file/${match[1]}?name=${encodeURIComponent(name)}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16" />
+          </svg>
+          <b>Download</b>
+          <span>{name}</span>
         </a>,
       );
     } else {
@@ -65,17 +77,21 @@ function MessageText({ text, accepted, onAccept }) {
 /** Split into words, keeping the whitespace that follows each one. */
 const words = (text) => text.match(/\S+\s*/g) || [];
 
-/** The pill, with a word that changes every couple of seconds. */
-function Thinking() {
+/**
+ * The pill. While the server is running a tool it says which one; the rotating
+ * words are only the fallback for the stretch where nothing is being called.
+ */
+function Thinking({ label }) {
   const [i, setI] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setI((n) => n + 1), 2200);
     return () => clearInterval(id);
   }, []);
+  const word = label || STATUS[i % STATUS.length];
   return (
     <div className="thinking">
       <span className="orb" />
-      <span className="word" key={i}>{STATUS[i % STATUS.length]}</span>
+      <span className="word" key={label || i}>{word}</span>
     </div>
   );
 }
@@ -87,6 +103,7 @@ export default function ChatBox({ thread, messages, accepted }) {
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState("");
+  const [doing, setDoing] = useState("");
   const box = useRef(null);
   const area = useRef(null);
 
@@ -145,11 +162,20 @@ export default function ChatBox({ thread, messages, accepted }) {
       const id = res.headers.get("X-Thread-Id");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      // Status lines come first, each one \u001f-prefixed; the answer is
+      // whatever is left once they have been read off the front.
       let acc = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         acc += decoder.decode(value, { stream: true });
+        while (acc.startsWith("\u001f")) {
+          const end = acc.indexOf("\n");
+          if (end < 0) break;
+          setDoing(acc.slice(1, end));
+          acc = acc.slice(end + 1);
+        }
+        if (acc.startsWith("\u001f")) continue;
         target.current = acc;
         tick();
       }
@@ -162,14 +188,23 @@ export default function ChatBox({ thread, messages, accepted }) {
       router.refresh();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setBusy(false);
-      setLeaving(false);
       setSent("");
       target.current = "";
       shown.current = 0;
+    } finally {
+      setBusy(false);
+      setLeaving(false);
+      setDoing("");
     }
   }
+
+  // The streamed words stay on screen until the server render of the thread
+  // arrives with them. Clearing them in `send` blanked the answer for a frame.
+  useEffect(() => {
+    setSent("");
+    target.current = "";
+    shown.current = 0;
+  }, [messages.length]);
 
   async function accept() {
     if (!thread?.id || busy) return;
@@ -223,14 +258,28 @@ export default function ChatBox({ thread, messages, accepted }) {
           </div>
         ) : null}
 
-        {messages.map((m) => (
-          <div key={m.id} className={`turn${m.role === "user" ? " me" : ""}`}>
-            {m.role === "user" ? null : <span className="who">QEA</span>}
-            <p className="say">
-              <MessageText text={m.content} accepted={accepted} onAccept={accept} />
-            </p>
-          </div>
-        ))}
+        {messages.map((m, index) => {
+          // A block of questions is asked one at a time instead of being shown
+          // as a list the rep has to answer in a format.
+          const asks = index === messages.length - 1 && m.role === "assistant" && !busy
+            ? parseQuestions(m.content)
+            : null;
+          return (
+            <div key={m.id} className={`turn${m.role === "user" ? " me" : ""}`}>
+              {m.role === "user" ? null : <span className="who">QEA</span>}
+              {asks ? (
+                <>
+                  {asks.intro ? <p className="say">{asks.intro}</p> : null}
+                  <AskSteps items={asks.items} busy={busy} onSend={send} />
+                </>
+              ) : (
+                <p className="say">
+                  <MessageText text={m.content} accepted={accepted} onAccept={accept} />
+                </p>
+              )}
+            </div>
+          );
+        })}
 
         {sent ? (
           <div className="turn me">
@@ -238,7 +287,7 @@ export default function ChatBox({ thread, messages, accepted }) {
           </div>
         ) : null}
 
-        {busy && !streaming ? <Thinking /> : null}
+        {busy && !streaming ? <Thinking label={doing} /> : null}
 
         {streaming ? (
           <div className="turn">

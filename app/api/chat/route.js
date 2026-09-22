@@ -11,6 +11,38 @@ import { loadVaultIndex } from "../../../lib/vault-store";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+/** What the person sees while a tool runs, instead of a made-up thought. */
+const DOING = {
+  vault_read: "Reading the wiki",
+  hq_campaigns: "Reading Campaign HQ",
+  remember: "Saving your note",
+  create_meeting_brief: "Writing the brief",
+  draft_proposal: "Calling the proposal agent",
+};
+
+/**
+ * The answer, preceded by status lines. Every line that starts with \u001f is a
+ * status the client shows in place of the pill; the answer follows and is the
+ * only thing stored on the thread.
+ */
+function streamed(headers, work) {
+  const enc = new TextEncoder();
+  const body = new ReadableStream({
+    async start(controller) {
+      const say = (label) => controller.enqueue(enc.encode(`\u001f${label}\n`));
+      let text;
+      try {
+        text = await work(say);
+      } catch (err) {
+        text = safeError(err);
+      }
+      controller.enqueue(enc.encode(text));
+      controller.close();
+    },
+  });
+  return new Response(body, { headers });
+}
+
 function safeError(err) {
   const msg = String(err?.message || err || "");
   if (/sk-|api[_-]?key|bearer|service_role/i.test(msg)) return "The model call failed.";
@@ -53,7 +85,11 @@ export async function POST(req) {
   await addMessage(threadId, "user", text);
   const history = await listMessages(threadId);
   const notes = await personNotes(user.email);
-  const headers = { "X-Thread-Id": threadId, "content-type": "text/plain; charset=utf-8" };
+  const headers = {
+    "X-Thread-Id": threadId,
+    "content-type": "text/plain; charset=utf-8",
+    "x-accel-buffering": "no",
+  };
 
   const open = await proposalInProgress(user.email, threadId).catch(() => false);
   const turn = proposalRoute(text, open);
@@ -63,37 +99,43 @@ export async function POST(req) {
     return new Response(reply, { headers });
   }
   if (turn.to === "service") {
-    let output;
-    try {
-      output = await draftProposal({
-        threadId,
-        email: user.email,
-        message: turn.message,
-        fresh: turn.fresh,
-      });
-    } catch (err) {
-      output = { refused: true, message: safeError(err) };
-    }
-    const reply = assistantText({ userText: text, resultText: "", outputs: output ? [output] : [] });
-    await addMessage(threadId, "assistant", reply);
-    return new Response(reply, { headers });
+    return streamed(headers, async (say) => {
+      say(DOING.draft_proposal);
+      let output;
+      try {
+        output = await draftProposal({
+          threadId,
+          email: user.email,
+          message: turn.message,
+          fresh: turn.fresh,
+        });
+      } catch (err) {
+        output = { refused: true, message: safeError(err) };
+      }
+      const reply = assistantText({ userText: text, resultText: "", outputs: output ? [output] : [] });
+      await addMessage(threadId, "assistant", reply);
+      return reply;
+    });
   }
   if (turn.to === "other") {
-    const tools = toolsFor({
-      email: user.email,
-      repName: user.rep_name,
-      threadId,
-      userText: text,
+    return streamed(headers, async (say) => {
+      say(DOING[turn.call.name] || `Using ${turn.call.name}`);
+      const tools = toolsFor({
+        email: user.email,
+        repName: user.rep_name,
+        threadId,
+        userText: text,
+      });
+      let output;
+      try {
+        output = await tools[turn.call.name].execute(turn.call.input);
+      } catch (err) {
+        output = { refused: true, message: safeError(err) };
+      }
+      const reply = assistantText({ userText: text, resultText: "", outputs: output ? [output] : [] });
+      await addMessage(threadId, "assistant", reply);
+      return reply;
     });
-    let output;
-    try {
-      output = await tools[turn.call.name].execute(turn.call.input);
-    } catch (err) {
-      output = { refused: true, message: safeError(err) };
-    }
-    const reply = assistantText({ userText: text, resultText: "", outputs: output ? [output] : [] });
-    await addMessage(threadId, "assistant", reply);
-    return new Response(reply, { headers });
   }
 
   const key = process.env.OPENROUTER_API_KEY;
@@ -103,42 +145,48 @@ export async function POST(req) {
     return new Response(reply, { headers });
   }
 
-  const vaultIndex = await loadVaultIndex().catch(() => []);
-  const openrouter = createOpenAI({
-    baseURL: "https://openrouter.ai/api/v1",
-    apiKey: key,
-  });
-  const agent = new ToolLoopAgent({
-    model: openrouter.chat(process.env.OPENROUTER_MODEL || "qwen/qwen3.7-max"),
-    instructions: instructionsFor({
-      displayName: user.display_name,
-      email: user.email,
-      repName: user.rep_name,
-      personNotes: notes,
-      vaultIndex,
-    }),
-    tools: toolsFor({
-      email: user.email,
-      repName: user.rep_name,
-      threadId,
-      userText: text,
-    }),
-    stopWhen: isStepCount(6),
-  });
-
-  let result;
-  try {
-    result = await agent.generate({
-      messages: history.map((message) => ({ role: message.role, content: message.content })),
+  return streamed(headers, async (say) => {
+    const vaultIndex = await loadVaultIndex().catch(() => []);
+    const openrouter = createOpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: key,
     });
-  } catch (err) {
-    const reply = safeError(err);
-    await addMessage(threadId, "assistant", reply);
-    return new Response(reply, { status: 200, headers });
-  }
+    const agent = new ToolLoopAgent({
+      model: openrouter.chat(process.env.OPENROUTER_MODEL || "qwen/qwen3.7-max"),
+      instructions: instructionsFor({
+        displayName: user.display_name,
+        email: user.email,
+        repName: user.rep_name,
+        personNotes: notes,
+        vaultIndex,
+      }),
+      tools: toolsFor({
+        email: user.email,
+        repName: user.rep_name,
+        threadId,
+        userText: text,
+      }),
+      stopWhen: isStepCount(6),
+    });
 
-  const outputs = (result.staticToolResults ?? []).map((item) => item.output).filter(Boolean);
-  const reply = assistantText({ userText: text, resultText: result.text, outputs });
-  await addMessage(threadId, "assistant", reply);
-  return new Response(reply, { headers });
+    let result;
+    try {
+      result = await agent.generate({
+        messages: history.map((message) => ({ role: message.role, content: message.content })),
+        onToolExecutionStart: ({ toolCall }) => {
+          const name = toolCall?.toolName;
+          if (name) say(DOING[name] || `Using ${name}`);
+        },
+      });
+    } catch (err) {
+      const failed = safeError(err);
+      await addMessage(threadId, "assistant", failed);
+      return failed;
+    }
+
+    const outputs = (result.staticToolResults ?? []).map((item) => item.output).filter(Boolean);
+    const reply = assistantText({ userText: text, resultText: result.text, outputs });
+    await addMessage(threadId, "assistant", reply);
+    return reply;
+  });
 }
