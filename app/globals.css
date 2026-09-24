@@ -1116,8 +1116,8 @@ details.threads .menu a.on{color:var(--ink-1);font-weight:600}
 .dochead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .dochead b{font-size:13.5px;font-weight:600}
 .docacts{margin-left:auto;display:flex;gap:6px}
-.docfile .choice,.docpanel .choice{gap:6px;color:var(--ink-1);text-decoration:none;white-space:nowrap}
-.docfile .choice svg,.docpanel .choice svg{width:14px;height:14px;flex:none}
+.docfile .choice,.docpanel .choice,.pop .choice{gap:6px;color:var(--ink-1);text-decoration:none;white-space:nowrap}
+.docfile .choice svg,.docpanel .choice svg,.pop .choice svg{width:14px;height:14px;flex:none}
 .choice.icon{width:32px;padding:0;justify-content:center}
 .choice.ghost{border-color:transparent;background:transparent}
 .docfile .choice:disabled{opacity:.4;cursor:default}
@@ -1164,7 +1164,7 @@ details.threads .menu a.on{color:var(--ink-1);font-weight:600}
 .bigphoto.mini .body{flex:1;min-width:0}
 .turn .say a.maplink,.maplink{color:var(--ink-1);text-decoration:none;font-weight:600;
   display:inline-flex;align-items:flex-start;gap:5px}
-.turn .say a.maplink:hover{color:var(--s1);text-decoration:underline;text-underline-offset:2px}
+.turn .say a.maplink:hover,.pop .maplink:hover{color:var(--s1);text-decoration:underline;text-underline-offset:2px}
 .maplink svg{color:var(--s1);width:13px;height:13px;flex:none;margin-top:.3em}
 .noaddr{color:var(--ink-3);font-weight:600}
 .bigphoto .tag{font-size:11px;padding:2px 7px;border-radius:var(--r-pill);background:var(--wash-3);
@@ -1172,6 +1172,22 @@ details.threads .menu a.on{color:var(--ink-1);font-weight:600}
 .bigphoto .tag.ok{background:var(--good-soft);color:var(--good-ink)}
 .docfile .choice.ok{color:var(--good-ink)}
 .docfile .choice.on-ok{background:var(--good-soft);border-color:transparent;color:var(--good-ink)}
+.docver{margin:10px 0 0;font-size:12.5px;color:var(--ink-3)}
+
+/* replacing a photo: one small card under its Edit button */
+.pop{position:fixed;z-index:60;width:320px;background:var(--surface-1);border:1px solid var(--axis);
+  border-radius:var(--r);box-shadow:var(--lift-lg);padding:14px;display:flex;flex-direction:column;gap:10px;
+  font-size:13px;color:var(--ink-1);animation:slideDown .16s cubic-bezier(.22,.8,.3,1) both}
+.pop .row{display:flex;gap:6px;justify-content:space-between;align-items:center}
+.pop .row b{font-size:13.5px}
+.pop .drop{border:1.5px dashed var(--axis);border-radius:var(--r-sm);padding:18px 12px;text-align:center;
+  color:var(--ink-2);transition:background .15s,border-color .15s}
+.pop .drop.over{background:var(--s1-soft);border-color:var(--s1)}
+.pop .drop b{color:var(--ink-1)}
+.pop .hint,.pop .err{margin:0;font-size:12.5px;color:var(--ink-3)}
+.pop .err{color:var(--crit)}
+.pop kbd{font:600 11px ui-monospace,Menlo,monospace;background:var(--wash-3);padding:1px 5px;border-radius:4px}
+.pop .choice:disabled,.pop .choice.off{opacity:.4;cursor:default;pointer-events:none}
 
 /* The panel takes the right-hand column; the thread and the composer keep the
    left, so the rep can still type. The page scrolls, not the thread, so the
