@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import AskSteps from "../../components/ask-steps";
 import { parseQuestions } from "../../lib/ask-steps";
+import ProposalFile, { DocPanel } from "./proposal-file";
 
 // Four openers, each with the dot that means what it means everywhere else:
 // blue is email, violet is the phone, green is the outcome you want, amber
@@ -105,7 +107,7 @@ function Written({ text }) {
   );
 }
 
-function MessageText({ text, accepted, onAccept }) {
+function MessageText({ text, accepted, onAccept, doc, onDoc }) {
   const nodes = [];
   let last = 0;
   let draft = false;
@@ -114,21 +116,16 @@ function MessageText({ text, accepted, onAccept }) {
   for (const match of text.matchAll(mark)) {
     if (match.index > last) nodes.push(text.slice(last, match.index));
     if (match[1]) {
-      const name = match[2];
+      const [, id, name] = match;
       nodes.push(
-        <a
-          key={i++}
-          className="filechip"
-          download={name}
-          href={`/api/chat/file/${match[1]}?name=${encodeURIComponent(name)}`}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16" />
-          </svg>
-          <b>Download</b>
-          <span>{name}</span>
-        </a>,
+        <ProposalFile
+          key={`file${i++}`}
+          id={id}
+          name={name}
+          open={doc?.id === id}
+          onOpen={(page) => onDoc({ id, name, page })}
+          onClose={() => onDoc(null)}
+        />,
       );
     } else {
       draft = true;
@@ -183,6 +180,8 @@ export default function ChatBox({ thread, messages, accepted }) {
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState("");
   const [doing, setDoing] = useState("");
+  // The one file open in the side panel: { id, name, page }, or null.
+  const [doc, setDoc] = useState(null);
   const box = useRef(null);
   const area = useRef(null);
 
@@ -287,6 +286,23 @@ export default function ChatBox({ thread, messages, accepted }) {
     shown.current = 0;
   }, [messages.length]);
 
+  // The state change runs inside the transition callback and is committed
+  // there, or the "after" snapshot is taken before React has drawn it.
+  function showDoc(next) {
+    const apply = () => flushSync(() => setDoc(next));
+    if (document.startViewTransition) document.startViewTransition(apply);
+    else apply();
+  }
+
+  useEffect(() => {
+    if (!doc) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") showDoc(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [doc]);
+
   async function accept() {
     if (!thread?.id || busy) return;
     setBusy(true);
@@ -348,7 +364,10 @@ export default function ChatBox({ thread, messages, accepted }) {
             ? parseQuestions(m.content)
             : null;
           return (
-            <div key={m.id} className={`turn${m.role === "user" ? " me" : ""}`}>
+            <div
+              key={m.id}
+              className={`turn${m.role === "user" ? " me" : ""}${m.content.includes("[file:") ? " wide" : ""}`}
+            >
               {m.role === "user" ? null : <span className="who">QEA</span>}
               {asks ? (
                 <>
@@ -357,7 +376,7 @@ export default function ChatBox({ thread, messages, accepted }) {
                 </>
               ) : (
                 <div className="say">
-                  <MessageText text={m.content} accepted={accepted} onAccept={accept} />
+                  <MessageText text={m.content} accepted={accepted} onAccept={accept} doc={doc} onDoc={showDoc} />
                 </div>
               )}
             </div>
@@ -390,6 +409,8 @@ export default function ChatBox({ thread, messages, accepted }) {
           </div>
         ) : null}
       </div>
+
+      {doc ? <DocPanel key={doc.id} {...doc} onClose={() => showDoc(null)} /> : null}
 
       <form
         className="composer"
