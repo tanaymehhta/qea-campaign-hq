@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { listPhotos } from "../../lib/docx-photos";
 
 // A Letter page at 96 dpi. docx-preview draws each page 612pt wide; the strip
@@ -334,10 +334,68 @@ function outline(id, photo, on) {
 }
 
 /**
- * One building photo: big in the message, a compact row while the panel is
- * open. Clicking the image does nothing; the address is the way to check it.
+ * One photo as large as the screen allows. A native modal dialog, so it sits
+ * above everything and takes focus; Esc, Close, or a click anywhere but the
+ * header closes it.
  */
-function Photo({ id, photo, n, mini, checked, onCheck, onEdit }) {
+function Lightbox({ photo, n, onClose }) {
+  const box = useRef(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useLayoutEffect(() => {
+    const dialog = box.current;
+    dialog.showModal();
+    dialog.querySelector(".lightbox-h .choice").focus();
+    // Esc would also reach the chat's own Esc and close the side panel.
+    const key = (e) => e.key === "Escape" && e.stopPropagation();
+    // The browser would close it at once; closing through onClose animates it.
+    const cancel = (e) => {
+      e.preventDefault();
+      close.current();
+    };
+    dialog.addEventListener("keydown", key);
+    dialog.addEventListener("cancel", cancel);
+    return () => {
+      dialog.removeEventListener("keydown", key);
+      dialog.removeEventListener("cancel", cancel);
+    };
+  }, []);
+  const meta = [SOURCE[photo.source], photo.page >= 0 ? `page ${photo.page + 1}` : null].filter(Boolean).join(" · ");
+  return (
+    <dialog
+      ref={box}
+      className="lightbox"
+      aria-label={`Photo ${n}`}
+      onClick={(e) => {
+        if (!e.target.closest(".lightbox-h")) onClose();
+      }}
+    >
+      <div className="lightbox-h">
+        <div>
+          {photo.address ? (
+            <a className="maplink" href={maps(photo.address)} target="_blank" rel="noopener">
+              {PIN}
+              {photo.address}
+            </a>
+          ) : (
+            <span className="noaddr">Address not recorded</span>
+          )}
+          {meta ? <div className="muted">{meta}</div> : null}
+        </div>
+        <button type="button" className="choice" onClick={onClose} title="Close (Esc)">
+          {CLOSE}Close
+        </button>
+      </div>
+      <img src={photo.src} alt={`Photo ${n}`} />
+    </dialog>
+  );
+}
+
+/**
+ * One building photo: big in the message, a compact row while the panel is
+ * open. Clicking the image shows it full screen.
+ */
+function Photo({ id, photo, n, mini, checked, onCheck, onEdit, onExpand }) {
   const meta = [SOURCE[photo.source], photo.page >= 0 ? `page ${photo.page + 1}` : null].filter(Boolean).join(" · ");
   return (
     <div
@@ -347,7 +405,7 @@ function Photo({ id, photo, n, mini, checked, onCheck, onEdit }) {
       onMouseLeave={mini ? () => outline(id, photo, false) : undefined}
     >
       <div className="imgwrap">
-        <img src={photo.src} alt={`Photo ${n}`} />
+        <img src={photo.src} alt={`Photo ${n}`} onClick={(e) => onExpand(e.currentTarget)} />
         {mini ? <span className="num">{n}</span> : null}
         <button type="button" className="edit" title="Replace this photo" aria-label={`Edit photo ${n}`} onClick={onEdit}>
           {PEN}
@@ -391,6 +449,31 @@ export default function ProposalFile({ id, name, open, onOpen, onClose }) {
   // The photo being replaced, and the Edit button its popover hangs from.
   const [editing, setEditing] = useState(null);
   useEffect(() => setEditing(null), [open]);
+
+  // The photo shown full screen, and the card image it grows out of: the two
+  // share a view-transition name for the length of the morph, never both at once.
+  const [big, setBig] = useState(null);
+  function expand(photo, n, img) {
+    const show = () => flushSync(() => setBig({ photo, n, img }));
+    if (!document.startViewTransition) return show();
+    img.style.viewTransitionName = "bigphoto";
+    document.startViewTransition(() => {
+      img.style.viewTransitionName = "";
+      show();
+    });
+  }
+  function shrink() {
+    const img = big?.img;
+    const hide = () => flushSync(() => setBig(null));
+    if (!document.startViewTransition || !img?.isConnected) return hide();
+    const morph = document.startViewTransition(() => {
+      hide();
+      img.style.viewTransitionName = "bigphoto";
+    });
+    morph.finished.finally(() => {
+      img.style.viewTransitionName = "";
+    });
+  }
 
   async function save(photo, png) {
     const form = new FormData();
@@ -454,6 +537,7 @@ export default function ProposalFile({ id, name, open, onOpen, onClose }) {
                 checked={checked.has(photo.rel)}
                 onCheck={() => check(photo.rel)}
                 onEdit={(e) => setEditing({ photo, n: i + 1, anchor: e.currentTarget })}
+                onExpand={(img) => expand(photo, i + 1, img)}
               />
             ))}
           </div>
@@ -465,6 +549,7 @@ export default function ProposalFile({ id, name, open, onOpen, onClose }) {
           {version.at ? ` · ${ago(version.at)}` : ""}
         </p>
       ) : null}
+      {big ? <Lightbox photo={big.photo} n={big.n} onClose={shrink} /> : null}
       {editing ? (
         <EditPhoto
           key={editing.photo.rel}
