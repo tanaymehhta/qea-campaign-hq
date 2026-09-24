@@ -1172,7 +1172,22 @@ details.threads .menu a.on{color:var(--ink-1);font-weight:600}
 .bigphoto .tag.ok{background:var(--good-soft);color:var(--good-ink)}
 .docfile .choice.ok{color:var(--good-ink)}
 .docfile .choice.on-ok{background:var(--good-soft);border-color:transparent;color:var(--good-ink)}
-.docver{margin:10px 0 0;font-size:12.5px;color:var(--ink-3)}
+.docver{margin-top:10px;font-size:12.5px;color:var(--ink-3)}
+.docver > summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:color .16s}
+.docver > summary::-webkit-details-marker{display:none}
+.docver > summary::after{content:"\2304";font-size:11px;line-height:1;transform:translateY(-2px)}
+.docver[open] > summary,.docver > summary:hover{color:var(--ink-1)}
+/* in the flow rather than floating: the thread would clip it */
+.docver .menu{width:max-content;min-width:300px;max-width:100%;margin-top:6px;padding:6px;border:1px solid var(--border);
+  border-radius:var(--r);background:var(--surface-1);box-shadow:var(--lift-lg);
+  animation:slideDown .24s cubic-bezier(.22,.8,.3,1) both}
+.turn .say .docver .menu a{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;font-size:13px;
+  color:var(--ink-2);text-decoration:none;transition:background .14s,color .14s}
+.turn .say .docver .menu a:hover{background:var(--wash-2);color:var(--ink-1)}
+.turn .say .docver .menu a.on{color:var(--ink-1);font-weight:600}
+.docver .menu svg{width:14px;height:14px;flex:none;color:var(--s1)}
+.docver .menu small{margin-left:auto;padding-left:12px;font-size:11.5px;color:var(--ink-3);font-weight:400;white-space:nowrap}
+.docver .menu .muted{display:block;padding:8px 10px}
 
 /* a photo full screen: dark in both themes, like the glass on the Edit button */
 .bigphoto img{cursor:zoom-in}
@@ -1187,6 +1202,16 @@ dialog.lightbox::backdrop{background:rgba(10,10,10,.95)}
 .lightbox .muted{color:rgba(255,255,255,.7)}
 .lightbox-h .choice{margin-left:auto}
 .lightbox img{flex:1;min-height:0;width:100%;object-fit:contain;cursor:zoom-out;view-transition-name:bigphoto}
+
+/* /files: everything a person made, with its versions */
+.files td{vertical-align:top}
+.files .kind{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:2px}
+.files .vers{margin-top:6px;font-size:12.5px}
+.files .vers > summary{cursor:pointer;color:var(--ink-3);width:max-content}
+.files .vers > summary:hover,.files .vers[open] > summary{color:var(--ink-1)}
+.files .vers ol{margin:6px 0 0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.files .vers li{display:flex;gap:12px}
+.files .vers li span{color:var(--ink-3)}
 
 /* replacing a photo: one small card under its Edit button */
 .pop{position:fixed;z-index:60;width:320px;background:var(--surface-1);border:1px solid var(--axis);

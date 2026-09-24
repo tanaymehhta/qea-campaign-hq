@@ -179,6 +179,51 @@ function ago(at) {
   return at.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+// The app's own date format and time zone, as prettyWhen writes them on /files.
+const when = (iso) =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/New_York", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+  }).format(new Date(iso));
+
+/**
+ * "v3 · Photo 1 replaced · 2 min ago", and behind it every version of the
+ * document with its own download. Read when opened, so it is never stale.
+ */
+function Versions({ id, name, version }) {
+  const [list, setList] = useState(null);
+  return (
+    <details
+      className="docver"
+      onToggle={(e) => {
+        if (!e.currentTarget.open) return;
+        fetch(`/api/chat/file/${id}/versions`)
+          .then((res) => (res.ok ? res.json() : []))
+          .then(setList, () => setList([]));
+      }}
+    >
+      <summary>
+        v{version.n} · {version.change}
+        {version.at ? ` · ${ago(version.at)}` : ""} · Earlier versions
+      </summary>
+      <div className="menu">
+        {list
+          ? list
+              .map((v, i) => (
+                <a key={v.id} href={fileUrl(v.id, name)} download={name} className={v.id === version.id ? "on" : ""}>
+                  {DOWN}
+                  <span>
+                    v{i + 1} · {v.change}
+                  </span>
+                  <small>{v.id === version.id ? "open now" : when(v.created_at)}</small>
+                </a>
+              ))
+              .reverse()
+          : <span className="muted">Loading</span>}
+      </div>
+    </details>
+  );
+}
+
 // Vercel refuses request bodies over 4.5 MB; the route takes 4 MB.
 const MAX_UPLOAD = 4 * 1024 * 1024;
 
@@ -543,12 +588,7 @@ export default function ProposalFile({ id, name, open, onOpen, onClose }) {
           </div>
         </>
       ) : null}
-      {version?.n > 1 ? (
-        <p className="docver">
-          v{version.n} · {version.change}
-          {version.at ? ` · ${ago(version.at)}` : ""}
-        </p>
-      ) : null}
+      {version?.n > 1 ? <Versions id={id} name={name} version={version} /> : null}
       {big ? <Lightbox photo={big.photo} n={big.n} onClose={shrink} /> : null}
       {editing ? (
         <EditPhoto
