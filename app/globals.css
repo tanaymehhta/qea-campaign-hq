@@ -1133,6 +1133,45 @@ details.threads .menu a.on{color:var(--ink-1);font-weight:600}
 .docstrip > button:not(:disabled):hover .docthumb{transform:translateY(-2px)}
 /* A page is paper in both themes, as it is in Word. */
 .docpage > section{zoom:var(--z);background:#fff}
+.docpage img{transition:outline-color .25s}
+.docpage img.hl{outline:6px solid var(--s1);outline-offset:4px}
+
+/* the building photos, outside the document, big enough to judge */
+.docfile .lbl{display:block;margin-top:10px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600}
+.photos{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+/* three across, and one photo still takes a third, not the whole width */
+.photos.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(220px,calc((100% - 24px) / 3)),1fr));gap:12px}
+.bigphoto{border:1px solid var(--border);border-radius:var(--r);background:var(--surface-1);overflow:hidden}
+.bigphoto .imgwrap{position:relative}
+.bigphoto img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block;background:var(--wash-3)}
+.bigphoto .edit{position:absolute;top:10px;right:10px;display:inline-flex;align-items:center;gap:6px;height:32px;
+  padding:0 12px;border-radius:9px;border:0;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;
+  color:#fff;background:rgba(15,15,15,.62);backdrop-filter:blur(6px);transition:background .15s,transform .15s}
+.bigphoto .edit:hover:not(:disabled){background:rgba(15,15,15,.82)}
+.bigphoto .edit:active:not(:disabled){transform:scale(.96)}
+.bigphoto .edit:disabled{cursor:default;opacity:.55}
+.bigphoto .edit svg{width:14px;height:14px}
+.bigphoto .body{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:10px 12px}
+.bigphoto .acts{display:flex;gap:6px;align-items:center}
+.bigphoto .num{position:absolute;top:6px;left:6px;min-width:20px;height:20px;padding:0 5px;border-radius:var(--r-pill);
+  display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;background:rgba(15,15,15,.62);
+  backdrop-filter:blur(6px)}
+.bigphoto.mini{display:flex;align-items:stretch}
+.bigphoto.mini .imgwrap{width:150px;flex:none}
+.bigphoto.mini img{height:100%;aspect-ratio:auto;min-height:100px}
+.bigphoto.mini .edit{height:28px;padding:0 8px;top:6px;right:6px}
+.bigphoto.mini .body{flex:1;min-width:0}
+.turn .say a.maplink,.maplink{color:var(--ink-1);text-decoration:none;font-weight:600;
+  display:inline-flex;align-items:flex-start;gap:5px}
+.turn .say a.maplink:hover{color:var(--s1);text-decoration:underline;text-underline-offset:2px}
+.maplink svg{color:var(--s1);width:13px;height:13px;flex:none;margin-top:.3em}
+.noaddr{color:var(--ink-3);font-weight:600}
+.bigphoto .tag{font-size:11px;padding:2px 7px;border-radius:var(--r-pill);background:var(--wash-3);
+  color:var(--ink-2);white-space:nowrap}
+.bigphoto .tag.ok{background:var(--good-soft);color:var(--good-ink)}
+.docfile .choice.ok{color:var(--good-ink)}
+.docfile .choice.on-ok{background:var(--good-soft);border-color:transparent;color:var(--good-ink)}
 
 /* The panel takes the right-hand column; the thread and the composer keep the
    left, so the rep can still type. The page scrolls, not the thread, so the

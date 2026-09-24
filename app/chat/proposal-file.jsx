@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { listPhotos } from "../../lib/docx-photos";
 
 // A Letter page at 96 dpi. docx-preview draws each page 612pt wide; the strip
 // and the panel shrink it with `zoom`, which also keeps Chrome from inflating
@@ -21,6 +22,26 @@ const SPLIT = (
     <path d="M14 4v16" />
   </svg>
 );
+const PEN = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" />
+  </svg>
+);
+const PIN = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" />
+    <circle cx="12" cy="9.5" r="2.5" />
+  </svg>
+);
+const CHECK = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+);
+const SOURCE = { satellite: "Satellite", streetview: "Street View", screenshot: "Your screenshot" };
 const CLOSE = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
     strokeLinecap="round" aria-hidden="true">
@@ -28,22 +49,24 @@ const CLOSE = (
   </svg>
 );
 
-// One fetch and one render per file, shared by the strip and the panel. The
-// finished pages are also kept by id so the panel's first frame already has
-// them, which is the frame the view transition snapshots.
+// One fetch and one render per file, shared by the strip, the photos and the
+// panel. The finished file is also kept by id so the panel's first frame
+// already has it, which is the frame the view transition snapshots.
 const jobs = new Map();
 const ready = new Map();
 
 /**
- * The file's pages as docx-preview draws them. It breaks only where the file
- * says a page ends (manual breaks, and the breaks Word recorded when it last
- * laid the document out), so a page that overflowed in Word is one long page here.
+ * The file's pages as docx-preview draws them, and its building photos. It
+ * breaks only where the file says a page ends (manual breaks, and the breaks
+ * Word recorded when it last laid the document out), so a page that
+ * overflowed in Word is one long page here.
  */
 function renderFile(id) {
   if (!jobs.has(id)) {
     const job = (async () => {
-      const [{ renderAsync }, res] = await Promise.all([
+      const [{ renderAsync }, { default: JSZip }, res] = await Promise.all([
         import("docx-preview"),
+        import("jszip"),
         fetch(`/api/chat/file/${id}`),
       ]);
       if (!res.ok) throw new Error(res.status === 404 ? "File not found." : `Could not load the pages (${res.status}).`);
@@ -53,14 +76,36 @@ function renderFile(id) {
       host.hidden = true;
       document.body.append(host);
       const className = `docx-${id.slice(0, 8)}`;
-      await renderAsync(await res.blob(), host, host, {
+      const blob = await res.blob();
+      await renderAsync(blob, host, host, {
         className,
         inWrapper: false,
         ignoreLastRenderedPageBreak: false,
       });
       const pages = [...host.querySelectorAll(`section.${className}`)];
-      ready.set(id, pages);
-      return pages;
+
+      // docx-preview draws the body's pictures in document order, so the
+      // photo's place among them finds its <img>. Trusted only when that image
+      // has the photo's proportions; otherwise the photo has no page here.
+      const zip = await JSZip.loadAsync(blob);
+      const drawn = [...host.querySelectorAll(`section.${className} > article img`)];
+      const photos = await Promise.all(
+        (await listPhotos(zip)).map(async (photo) => {
+          const img = drawn[photo.picture];
+          const same = img && Math.abs(parseFloat(img.style.width) / parseFloat(img.style.height) - photo.cx / photo.cy) < 0.01;
+          const section = same ? img.closest("section") : null;
+          return {
+            ...photo,
+            src: URL.createObjectURL(await zip.file(photo.target).async("blob")),
+            page: section ? pages.indexOf(section) : -1,
+            // its place among the page's images, which a copy of the page keeps
+            nth: section ? [...section.querySelectorAll("img")].indexOf(img) : -1,
+          };
+        }),
+      );
+      const file = { pages, photos };
+      ready.set(id, file);
+      return file;
     })();
     job.catch(() => jobs.delete(id));
     jobs.set(id, job);
@@ -68,13 +113,13 @@ function renderFile(id) {
   return jobs.get(id);
 }
 
-function usePages(id) {
-  const [state, setState] = useState(() => ({ pages: ready.get(id) ?? null, error: "" }));
+function useFile(id) {
+  const [state, setState] = useState(() => ({ ...ready.get(id), error: "" }));
   useEffect(() => {
     let live = true;
     renderFile(id).then(
-      (pages) => live && setState({ pages, error: "" }),
-      (err) => live && setState({ pages: null, error: err.message }),
+      (file) => live && setState({ ...file, error: "" }),
+      (err) => live && setState({ error: err.message }),
     );
     return () => {
       live = false;
@@ -94,10 +139,75 @@ function Page({ section }) {
 
 const plural = (n) => `${n} page${n === 1 ? "" : "s"}`;
 const fileUrl = (id, name) => `/api/chat/file/${id}?name=${encodeURIComponent(name)}`;
+const maps = (address) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+
+/** Outline the photo on its page in the open panel, and bring it into view there. */
+function outline(id, photo, on) {
+  const body = document.querySelector(`.docpanel[data-id="${id}"] .docpanel-b`);
+  const img = body?.children[photo.page]?.querySelectorAll("img")[photo.nth];
+  if (!img) return;
+  img.classList.toggle("hl", on);
+  if (!on) return;
+  const box = body.getBoundingClientRect();
+  const at = img.getBoundingClientRect();
+  body.scrollBy({ top: at.top - box.top - (box.height - at.height) / 2, behavior: "smooth" });
+}
+
+/**
+ * One building photo: big in the message, a compact row while the panel is
+ * open. Clicking the image does nothing; the address is the way to check it.
+ */
+function Photo({ id, photo, n, mini, checked, onCheck }) {
+  const meta = [SOURCE[photo.source], photo.page >= 0 ? `page ${photo.page + 1}` : null].filter(Boolean).join(" · ");
+  return (
+    <div
+      className={`bigphoto${mini ? " mini" : ""}`}
+      style={{ viewTransitionName: `photo-${id.slice(0, 8)}-${photo.rel}` }}
+      onMouseEnter={mini ? () => outline(id, photo, true) : undefined}
+      onMouseLeave={mini ? () => outline(id, photo, false) : undefined}
+    >
+      <div className="imgwrap">
+        <img src={photo.src} alt={`Photo ${n}`} />
+        {mini ? <span className="num">{n}</span> : null}
+        <button type="button" className="edit" disabled title="Editing arrives in the next step">
+          {PEN}
+          {mini ? null : "Edit"}
+        </button>
+      </div>
+      <div className="body">
+        <div>
+          {photo.address ? (
+            <a className="maplink" href={maps(photo.address)} target="_blank" rel="noopener">
+              {PIN}
+              {photo.address}
+            </a>
+          ) : (
+            <span className="noaddr">Address not recorded</span>
+          )}
+          {meta ? <div className="muted">{meta}</div> : null}
+        </div>
+        <div className="acts">
+          <span className={`tag${checked ? " ok" : ""}`}>{checked ? "Checked" : "Not checked"}</span>
+          <button type="button" className={`choice ${checked ? "on-ok" : "ok"}`} aria-pressed={checked} onClick={onCheck}>
+            {CHECK}Looks right
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** The file inside the message: name, the pages as a strip, and the way to the panel. */
 export default function ProposalFile({ id, name, open, onOpen, onClose }) {
-  const { pages, error } = usePages(id);
+  const { pages, photos, error } = useFile(id);
+  // Which photos the rep has looked at. Kept on this screen only for now.
+  const [checked, setChecked] = useState(() => new Set());
+  const check = (rel) =>
+    setChecked((was) => {
+      const next = new Set(was);
+      if (!next.delete(rel)) next.add(rel);
+      return next;
+    });
   const note = error || (pages ? `${plural(pages.length)} · ${open ? "open in the panel" : "swipe, or click a page"}` : "Loading the pages");
   return (
     <div className="docfile">
@@ -129,13 +239,31 @@ export default function ProposalFile({ id, name, open, onOpen, onClose }) {
           ))}
         </div>
       )}
+      {photos?.length ? (
+        <>
+          <span className="lbl">Photos in this proposal</span>
+          <div className={`photos${open ? "" : " grid"}`}>
+            {photos.map((photo, i) => (
+              <Photo
+                key={photo.rel}
+                id={id}
+                photo={photo}
+                n={i + 1}
+                mini={open}
+                checked={checked.has(photo.rel)}
+                onCheck={() => check(photo.rel)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
 
 /** The whole document beside the thread, scrolled to `page`. */
 export function DocPanel({ id, name, page, onClose }) {
-  const { pages, error } = usePages(id);
+  const { pages, error } = useFile(id);
   const body = useRef(null);
 
   // Readable width: the panel's, capped at 520px. Set on the element, not in
@@ -155,7 +283,7 @@ export function DocPanel({ id, name, page, onClose }) {
   }, [page, pages]);
 
   return (
-    <aside className="docpanel" aria-label={name}>
+    <aside className="docpanel" data-id={id} aria-label={name}>
       <div className="docpanel-h">
         <span className="name">{name}</span>
         <span className="muted">{error || (pages ? plural(pages.length) : "Loading")}</span>
