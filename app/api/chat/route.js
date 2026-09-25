@@ -9,14 +9,14 @@ import { draftProposal } from "../../../lib/proposal";
 import { loadVaultIndex } from "../../../lib/vault-store";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /** What the person sees while a tool runs, instead of a made-up thought. */
 const DOING = {
   vault_read: "Reading the wiki",
   hq_campaigns: "Reading Campaign HQ",
   remember: "Saving your note",
-  create_meeting_brief: "Writing the brief",
+  create_meeting_brief: "Researching and writing the brief, about two minutes",
   draft_proposal: "Calling the proposal agent",
 };
 
