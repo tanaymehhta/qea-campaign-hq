@@ -164,3 +164,33 @@ database holds is safely cacheable: the sync rewrites it every 30 minutes.
 
     npm install
     npm run dev
+
+## Tests
+
+    npm test
+
+Runs every test that needs no live database: each `*.test.js` (Node's built-in
+`node:test`), the four pure scripts `scripts/test-{routing,busy,runs,window}.mjs`, the
+thread splitter's self-check in `lib/thread.mjs`, and the Deno test for the sync in
+`supabase/functions/sync`. A new `*.test.js` anywhere is picked up without editing the script.
+
+**53 unit tests as of 24 Sep 2026** — 52 reported by `node --test` plus 1 by Deno:
+
+| Where | Count |
+|---|---|
+| `lib/*.test.js` that existed before 24 Sep | 26 |
+| Added 24 Sep: login gate, date windows, null-not-zero, Calls tiles, degraded nodes, inbound header and costs, download names | 14 |
+| Added 24 Sep with the chat's files and briefs | 7 |
+| The four pure scripts and `lib/thread.mjs` | 5 |
+| Deno, `supabase/functions/sync/hubspot_test.ts` | 1 |
+
+A script counts as one test in that total but holds many checks: roughly 200 between them,
+most in `test-routing.mjs`. One failing check fails the whole script. The count goes stale
+the moment someone adds a test; `npm test` prints the current one.
+
+Deliberately not in `npm test`: the checks that read the live database or a running server
+(`scripts/*-parity.mjs`, `calls-guards.mjs`, `test-phase1.mjs`, `test-bounce.mjs`,
+`board-features.mjs`). Run those by hand. `test-touched.mjs` **writes** to a real
+`inbound_companies` row and puts it back. As of 24 Sep, `calls-parity.mjs` still counts five
+call outcomes where the board has six, and `test-phase1.mjs` and `test-bounce.mjs` fail for
+reasons not yet looked into.
