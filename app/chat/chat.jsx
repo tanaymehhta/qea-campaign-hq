@@ -172,6 +172,26 @@ function Thinking({ label }) {
   );
 }
 
+/** 1234 -> 1.2k, 1000000 -> 1M */
+function tokens(n) {
+  if (n >= 1e6) return `${+(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${+(n / 1e3).toFixed(1)}k`;
+  return String(n);
+}
+
+/** What this thread has cost so far, and how full the model's window was on its last call. */
+export function Spend({ thread }) {
+  const cost = Number(thread.cost_usd ?? 0);
+  const used = thread.context_tokens;
+  const limit = thread.context_limit;
+  return (
+    <span className="spend">
+      ${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}
+      {used != null && limit ? ` · ${tokens(used)} / ${tokens(limit)} context (${Math.round((used / limit) * 100)}%)` : ""}
+    </span>
+  );
+}
+
 export default function ChatBox({ thread, messages, accepted }) {
   const router = useRouter();
   const [draft, setDraft] = useState("");
@@ -419,6 +439,8 @@ export default function ChatBox({ thread, messages, accepted }) {
           send(draft);
         }}
       >
+        {/* Also here, so the running cost is in view without scrolling back up. */}
+        {thread ? <Spend thread={thread} /> : null}
         <div className="field">
           <textarea
             id="chat-message"

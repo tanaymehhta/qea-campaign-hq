@@ -1,30 +1,10 @@
 import { requireUser } from "../../lib/auth";
 import { getThread, listMessages, listThreads } from "../../lib/hq-chat";
 import { listFiles } from "../../lib/staff-files";
-import ChatBox from "./chat";
+import ChatBox, { Spend } from "./chat";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Chat — QEA Campaign HQ" };
-
-/** 1234 -> 1.2k, 1000000 -> 1M */
-function tokens(n) {
-  if (n >= 1e6) return `${+(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${+(n / 1e3).toFixed(1)}k`;
-  return String(n);
-}
-
-/** What this thread has cost so far, and how full the model's window was on its last call. */
-function Spend({ thread }) {
-  const cost = Number(thread.cost_usd ?? 0);
-  const used = thread.context_tokens;
-  const limit = thread.context_limit;
-  return (
-    <span className="spend">
-      ${cost < 1 ? cost.toFixed(4) : cost.toFixed(2)}
-      {used != null && limit ? ` · ${tokens(used)} / ${tokens(limit)} context (${Math.round((used / limit) * 100)}%)` : ""}
-    </span>
-  );
-}
 
 export default async function ChatPage({ searchParams }) {
   const user = await requireUser();
