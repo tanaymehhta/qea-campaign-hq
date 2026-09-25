@@ -1,7 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { isStepCount, ToolLoopAgent } from "ai";
 import { currentUser } from "../../../lib/auth";
-import { addMessage, createThread, getThread, listMessages, personNotes, proposalInProgress } from "../../../lib/hq-chat";
+import { addMessage, addSpend, createThread, getThread, listMessages, personNotes, proposalInProgress } from "../../../lib/hq-chat";
 import { instructionsFor } from "../../../lib/hq-prompt";
 import { assistantText } from "../../../lib/hq-reply";
 import { proposalRoute, toolsFor } from "../../../lib/hq-tools";
@@ -47,6 +47,33 @@ function safeError(err) {
   const msg = String(err?.message || err || "");
   if (/sk-|api[_-]?key|bearer|service_role/i.test(msg)) return "The model call failed.";
   return msg.slice(0, 300) || "The model call failed.";
+}
+
+/** Dollars the tool outputs report spending on their own model calls (the proposal service). */
+function outputCost(outputs) {
+  return outputs.reduce((sum, item) => sum + (Number(item?.cost) || 0), 0);
+}
+
+/** OpenRouter's usage.cost on one step's raw response body. */
+function stepCost(step) {
+  let body = step?.response?.body;
+  if (typeof body === "string") {
+    try { body = JSON.parse(body); } catch { return 0; }
+  }
+  return Number(body?.usage?.cost) || 0;
+}
+
+/** The model's context window, from OpenRouter's catalogue, fetched once per server. */
+let catalogue;
+async function contextLimit(model) {
+  catalogue ??= fetch("https://openrouter.ai/api/v1/models")
+    .then((res) => res.json())
+    .then((json) => new Map(json.data.map((m) => [m.id, m.context_length])))
+    .catch(() => {
+      catalogue = undefined;
+      return new Map();
+    });
+  return (await catalogue).get(model) ?? null;
 }
 
 /** Everything this person has typed on the thread, for the did-they-name-it guard. */
@@ -117,6 +144,7 @@ export async function POST(req) {
       }
       const reply = assistantText({ userText: text, resultText: "", outputs: output ? [output] : [] });
       await addMessage(threadId, "assistant", reply);
+      await addSpend(threadId, { cost: outputCost([output]) }).catch(() => {});
       return reply;
     });
   }
@@ -138,6 +166,7 @@ export async function POST(req) {
       }
       const reply = assistantText({ userText: text, resultText: "", outputs: output ? [output] : [] });
       await addMessage(threadId, "assistant", reply);
+      await addSpend(threadId, { cost: outputCost([output]) }).catch(() => {});
       return reply;
     });
   }
@@ -155,8 +184,9 @@ export async function POST(req) {
       baseURL: "https://openrouter.ai/api/v1",
       apiKey: key,
     });
+    const modelId = process.env.OPENROUTER_MODEL || "qwen/qwen3.7-max";
     const agent = new ToolLoopAgent({
-      model: openrouter.chat(process.env.OPENROUTER_MODEL || "qwen/qwen3.7-max"),
+      model: openrouter.chat(modelId),
       instructions: instructionsFor({
         displayName: user.display_name,
         email: user.email,
@@ -172,6 +202,8 @@ export async function POST(req) {
         saidByUser: saidByUser(history),
       }),
       stopWhen: isStepCount(6),
+      // The raw body is where OpenRouter puts usage.cost.
+      include: { responseBody: true },
     });
 
     let result;
@@ -192,6 +224,12 @@ export async function POST(req) {
     const outputs = (result.staticToolResults ?? []).map((item) => item.output).filter(Boolean);
     const reply = assistantText({ userText: text, resultText: result.text, outputs });
     await addMessage(threadId, "assistant", reply);
+    const steps = result.steps ?? [];
+    await addSpend(threadId, {
+      cost: steps.reduce((sum, step) => sum + stepCost(step), 0) + outputCost(outputs),
+      contextTokens: steps.at(-1)?.usage?.inputTokens ?? null,
+      contextLimit: await contextLimit(modelId),
+    }).catch(() => {});
     return reply;
   });
 }
