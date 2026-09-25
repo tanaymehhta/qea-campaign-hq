@@ -1,24 +1,38 @@
+import "./inboxes.css";
 import { db, windowFrom, num } from "../../lib/db";
-import { Pill, RangePicker } from "../../components/ui";
+import { RangePicker } from "../../components/ui";
+import InboxesConsole from "./console";
+import {
+  DOMAIN_OWNER, CAMPAIGNS, CAMPAIGNS_OF_EMAIL, CAMPAIGN_OWNER, ownerOf, HEALTH,
+} from "../../lib/inboxes/assignments";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The mailbox console.
+ *
+ * Every mailbox in one sortable, filterable, searchable table — the one place to
+ * find the single address that is off and fix it. The interactive part is a
+ * client component (`console.jsx`); this server component fetches the mailboxes,
+ * joins each to its owner and campaigns from the hand-kept spreadsheet
+ * (`lib/inboxes/assignments`), attaches the InboxKit health reading where there
+ * is one, and hands the rows down. Warmup is on for every mailbox by standing
+ * instruction from the team, so the sync's stale flag is not shown.
+ */
+
+const CAMPAIGN_ORDER = CAMPAIGNS.map((c) => c.name);
 
 export default async function Inboxes({ searchParams }) {
   const sp = searchParams ?? {};
   const w = windowFrom(sp);
 
-  const [{ data: accounts }, { data: campaigns }, { data: members }, { data: groups }, { data: daily }] = await Promise.all([
-    db.from("email_accounts").select("*").order("domain").order("email"),
-    db.from("campaigns").select("id, name, source, status, sender_emails").order("name"),
-    db.from("campaign_group_members").select("group_id, campaign_id"),
-    db.from("campaign_groups").select("id, display_name"),
+  const [{ data: accounts }, { data: daily }] = await Promise.all([
+    db.from("email_accounts").select("*").eq("source", "instantly").order("domain").order("email"),
     db.from("email_account_daily").select("email, metric_date, sent")
       .gte("metric_date", w.from).lte("metric_date", w.to),
   ]);
 
-  // Per email: total sent, days it actually sent (avg is over sending days,
-  // not calendar days — a mailbox idle on weekends shouldn't look throttled),
-  // and the highest/lowest single day.
+  // Per email: total sent over the window and the days it actually sent.
   const volumeByEmail = new Map();
   for (const d of daily ?? []) {
     const email = d.email.toLowerCase();
@@ -33,47 +47,101 @@ export default async function Inboxes({ searchParams }) {
     v.min = v.days.length ? Math.min(...v.days) : 0;
   }
 
-  const groupNameOf = new Map((groups ?? []).map((g) => [g.id, g.display_name]));
-  const groupOfCampaign = new Map((members ?? []).map((m) => [m.campaign_id, groupNameOf.get(m.group_id)]));
+  // The rows the console renders: mailbox joined to owner, campaigns and health.
+  const rows = (accounts ?? []).map((a) => {
+    const email = a.email.toLowerCase();
+    const ownerName = (DOMAIN_OWNER[a.domain] ?? "—").split(",")[0].trim();
+    const o = ownerOf(DOMAIN_OWNER[a.domain] ?? ownerName);
+    const campaigns = (CAMPAIGNS_OF_EMAIL.get(email) ?? []).map((name) => {
+      const co = ownerOf(CAMPAIGN_OWNER[name]);
+      return { name, tint: co.tint, ink: co.ink };
+    });
+    const health = Object.prototype.hasOwnProperty.call(HEALTH, email) ? HEALTH[email] : null;
+    return {
+      id: a.id,
+      email: a.email,
+      domain: a.domain,
+      owner: ownerName,
+      ownerStyle: { short: o.short, initials: o.initials, tint: o.tint, ink: o.ink },
+      campaigns,
+      health,
+      healthReal: health != null,
+      dailyLimit: a.daily_limit ?? 0,
+      active: a.status === "1" || a.status === "active",
+    };
+  });
 
-  // Invert campaigns.sender_emails: which campaigns does each mailbox send for.
-  const campaignsByEmail = new Map();
-  for (const c of campaigns ?? []) {
-    for (const raw of c.sender_emails ?? []) {
-      const email = raw.toLowerCase();
-      if (!campaignsByEmail.has(email)) campaignsByEmail.set(email, []);
-      campaignsByEmail.get(email).push(c);
-    }
-  }
-
-  const byDomain = new Map();
-  for (const a of accounts ?? []) {
-    const d = a.domain || "—";
-    if (!byDomain.has(d)) byDomain.set(d, []);
-    byDomain.get(d).push(a);
-  }
-  const domains = [...byDomain.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const domainsCount = new Set(rows.map((r) => r.domain)).size;
+  const assigned = rows.filter((r) => r.campaigns.length).length;
+  const known = rows.filter((r) => r.health != null);
+  const avgHealth = known.length ? Math.round(known.reduce((t, r) => t + r.health, 0) / known.length) : null;
 
   const registeredEmails = new Set((accounts ?? []).map((a) => a.email.toLowerCase()));
-  const unregistered = [...campaignsByEmail.keys()].filter((e) => !registeredEmails.has(e));
+  const missing = [...CAMPAIGNS_OF_EMAIL.keys()].filter((e) => !registeredEmails.has(e));
 
   return (
     <>
       <h1>Inboxes</h1>
-      <p className="sub">
-        Every mailbox we own, the domain it lives on, and which campaigns send from it.
+      <p className="ibx-lede">
+        Every mailbox in one console — sort any column, filter by rep or campaign, search any field.
+        <b> {num(rows.length)} mailboxes</b> across <b>{num(domainsCount)} domains</b>, all warming.
       </p>
 
-      <div className="grid g4">
-        <div className="tile plus"><div className="lbl">Domains</div><div className="val">{domains.length}</div></div>
-        <div className="tile plus"><div className="lbl">Mailboxes</div><div className="val">{(accounts ?? []).length}</div></div>
-        <div className="tile plus"><div className="lbl">Campaigns</div><div className="val">{(campaigns ?? []).length}</div></div>
-        <div className="tile plus"><div className="lbl">Idle mailboxes</div><div className="val">{(accounts ?? []).filter((a) => !campaignsByEmail.has(a.email.toLowerCase())).length}</div>
-          <div className="note">not assigned to any campaign</div></div>
+      <div className="ibxc-rail">
+        <div className="u"><span className="v">{num(rows.length)}</span><span className="k">Mailboxes</span></div>
+        <span className="sep" />
+        <div className="u"><span className="v">{num(domainsCount)}</span><span className="k">Domains</span></div>
+        <span className="sep" />
+        <div className="u"><span className="v">{num(assigned)}</span><span className="k">On a campaign</span></div>
+        <span className="sep" />
+        <div className="u"><span className="v">{avgHealth == null ? "—" : `${avgHealth}%`}</span><span className="k">Avg health</span></div>
+        <span className="sep" />
+        <div className="u"><span className="v">{num(rows.length)}</span><span className="k">Warming</span></div>
+      </div>
+
+      <InboxesConsole rows={rows} campaignOrder={CAMPAIGN_ORDER} />
+
+      <p className="ibx-lede" style={{ marginTop: 4, fontSize: 12.5 }}>
+        Health is a mailbox&rsquo;s sender reputation from InboxKit. {num(known.length)} are synced;
+        the rest show &ldquo;—&rdquo; until the full InboxKit export lands. Warmup and daily limit come from the
+        Instantly sync.
+      </p>
+
+      <h2>Campaigns and the mailboxes behind them</h2>
+      <div className="card tw">
+        <table>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>Campaign</th>
+              <th style={{ textAlign: "left" }}>Owner</th>
+              <th>Domains</th>
+              <th>Mailboxes</th>
+              <th>Synced</th>
+            </tr>
+          </thead>
+          <tbody>
+            {CAMPAIGNS.map((c) => {
+              const o = ownerOf(c.owner);
+              const doms = new Set(c.emails.map((e) => e.split("@")[1])).size;
+              const synced = c.emails.filter((e) => registeredEmails.has(e.toLowerCase())).length;
+              return (
+                <tr key={c.name}>
+                  <td className="name" style={{ textAlign: "left" }}>
+                    <span className="ibxc-cmp" style={{ background: o.tint, color: o.ink }}>{c.name}</span>
+                  </td>
+                  <td className="dim" style={{ textAlign: "left" }}>{c.owner}</td>
+                  <td>{num(doms)}</td>
+                  <td>{num(c.emails.length)}</td>
+                  <td className={synced === c.emails.length ? "" : "mid"}>{num(synced)}/{num(c.emails.length)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       <h2>Send volume per mailbox</h2>
-      <p className="sub">Instantly only.</p>
+      <p className="sub">Instantly only, over the chosen window.</p>
       <RangePicker base="/inboxes" current={w.range} />
       <div className="card tw">
         <table>
@@ -88,7 +156,7 @@ export default async function Inboxes({ searchParams }) {
             </tr>
           </thead>
           <tbody>
-            {(accounts ?? []).filter((a) => a.source === "instantly").map((a) => {
+            {(accounts ?? []).map((a) => {
               const v = volumeByEmail.get(a.email.toLowerCase());
               if (!v) return (
                 <tr key={a.id}>
@@ -107,92 +175,26 @@ export default async function Inboxes({ searchParams }) {
                 </tr>
               );
             })}
-            {!accounts?.filter((a) => a.source === "instantly").length
-              ? <tr><td colSpan={6} className="empty">No Instantly mailboxes synced yet.</td></tr> : null}
+            {!accounts?.length ? <tr><td colSpan={6} className="empty">No Instantly mailboxes synced yet.</td></tr> : null}
           </tbody>
         </table>
       </div>
 
-      <h2>Domains</h2>
-      <div className="card tw">
-        <table>
-          <thead><tr><th style={{ textAlign: "left" }}>Domain</th><th>Mailboxes</th><th>Warmed up</th></tr></thead>
-          <tbody>
-            {domains.map(([domain, emails]) => (
-              <tr key={domain}>
-                <td className="name" style={{ textAlign: "left" }}>{domain}</td>
-                <td>{emails.length}</td>
-                <td>{emails.filter((e) => e.warmup_enabled).length}/{emails.length}</td>
-              </tr>
-            ))}
-            {!domains.length ? <tr><td colSpan={3} className="empty">No mailboxes synced yet.</td></tr> : null}
-          </tbody>
-        </table>
-      </div>
-
-      <h2>Emails</h2>
-      <div className="card tw">
-        <table>
-          <thead><tr><th style={{ textAlign: "left" }}>Email</th><th style={{ textAlign: "left" }}>Domain</th><th>Source</th><th style={{ textAlign: "left" }}>Campaign</th><th style={{ textAlign: "left" }}>Sub-campaign</th></tr></thead>
-          <tbody>
-            {(accounts ?? []).map((a) => {
-              const cs = campaignsByEmail.get(a.email.toLowerCase()) ?? [];
-              const groupNames = [...new Set(cs.map((c) => groupOfCampaign.get(c.id) ?? "—"))].join(", ");
-              return (
-                <tr key={a.id}>
-                  <td className="name" style={{ textAlign: "left" }}>{a.email}</td>
-                  <td className="dim" style={{ textAlign: "left" }}>{a.domain ?? "—"}</td>
-                  <td className="dim">{a.source}</td>
-                  <td style={{ textAlign: "left" }} className={cs.length ? "" : "zero"}>
-                    {cs.length ? groupNames : "unassigned"}
-                  </td>
-                  <td style={{ textAlign: "left" }} className={cs.length ? "" : "zero"}>
-                    {cs.length ? cs.map((c) => c.name).join(", ") : "unassigned"}
-                  </td>
-                </tr>
-              );
-            })}
-            {!accounts?.length ? <tr><td colSpan={5} className="empty">No mailboxes synced yet.</td></tr> : null}
-          </tbody>
-        </table>
-      </div>
-
-      <h2>Campaigns</h2>
-      <div className="card tw">
-        <table>
-          <thead><tr><th style={{ textAlign: "left" }}>Campaign</th><th style={{ textAlign: "left" }}>Group</th><th>Tool</th><th>Status</th><th style={{ textAlign: "left" }}>Sender emails</th></tr></thead>
-          <tbody>
-            {(campaigns ?? []).map((c) => (
-              <tr key={c.id}>
-                <td className="name" style={{ textAlign: "left" }}><a href={`/c/${c.id}`}>{c.name}</a></td>
-                <td className="dim" style={{ textAlign: "left" }}>{groupOfCampaign.get(c.id) ?? "—"}</td>
-                <td className="dim">{c.source}</td>
-                <td><Pill status={c.status} /></td>
-                <td style={{ textAlign: "left" }} className={c.sender_emails?.length ? "" : "zero"}>
-                  {c.sender_emails?.length ? c.sender_emails.join(", ") : "none"}
-                </td>
-              </tr>
-            ))}
-            {!campaigns?.length ? <tr><td colSpan={5} className="empty">No campaigns synced yet.</td></tr> : null}
-          </tbody>
-        </table>
-      </div>
-
-      {unregistered.length ? (
+      {missing.length ? (
         <>
-          <h2>Unregistered senders</h2>
+          <h2>Campaign senders with no mailbox on record</h2>
           <p className="sub">
-            These addresses send for a campaign but never showed up in a mailbox sync — check they
-            still exist in the sending tool.
+            These addresses are assigned to a campaign but never showed up in a mailbox sync — check
+            they still exist in the sending tool.
           </p>
           <div className="card tw">
             <table>
               <thead><tr><th style={{ textAlign: "left" }}>Email</th><th style={{ textAlign: "left" }}>Campaigns</th></tr></thead>
               <tbody>
-                {unregistered.map((e) => (
+                {missing.map((e) => (
                   <tr key={e}>
                     <td className="name" style={{ textAlign: "left" }}>{e}</td>
-                    <td style={{ textAlign: "left" }}>{campaignsByEmail.get(e).map((c) => c.name).join(", ")}</td>
+                    <td style={{ textAlign: "left" }}>{(CAMPAIGNS_OF_EMAIL.get(e) ?? []).join(", ")}</td>
                   </tr>
                 ))}
               </tbody>

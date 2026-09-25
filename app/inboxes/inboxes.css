@@ -1,0 +1,83 @@
+/* The inboxes console.
+ *
+ * Every mailbox in one sortable, searchable table. Scoped under `.ibxc` so it
+ * borrows the app's tokens and base table styles without touching any other
+ * page. The stat rail and lede sit above it. */
+
+.ibx-lede{color:var(--ink-2);font-size:14.5px;line-height:1.55;max-width:74ch;margin:0 0 20px}
+.ibx-lede b{color:var(--ink-1);font-weight:600}
+
+/* Inline stat rail. */
+.ibxc-rail{display:flex;gap:26px;flex-wrap:wrap;align-items:center;
+  padding:16px 20px;background:var(--surface-1);border:1px solid var(--border);
+  border-radius:var(--r);margin-bottom:20px}
+.ibxc-rail .u{display:flex;flex-direction:column;gap:3px}
+.ibxc-rail .v{font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.ibxc-rail .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.ibxc-rail .sep{width:1px;align-self:stretch;background:var(--grid)}
+@media(max-width:720px){.ibxc-rail{gap:18px}.ibxc-rail .sep{display:none}}
+
+/* Search + filters. */
+.ibxc-controls{margin-bottom:12px}
+.ibxc-search{position:relative;max-width:100%}
+.ibxc-search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none}
+.ibxc-search input{width:100%;height:42px;padding:0 14px 0 40px;border-radius:var(--r-sm);
+  border:1px solid var(--border);background:var(--surface-1);color:var(--ink-1);font-size:14px;
+  transition:border-color .18s,box-shadow .18s}
+.ibxc-search input:focus{outline:none;border-color:var(--s1);box-shadow:0 0 0 3px var(--tint-1)}
+
+.ibxc-filters{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.ibxc-fg{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.ibxc-fg .flab{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
+.ibxc-chip{cursor:pointer;font-size:12px;font-weight:600;padding:6px 11px;border-radius:999px;
+  border:1px solid var(--border);background:var(--surface-1);color:var(--ink-2);transition:.15s;white-space:nowrap}
+.ibxc-chip:hover{color:var(--ink-1)}
+.ibxc-chip.on{background:var(--ink-1);color:var(--page);border-color:var(--ink-1)}
+.ibxc-chip .dot{display:inline-block;width:7px;height:7px;border-radius:999px;margin-right:6px;vertical-align:middle}
+
+/* Sticky-header table. Reuses .card/.tw and the app's base table styles. */
+.ibxc-tablewrap{padding:0;margin-bottom:0;border-radius:var(--r)}
+.ibxc-tablewrap thead th{position:sticky;top:0;z-index:2;background:var(--surface-1);
+  padding:13px 14px;transition:color .15s}
+.ibxc-tablewrap thead th:first-child{padding-left:20px}
+.ibxc-tablewrap thead th:last-child{padding-right:20px}
+.ibxc-tablewrap thead th:hover{color:var(--ink-1)}
+.ibxc-tablewrap thead th.srt{color:var(--ink-1)}
+.ibxc-tablewrap th .ar{font-size:9px}
+.ibxc-tablewrap td{padding:12px 14px}
+.ibxc-tablewrap td:first-child{padding-left:20px}
+.ibxc-tablewrap td:last-child{padding-right:20px}
+.ibxc-tablewrap tbody tr{animation:fadeUp .4s cubic-bezier(.22,.8,.3,1) both}
+.ibxc-tablewrap td.mono{font-variant-numeric:normal}
+
+.ibxc-owner{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ibxc-owner .av{width:20px;height:20px;border-radius:999px;display:inline-flex;align-items:center;
+  justify-content:center;font-size:9.5px;font-weight:700;flex:none}
+
+.ibxc-cmps{display:inline-flex;gap:5px;flex-wrap:wrap}
+.ibxc-cmp{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:6px;white-space:nowrap}
+.ibxc-cmp.none{color:var(--ink-3);border:1px dashed var(--border)}
+
+.ibxc-health{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end}
+.ibxc-health .bar{width:44px;height:5px;border-radius:999px;background:var(--wash-3);overflow:hidden}
+.ibxc-health .bf{height:100%;border-radius:999px;transition:width .8s cubic-bezier(.22,.8,.3,1)}
+.ibxc-health b{font-weight:600;min-width:26px;text-align:right;font-variant-numeric:tabular-nums}
+.ibxc-health .sup{font-size:8px;color:var(--warn-ink);vertical-align:super;margin-left:1px}
+
+.ibxc-wu{font-size:12px;color:var(--ink-3)}
+.ibxc-wu.on{color:var(--good-ink,var(--good));font-weight:600}
+
+.ibxc-st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.ibxc-st .d{width:7px;height:7px;border-radius:999px;background:var(--ink-3)}
+.ibxc-st.on{color:var(--good-ink,var(--good))}
+.ibxc-st.on .d{background:var(--good)}
+.ibxc-st.off{color:var(--ink-3)}
+
+.ibxc-count{font-size:12.5px;color:var(--ink-3);margin:14px 2px 24px}
+
+.ibxc mark{background:var(--tint-1);color:inherit;border-radius:3px;padding:0 1px}
+
+@media (prefers-reduced-motion:reduce){
+  .ibxc-tablewrap tbody tr{animation:none}
+  .ibxc-health .bf{transition:none}
+}
