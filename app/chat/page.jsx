@@ -1,5 +1,6 @@
 import { requireUser } from "../../lib/auth";
 import { getThread, listMessages, listThreads } from "../../lib/hq-chat";
+import { listFiles } from "../../lib/staff-files";
 import ChatBox from "./chat";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export default async function ChatPage({ searchParams }) {
     );
   }
 
-  const threads = await listThreads(user.email);
+  const [threads, files] = await Promise.all([listThreads(user.email), listFiles(user.email)]);
   const requested = searchParams?.t;
   const thread = requested ? await getThread(user.email, requested) : null;
   const messages = thread ? await listMessages(thread.id) : [];
@@ -42,6 +43,21 @@ export default async function ChatPage({ searchParams }) {
                   {t.title || "Chat"}
                 </a>
               ))}
+            </div>
+          </details>
+        ) : null}
+        {/* Every file this person has made, newest version of each. Older
+            versions are on the chat card and on /files. */}
+        {files.length ? (
+          <details className="threads">
+            <summary>Files ({files.length})</summary>
+            <div className="menu">
+              {files.map((f) => (
+                <a key={f.root_id} href={`/api/chat/file/${f.id}?name=${encodeURIComponent(f.filename)}`} download={f.filename}>
+                  {f.filename}
+                </a>
+              ))}
+              <a href="/files">All versions</a>
             </div>
           </details>
         ) : null}
