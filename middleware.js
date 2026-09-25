@@ -63,8 +63,10 @@ export async function middleware(request) {
 export const config = {
   matcher: [
     // Everything except the login page, the OAuth routes it depends on, Next's
-    // own assets, and files with an extension (images, fonts, the QEA mark) —
-    // which must stay reachable or the login page renders without its own logo.
-    "/((?!login|auth/callback|auth/signout|_next/static|_next/image|favicon.ico|.*\\.[^/]*$).*)",
+    // own assets, and static files (images, fonts, the QEA mark) — which must
+    // stay reachable or the login page renders without its own logo. Named
+    // extensions, not "anything with a dot": /person/<email> always has one,
+    // and every person page was served to anyone without a login.
+    "/((?!login|auth/callback|auth/signout|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|svg|ico|webp|mp4|woff2?|ttf|css|js|map|txt)$).*)",
   ],
 };
