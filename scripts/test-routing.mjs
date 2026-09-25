@@ -276,7 +276,7 @@ assert.equal(
   busyOf([{ id: "r", stage_no: 2, status: "running", started_at: ago(1) }], null).stage, 2);
 // Placed by graph name where stage_no is null, same as the timeline.
 assert.equal(
-  busyOf([{ id: "r", graph_name: "research", stage_no: null, status: "running" }], null).stage, 1);
+  busyOf([{ id: "r", graph_name: "research", stage_no: null, status: "running", started_at: ago(1) }], null).stage, 1);
 
 // The gap: GitHub is booting and this database holds no run at all. Without
 // this the page a rep is staring at right after pressing looks exactly like the

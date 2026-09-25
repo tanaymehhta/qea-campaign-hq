@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --test \"**/*.test.js\" scripts/test-routing.mjs scripts/test-busy.mjs scripts/test-runs.mjs scripts/test-window.mjs lib/thread.mjs && deno test -q supabase/functions/sync"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.72",
