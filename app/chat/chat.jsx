@@ -63,9 +63,12 @@ function deal(last) {
   if (deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];
   return deck;
 }
-/** The model writes **bold**. Showing the asterisks is worse than showing neither. */
+/**
+ * The model writes **bold**. Showing the asterisks is worse than showing
+ * neither — and a pair still being typed is already bold, not asterisks.
+ */
 function Bold({ text }) {
-  const parts = String(text).split(/\*\*(.+?)\*\*/gs);
+  const parts = String(text).split(/\*\*(.*?)(?:\*\*|$)/gs);
   return (
     <>
       {parts.map((part, index) => (index % 2 ? <strong key={index}>{part}</strong> : <span key={index}>{part}</span>))}
@@ -73,12 +76,49 @@ function Bold({ text }) {
   );
 }
 
+const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+
+/**
+ * Tables and quoted emails, as the rest of the dashboard shows them. Runs on
+ * the half-typed answer too, so a row is a row from its first cell.
+ */
+function Prose({ text }) {
+  const blocks = [];
+  for (const line of String(text).split("\n")) {
+    const kind = /^\s*\|/.test(line) ? "table" : /^\s*>/.test(line) ? "quote" : "text";
+    const prev = blocks[blocks.length - 1];
+    if (prev?.kind === kind) prev.lines.push(line);
+    else blocks.push({ kind, lines: [line] });
+  }
+  return blocks.map(({ kind, lines }, index) => {
+    if (kind === "table") {
+      const [head, ...body] = lines.filter((l) => !/^\s*\|[\s:|-]*-[\s:|-]*$/.test(l)).map(cells);
+      return (
+        <div key={index} className="mdtable">
+          <table>
+            <thead><tr>{head.map((c, j) => <th key={j}><Bold text={c} /></th>)}</tr></thead>
+            <tbody>
+              {body.map((row, r) => <tr key={r}>{row.map((c, j) => <td key={j}><Bold text={c} /></td>)}</tr>)}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    if (kind === "quote") {
+      const said = lines.map((l) => l.replace(/^\s*>\s?/, "")).join("\n").replace(/^\n+|\n+$/g, "");
+      return <blockquote key={index}><Bold text={said} /></blockquote>;
+    }
+    const said = lines.join("\n").replace(/^\n+|\n+$/g, "");
+    return said ? <Bold key={index} text={said} /> : null;
+  });
+}
+
 /**
  * The proposal recap is a fenced block whose columns only line up in a
  * monospace face. Everything outside the fences is ordinary prose.
  */
 function Written({ text }) {
-  const parts = String(text).split(/```[a-z]*\n?([\s\S]*?)```/g);
+  const parts = String(text).split(/```[a-z]*\n?([\s\S]*?)(?:```|$)/g);
   return (
     <>
       {parts.map((part, index) =>
@@ -100,7 +140,7 @@ function Written({ text }) {
             {part.replace(/\n+$/, "")}
           </pre>
         ) : (
-          <Bold key={index} text={part} />
+          <Prose key={index} text={part} />
         ),
       )}
     </>
@@ -421,8 +461,7 @@ export default function ChatBox({ thread, messages, accepted }) {
               </>
             ) : (
               <div className="say">
-                {revealed.slice(0, -1).join("")}
-                <span className="wordin">{revealed[revealed.length - 1]}</span>
+                <MessageText text={revealed.join("")} accepted={accepted} onAccept={accept} />
                 {revealed.length < all.length || busy ? <span className="cursor" /> : null}
               </div>
             )}

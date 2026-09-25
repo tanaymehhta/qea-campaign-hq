@@ -1058,8 +1058,12 @@ details.threads .menu a.on{color:var(--ink-1);font-weight:600}
 .turn.me .say{background:var(--wash-2);border:1px solid var(--border);padding:11px 15px;
   border-radius:var(--r) var(--r) var(--r-sm) var(--r)}
 .turn .say a{text-decoration:underline;text-underline-offset:2px;color:var(--s1)}
-.wordin{animation:wordin .22s ease-out both}
-@keyframes wordin{from{opacity:0;filter:blur(2px)}to{opacity:1;filter:none}}
+.turn .say .mdtable{overflow-x:auto;margin:10px 0}
+.turn .say .mdtable :is(th,td){text-align:left;padding-left:0;padding-right:18px}
+.turn .say .mdtable td{white-space:normal;min-width:8ch}
+/* a quoted email reads like the reply panel on /replies, not a column of > */
+.turn .say blockquote{margin:10px 0;padding:14px 18px;border-radius:10px;
+  background:var(--tint-n);color:var(--ink-1)}
 .cursor{display:inline-block;width:6px;height:1em;vertical-align:-1px;margin-left:2px;
   background:var(--s1);animation:caret 1.05s steps(2,start) infinite}
 @keyframes caret{0%,100%{opacity:1}50%{opacity:0}}
