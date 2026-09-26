@@ -91,12 +91,9 @@ function saidByUser(history) {
 export async function POST(req) {
   const user = await currentUser();
   if (!user) return Response.json({ error: "Sign in." }, { status: 401 });
-  if (!user.rep_name) {
-    return Response.json(
-      { error: `${user.email} has no rep name yet. Ask Tanay to add the row in app_users.` },
-      { status: 403 },
-    );
-  }
+  // Everyone with a QEA account is allowed in (settled 14 Sep). A missing
+  // rep_name is not a refusal: they get general chat, the wiki, and their own
+  // notes; campaign reads scope to nothing until Tanay maps them in app_users.
 
   let body;
   try {
